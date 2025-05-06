@@ -1,0 +1,43 @@
+# Unity cache/temp/build
+*/Library/
+*/Temp/
+*/Obj/
+*/Build/
+*/Builds/
+*/Logs/
+*/MemoryCaptures/
+
+# VSCode
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.apk
+*.aab
+*.unitypackage
+
+# Rider / VS
+.idea/
+*.sln
+*.csproj
+*.user
+*.pidb
+*.booproj
+*.suo
+.vs/
+
+# Logs and profiler
+*.log
+*.profiler
+
+# Optional: If you include unit tests or samples and want to skip certain generated folders
+*/bin/
+*/obj/
+
+/Spoke.cs.meta
+/Spoke.Unity.cs.meta
+LICENSE.meta
+/Examples.meta
