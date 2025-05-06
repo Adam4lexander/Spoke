@@ -6,7 +6,6 @@
 // > Drawers
 // > UnitySpokeLogger
 
-#if UNITY_EDITOR || UNITY_STANDALONE
 using System;
 using System.Collections;
 using UnityEngine;
@@ -262,4 +261,3 @@ namespace Spoke {
         }
     }
 }
-#endif
