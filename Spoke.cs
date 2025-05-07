@@ -369,17 +369,17 @@ namespace Spoke {
             var index = handles.IndexOf(handle);
             if (index >= 0) { handle.Dispose(); handles.RemoveAt(index); }
         }
-        protected void OnCleanup(Action fn) => cleanupFuncs.Insert(0, fn);
+        protected void OnCleanup(Action fn) => cleanupFuncs.Add(fn);
         protected void ClearChildren() {
             isChildrenDisposing = true;
-            foreach (var cleanupFunc in cleanupFuncs)
-                try { cleanupFunc?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
-            cleanupFuncs.Clear();
-            foreach (var child in children)
-                try { child.Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {child}", e); }
-            children.Clear();
             foreach (var triggerChild in handles) triggerChild.Dispose();
             handles.Clear();
+            for (int i = children.Count - 1; i >= 0; i--)
+                try { children[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {children[i]}", e); }
+            children.Clear();
+            for (int i = cleanupFuncs.Count - 1; i >= 0; i--)
+                try { cleanupFuncs[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
+            cleanupFuncs.Clear();
             siblingCounter = 0;
             isChildrenDisposing = false;
         }
