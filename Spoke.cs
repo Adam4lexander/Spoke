@@ -48,27 +48,32 @@ namespace Spoke {
         SpokePool<List<int>> intListPool = SpokePool<List<int>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Dictionary<Delegate, List<int>> unsubLookup = new Dictionary<Delegate, List<int>>();
+        Queue<T> events = new Queue<T>();
         DeferredQueue deferred = DeferredQueue.Create();
         int idCount = 0; bool isAnyInactive;
-        Action<int> _Unsub;
-        public Trigger() { _Unsub = Unsub; }
+        Action<int> _Unsub; Action _Flush;
+        public Trigger() { _Unsub = Unsub; _Flush = Flush; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(action, _ => action?.Invoke());
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(action, action);
         public override void Invoke() => Invoke(default(T));
-        public void Invoke(T param) {
-            var subList = subListPool.Get();
-            foreach (var item in subscriptions) subList.Add(item);
-            deferred.Hold();
-            foreach (var item in subList) {
-                if (item.IsActive)
-                    try { item.Action?.Invoke(param); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
-            }
-            subListPool.Return(subList);
-            ClearInactive();
-            deferred.Release();
-        }
+        public void Invoke(T param) { events.Enqueue(param); deferred.Enqueue(_Flush); }
         public override void Unsubscribe(Action action) => Unsub(action);
         public void Unsubscribe(Action<T> action) => Unsub(action);
+        void Flush() {
+            deferred.Hold();
+            while (events.Count > 0) {
+                var evt = events.Dequeue();
+                var subList = subListPool.Get();
+                foreach (var item in subscriptions) subList.Add(item);
+                foreach (var item in subList) {
+                    if (item.IsActive)
+                        try { item.Action?.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
+                }
+                subListPool.Return(subList);
+                ClearInactive();
+            }
+            deferred.Release();
+        }
         void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
             if (unsubLookup.TryGetValue(action, out var idList)) {
@@ -287,12 +292,12 @@ namespace Spoke {
         SpokeEngine engine;
         public Dock(string name, SpokeEngine engine) : base(name) { this.engine = engine; }
         public void Use(object key, SpokeHandle handle) {
-            Drop(key); 
-            handles[key] = Own(handle); 
+            Drop(key);
+            handles[key] = Own(handle);
         }
         public T Use<T>(object key, T disposable) where T : IDisposable {
-            Drop(key); 
-            disposables[key] = Own(disposable); 
+            Drop(key);
+            disposables[key] = Own(disposable);
             return disposable;
         }
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
