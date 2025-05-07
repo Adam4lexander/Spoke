@@ -6,26 +6,25 @@ namespace Spoke.Examples {
      
         protected override void Init(EffectBuilder s) {
 
-            // This block runs when the behaviour is Awake
+            // Runs while the behaviour is Awake (from Awake to OnDestroy)
             s.UsePhase(IsAwake, s => {
                 Debug.Log("IsAwake Mounted");
                 s.OnCleanup(() => Debug.Log("Disposing IsAwake"));
             });
 
-            // This block runs when the behaviour is Enabled
+            // Runs while the behaviour is Enabled (from OnEnable to OnDisable)
             s.UsePhase(IsEnabled, s => {
                 Debug.Log("IsEnabled Mounted");
                 s.OnCleanup(() => Debug.Log("Disposing IsEnabled"));
             });
 
-            // This block runs when the behaviour is Started
+            // Runs while the behaviour is Started (from Start to OnDestroy)
             s.UsePhase(IsStarted, s => {
                 Debug.Log("IsStarted Mounted");
                 s.OnCleanup(() => Debug.Log("Disposing IsStarted"));
             });
 
-            // Init is also a declarative block, just like the phases above.
-            // It runs before the behaviour is Awake.
+            // Init runs first -- before Awake -- and behaves like a permanent effect
             Debug.Log("Init Mounted");
             s.OnCleanup(() => Debug.Log("Disposing Init"));
         }

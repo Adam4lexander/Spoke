@@ -26,7 +26,8 @@ namespace Spoke.Examples {
         [SerializeField] UState<bool> mountOuterPhase = UState.Create(true);
         [SerializeField] UState<bool> mountInnerPhase = UState.Create(true);
 
-        // Triggers are the fundamental reactive unit in Spoke. Invoking one causes subscribed logic to run.
+        // Trigger is the simplest reactive signal in Spoke -- a fire-and-forget pulse.
+        // When invoked, any subscribed effects or memos will run.
         Trigger flashCommand = Trigger.Create();
 
         protected override void Init(EffectBuilder s) {

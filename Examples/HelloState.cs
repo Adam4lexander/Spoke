@@ -7,7 +7,8 @@ namespace Spoke.Examples {
         [Header("References")]
         [SerializeField] MeshRenderer Sphere;
 
-        // This holds reactive state -- true = red, false = blue.
+        // State<T> holds reactive state — like a variable you can subscribe to.
+        // Any logic that *uses* it will re-run when its value changes.
         State<bool> isRed = State.Create(false);
 
         protected override void Init(EffectBuilder s) {
@@ -15,14 +16,15 @@ namespace Spoke.Examples {
             // Cache the material once (to avoid triggering Unity's internal instancing).
             var sphereMaterial = Sphere.material;
 
-            // Reactively update the colour whenever `isRed` changes.
+            // Reactively update the sphere’s color when `isRed` changes.
             s.UseEffect(s => {
-                // s.D tracks a dynamic dependency on `isRed` and reacts automatically
+                // `s.D(...)` tracks a *dynamic dependency* -- this effect will re-run if `isRed` changes.
                 sphereMaterial.color = s.D(isRed) ? Color.red : Color.blue;
             });
 
             /*
-            // Equivalent with explicit dependency -- `isRed` is passed manually
+            // This version is equivalent, but uses *explicit* dependency tracking.
+            // Slightly more verbose, but clearer in some cases.
             s.UseEffect(s => {
                 sphereMaterial.color = isRed.Now ? Color.red : Color.blue;
             }, isRed);
@@ -30,10 +32,10 @@ namespace Spoke.Examples {
         }
 
         void Update() {
-            // Toggle the state when the spacebar is pressed.
+            // Flip the color each time space is pressed
             if (Input.GetKeyDown(KeyCode.Space)) {
                 isRed.Update(val => !val);
-                // Or simply: isRed.Set(!isRed.Now);
+                // Or: isRed.Set(!isRed.Now);
             }
         }
     }
