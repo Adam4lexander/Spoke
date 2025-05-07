@@ -28,9 +28,6 @@ namespace Spoke.Examples {
             // It runs before the behaviour is Awake.
             Debug.Log("Init Mounted");
             s.OnCleanup(() => Debug.Log("Disposing Init"));
-
         }
-
     }
-
 }
