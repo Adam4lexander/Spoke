@@ -9,7 +9,8 @@ namespace Spoke.Examples {
     public struct Sphere {
         public Renderer renderer;
         public Text label;
-        public void CloneMat() { var m = renderer.material; }
+        // Force Unity to clone shared material instance
+        public void CloneMat() { _ = renderer.material; }
     }
 
     public class HelloEffect : SpokeBehaviour {
@@ -21,36 +22,46 @@ namespace Spoke.Examples {
         [SerializeField] Sphere reactionSphere;
 
         [Header("Attributes")]
+        // UState<T> is the serialized version of State<T> -- same reactive behavior, but visible in the Inspector
         [SerializeField] UState<bool> mountOuterPhase = UState.Create(true);
         [SerializeField] UState<bool> mountInnerPhase = UState.Create(true);
 
-        Trigger blinkCommand = Trigger.Create();
+        // Triggers are the fundamental reactive unit in Spoke. Invoking one causes subscribed logic to run.
+        Trigger flashCommand = Trigger.Create();
 
         protected override void Init(EffectBuilder s) {
 
+            // Ensure each sphere has a unique material instance
             effectSphere.CloneMat(); 
             outerPhaseSphere.CloneMat(); 
             innerPhaseSphere.CloneMat(); 
             reactionSphere.CloneMat();
 
-            s.UseEffect(BlinkSphere("Effect", effectSphere), 
-                blinkCommand);
+            // UseEffect: Mounts immediately and remounts when any dependency is triggered
+            s.UseEffect(FlashSphere("Effect", effectSphere), flashCommand);
 
+            // UsePhase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency changes.
             s.UsePhase(mountOuterPhase, s => {
 
-                s.UseEffect(BlinkSphere("Phase (Outer)", outerPhaseSphere), 
-                    blinkCommand);
+                // This effect is scoped to the outer phase. It mounts when the outer phase is mounted.
+                s.UseEffect(FlashSphere("Phase (Outer)", outerPhaseSphere));
 
-                s.UsePhase(mountInnerPhase, BlinkSphere("Phase (Inner)", innerPhaseSphere), 
-                    blinkCommand);
+                // This inner phase only mounts while `mountInnerPhase` is true, and will remount on trigger
+                s.UsePhase(mountInnerPhase, FlashSphere("Phase (Inner)", innerPhaseSphere), flashCommand);
 
-            }, blinkCommand);
+            }, flashCommand);
 
-            s.UseReaction(BlinkSphere("Reaction", reactionSphere), 
-                blinkCommand);
+            // UseReaction: Does *not* mount until a dependency is triggered.
+            // It runs only when triggered -- perfect for one-shot logic that doesn't need to persist
+            s.UseReaction(FlashSphere("Reaction", reactionSphere), flashCommand);
         }
 
-        EffectBlock BlinkSphere(string label, Sphere sphere) => s => {
+        // EffectBlock is a core Spoke abstraction — it's just:
+        //     public delegate void EffectBlock(EffectBuilder s);
+        //
+        // You can return them like functions, allowing modular, parameterized logic.
+        // This one blinks a sphere green, waits 0.5s, then turns it blue. On cleanup, resets to red.
+        EffectBlock FlashSphere(string label, Sphere sphere) => s => {
 
             var origLabel = sphere.label.text;
             sphere.label.text = label;
@@ -61,7 +72,10 @@ namespace Spoke.Examples {
                 yield return new WaitForSeconds(0.5f);
                 sphere.renderer.material.color = Color.blue;
             }
+
             var routineInstance = StartCoroutine(blinkRoutine());
+
+            // Stop the flash if this scope is cleaned up early
             s.OnCleanup(() => {
                 StopCoroutine(routineInstance);
                 sphere.renderer.material.color = Color.red;
@@ -69,8 +83,9 @@ namespace Spoke.Examples {
         };
 
         void Update() {
+            // Press space to invoke the blink trigger
             if (Input.GetKeyDown(KeyCode.Space)) {
-                blinkCommand.Invoke();
+                flashCommand.Invoke();
             }
         }
     }
