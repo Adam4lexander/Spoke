@@ -95,11 +95,11 @@ using Spoke;
 
 public class MyBehaviour : MonoBehaviour {
 
-    SpokeEngine engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
     State<bool> isEnabled = State.Create(false);
     Effect effect;
 
     void Awake() {
+        var engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
         effect = new Effect("MyEffect", engine, s => {
             s.UsePhase(isEnabled, s => {
                 // OnEnable logic
