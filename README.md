@@ -139,7 +139,7 @@ s.UseEffect(s => renderer.sharedMaterial.color = s.D(ColourSignal)); // Always m
 
 s.UsePhase(isAlive, s => Debug.Log("I'm alive!")); // Only mounted when condition is true
 
-s.UseReaction(s => CheckIsGameOver(), PlayerHealth, NumberEnemies); // Mounts only after first dependency triggers
+s.UseReaction(s => CheckIsGameOver(), DamageEvent); // Mounts only after first dependency triggers
 ```
 
 Effects can **own disposables**, including other effects, forming a nested ownership hierarchy.  
