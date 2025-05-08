@@ -41,6 +41,76 @@ public class MyActor : SpokeBehaviour {
 }
 ```
 
+## 🔰 Getting Started
+
+Copy `_Spoke.cs_` and `_Spoke.Unity.cs_` into your project.
+
+Then create a new script and subclass `SpokeBehaviour` instead of `MonoBehaviour`:
+
+```csharp
+using Spoke;
+
+public class MyBehaviour : SpokeBehaviour {
+
+    // Replaces Awake, OnEnable, Start, OnDisable, OnDestroy
+    protected override void Init(EffectBuilder s) {
+
+        // Run Awake logic here
+        s.OnCleanup(() => {
+            // Run OnDestroy logic here
+        })
+
+        s.UsePhase(IsAwake, s => {
+            // Runs at the end of Awake (useful for dependency timing)
+        });
+
+        s.UsePhase(IsEnabled, s => {
+            // OnEnable logic here
+            s.OnCleanup(() => {
+                // OnDisable logic here
+            })
+        });
+
+        s.UsePhase(IsStarted, s => {
+            // Start logic here
+        });
+    }
+}
+```
+
+## ⚙️ Prefer manual control?
+
+You can also create a `SpokeEngine` manually in any `MonoBehaviour`:
+
+```csharp
+using Spoke;
+
+public class MyBehaviour : SpokeBehaviour {
+
+    SpokeEngine engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
+    State<bool> isEnabled = State.Create(false);
+    Effect effect;
+
+    void Awake() {
+        effect = new Effect("MyEffect", engine, s => {
+            s.UsePhase(isEnabled, s => {
+                // OnEnable logic
+                s.OnCleanup(() => {
+                    // OnDisable logic
+                })
+            });
+        });
+    }
+
+    void OnDestroy() => effect.Dispose();
+    void OnEnable() => isEnabled.Set(true);
+    void OnDisable() => isEnabled.Set(false);
+}
+```
+
+Spoke integrates with Unity through a very thin wrapper.
+Take a peek at SpokeBehaviour if you're curious — it's tiny.
+
 ## 🧠 Core Concepts
 
 - **State** – Reactive container for any value
