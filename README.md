@@ -21,7 +21,7 @@ public class MyActor : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         var isActive = s.UseMemo(s =>
-            s.D(IsEnabled) && s.D(ActorManagar.Instance.IsEnabled)
+            s.D(IsEnabled) && s.D(ActorManager.Instance.IsEnabled)
         );
 
         s.UsePhase(isActive, s => {
@@ -58,7 +58,7 @@ public class MyBehaviour : SpokeBehaviour {
         // Run Awake logic here
         s.OnCleanup(() => {
             // Run OnDestroy logic here
-        })
+        });
 
         s.UsePhase(IsAwake, s => {
             // Runs at the end of Awake (useful for dependency timing)
@@ -68,7 +68,7 @@ public class MyBehaviour : SpokeBehaviour {
             // OnEnable logic here
             s.OnCleanup(() => {
                 // OnDisable logic here
-            })
+            });
         });
 
         s.UsePhase(IsStarted, s => {
@@ -85,7 +85,7 @@ You can also create a `SpokeEngine` manually in any `MonoBehaviour`:
 ```csharp
 using Spoke;
 
-public class MyBehaviour : SpokeBehaviour {
+public class MyBehaviour : MonoBehaviour {
 
     SpokeEngine engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
     State<bool> isEnabled = State.Create(false);
@@ -113,13 +113,44 @@ Take a peek at SpokeBehaviour if you're curious — it's tiny.
 
 ## 🧠 Core Concepts
 
-- **State** – Reactive container for any value
 - **Trigger** – Fire-and-forget pulse for one-shot updates
-- **Memo** – Derived reactive value (computed from state or triggers)
-- **EffectBuilder** – Creates modular, self-cleaning logic blocks
-- **UseEffect** / **UsePhase** / **UseReaction** – Declarative control over when logic mounts
 
-All logic is structured around **scopes**: once a condition stops being true, the associated logic is automatically cleaned up.
+```csharp
+var trigger = Trigger.Create();
+trigger.Invoke();
+```
+
+- **State** – Reactive container for any value
+
+```csharp
+var isVisible = State.Create(true);
+isVisible.Set(false);
+```
+
+- **Effect** / **Phase** / **Reaction** – All are kinds of 'Effect'. Forms an ownership hierarchy of IDisposable. Remounts from reactive signals
+
+```csharp
+s.UseEffect(s => renderer.sharedMaterial.color = s.D(ColourSignal));
+s.UsePhase(isAlive, s => Debug.Log("I'm alive!"));
+s.UseReaction(s => CheckIsGameOver(), PlayerHealth, NumberEnemies);
+```
+
+- **EffectBuilder** – Object passed into `EffectBlock` for conveniently mounting IDisposables
+
+```csharp
+s.UseEffect((EffectBuilder s) => {
+    // Use[...] *means* to take ownership of a IDisposable
+    s.Use(new MyCustomDisposable());
+    s.UseSubscribe(someTrigger, evt => { /* ... */ })
+    s.UseEffect(s => { /* ... */ });
+});
+```
+
+- **Memo** – Derived reactive value (computed from state or triggers)
+
+```csharp
+var isAlive = s.UseMemo(s => s.D(health) > 0);
+```
 
 ## 🧰 Requirements
 
