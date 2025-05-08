@@ -113,29 +113,40 @@ Take a peek at SpokeBehaviour if you're curious — it's tiny.
 
 ## 🧠 Core Concepts
 
-- **Trigger** – Fire-and-forget pulse for one-shot updates
+- **Trigger** – The most basic reactive signal. Emits a one-shot event that remounts effects and recomputes memos.
 
 ```csharp
-var trigger = Trigger.Create();
-trigger.Invoke();
+var damageTaken = Trigger.Create<DamageEvent>();
+damageTaken.Invoke(new DamageEvent(/*...*/));
 ```
 
-- **State** – Reactive container for any value
+Triggers are fire-and-forget pulses.
+They implement `ITrigger` / `ITrigger<T>`, so they can be subscribed to or used as dependencies in effects and memos.
+
+- **State** – Reactive container for any value. When updated, it notifies dependent logic automatically.
 
 ```csharp
 var isVisible = State.Create(true);
-isVisible.Set(false);
+isVisible.Set(false); // Triggers effects or memos that depend on it
 ```
 
-- **Effect** / **Phase** / **Reaction** – All are kinds of 'Effect'. Forms an ownership hierarchy of IDisposable. Remounts from reactive signals
+`State<T>` implements `ISignal<T>` and `ITrigger<T>`, making it usable as both a value and a reactive trigger.
+
+- **Effect** / **Phase** / **Reaction** – Declarative logic blocks that mount, unmount, and remount automatically based on reactive state.
 
 ```csharp
-s.UseEffect(s => renderer.sharedMaterial.color = s.D(ColourSignal));
-s.UsePhase(isAlive, s => Debug.Log("I'm alive!"));
-s.UseReaction(s => CheckIsGameOver(), PlayerHealth, NumberEnemies);
+s.UseEffect(s => renderer.sharedMaterial.color = s.D(ColourSignal)); // Always mounted
+
+s.UsePhase(isAlive, s => Debug.Log("I'm alive!")); // Only mounted when condition is true
+
+s.UseReaction(s => CheckIsGameOver(), PlayerHealth, NumberEnemies); // Mounts only after first dependency triggers
 ```
 
-- **EffectBuilder** – Object passed into `EffectBlock` for conveniently mounting IDisposables
+Effects can **own disposables**, including other effects, forming a nested ownership hierarchy.  
+When any dependency changes, the effect is **fully remounted** — its previous logic is cleaned up, then re-executed.  
+This keeps your logic in sync with state, and prevents stale behavior from lingering.
+
+- **EffectBuilder** – Passed into every reactive block. Used to mount effects, subscriptions, and disposables within a scope.
 
 ```csharp
 s.UseEffect((EffectBuilder s) => {
@@ -146,11 +157,24 @@ s.UseEffect((EffectBuilder s) => {
 });
 ```
 
-- **Memo** – Derived reactive value (computed from state or triggers)
+Every `Effect`, `Phase`, and `Reaction` receives an `EffectBuilder` —
+it defines what logic is mounted, and ensures automatic cleanup when the scope ends.
+
+- **Memo** – A computed signal. Automatically re-evaluates when any of its reactive dependencies change.
 
 ```csharp
 var isAlive = s.UseMemo(s => s.D(health) > 0);
 ```
+
+Memos are like derived values — they track the signals they access,
+and update whenever those signals change.
+
+### Dependency Tracking
+
+> All reactive scopes (Effect, Phase, Reaction, Memo) can track dependencies either:
+>
+> - **Dynamically**, using `s.D(...)` inside the block
+> - **Explicitly**, by passing signals as parameters
 
 ## 🧰 Requirements
 
