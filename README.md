@@ -10,6 +10,7 @@ It helps you write gameplay logic that automatically responds to state changes �
 - 📦 **Drop-in simple** — just two files, no setup or dependencies
 - 🧪 **Use it anywhere** — start small, add it to just one script, and grow from there
 
+
 ## 🔁 What can it do?
 
 ```csharp
@@ -40,6 +41,7 @@ public class MyActor : SpokeBehaviour {
     };
 }
 ```
+
 
 ## 🔰 Getting Started
 
@@ -78,6 +80,7 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
+
 ## ⚙️ Prefer manual control?
 
 You can also create a `SpokeEngine` manually in any `MonoBehaviour`:
@@ -110,6 +113,7 @@ public class MyBehaviour : MonoBehaviour {
 
 Spoke integrates with Unity through a very thin wrapper.
 Take a peek at SpokeBehaviour if you're curious — it's tiny.
+
 
 ## 🧠 Core Concepts
 
@@ -186,10 +190,12 @@ and update whenever those signals change.
 > - **Dynamically**, using `s.D(...)` inside the block
 > - **Explicitly**, by passing signals as parameters
 
+
 ## 🧰 Requirements
 
 - Unity 2021.3 or later (For Examples)
 - No packages, no dependencies
+
 
 ## 📜 License
 
