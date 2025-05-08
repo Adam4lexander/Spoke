@@ -14,25 +14,30 @@ It helps you write gameplay logic that automatically responds to state changes â
 
 ```csharp
 public class MyActor : SpokeBehaviour {
-    State<float> health = State.Create(100f);
+
+    public State<bool> CanHear { get; } = State.Create(true);
+    public Trigger<SoundStim> ReceiveSoundStim { get; } = Trigger.Create<SoundStim>();
 
     protected override void Init(EffectBuilder s) {
 
-        s.UsePhase(IsStarted, s => {
-            Debug.Log($"Actor spawned with {health.Now} HP");
+        var isActive = s.UseMemo(s =>
+            s.D(IsEnabled) && s.D(ActorManagar.Instance.IsEnabled)
+        );
 
-            var isAlive = s.UseMemo(s => s.D(health) > 0);
+        s.UsePhase(isActive, s => {
 
-            s.UsePhase(isAlive, s => {
-                Debug.Log("Actor is alive and active");
-                s.OnCleanup(() => Debug.Log("Actor is no longer active"));
-            });
+            ActorManager.Instance.RegisterActor(this);
+            s.OnCleanup(() => ActorManager.Instance.UnregisterActor(this));
+
+            s.UsePhase(CanHear, ReactSoundStim);
         });
     }
 
-    public void TakeDamage(float amount) {
-        health.Set(health.Now - amount);
-    }
+    EffectBlock ReactSoundStim => s => {
+        s.UseSubscribe(ReceiveSoundStim, evt => {
+            if (evt.IsHostile) Chase(evt.Target);
+        });
+    };
 }
 ```
 
