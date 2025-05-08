@@ -172,7 +172,7 @@ Passed into every reactive block. Used to mount effects, subscriptions, and disp
 
 ```csharp
 s.UseEffect((EffectBuilder s) => {
-    // Use[...] *means* to take ownership of a IDisposable
+    // Use[...] means: "I now own this IDisposable, and it will be cleaned up automatically"
     s.Use(new MyCustomDisposable());
     s.UseSubscribe(someTrigger, evt => { /* ... */ });
     s.UseEffect(s => { /* ... */ });
