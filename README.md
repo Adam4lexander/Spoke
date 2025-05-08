@@ -43,7 +43,7 @@ public class MyActor : SpokeBehaviour {
 
 ## 🔰 Getting Started
 
-Copy _Spoke.cs_ and _Spoke.Unity.cs_ into your project.
+Copy **Spoke.cs** and **Spoke.Unity.cs** into your project.
 
 Then create a new script and subclass `SpokeBehaviour` instead of `MonoBehaviour`:
 
