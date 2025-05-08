@@ -141,7 +141,7 @@ s.UseReaction(s => CheckIsGameOver(), PlayerHealth, NumberEnemies);
 s.UseEffect((EffectBuilder s) => {
     // Use[...] *means* to take ownership of a IDisposable
     s.Use(new MyCustomDisposable());
-    s.UseSubscribe(someTrigger, evt => { /* ... */ })
+    s.UseSubscribe(someTrigger, evt => { /* ... */ });
     s.UseEffect(s => { /* ... */ });
 });
 ```
