@@ -133,6 +133,8 @@ damageTaken.Invoke(new DamageEvent(/*...*/));
 Triggers are fire-and-forget pulses.
 They implement `ITrigger` / `ITrigger<T>`, so they can be subscribed to or used as dependencies in effects and memos.
 
+---
+
 ### State
 
 Reactive container for any value. When updated, it notifies dependent logic automatically.
@@ -143,6 +145,8 @@ isVisible.Set(false); // Triggers effects or memos that depend on it
 ```
 
 `State<T>` implements `ISignal<T>` and `ITrigger<T>`, making it usable as both a value and a reactive trigger.
+
+---
 
 ### Effect / Phase / Reaction
 
@@ -160,6 +164,8 @@ Effects can **own disposables**, including other effects, forming a nested owner
 When any dependency changes, the effect is **fully remounted** — its previous logic is cleaned up, then re-executed.  
 This keeps your logic in sync with state, and prevents stale behavior from lingering.
 
+---
+
 ### EffectBuilder
 
 Passed into every reactive block. Used to mount effects, subscriptions, and disposables within a scope.
@@ -176,6 +182,8 @@ s.UseEffect((EffectBuilder s) => {
 Every `Effect`, `Phase`, and `Reaction` receives an `EffectBuilder` —
 it defines what logic is mounted, and ensures automatic cleanup when the scope ends.
 
+---
+
 ### Memo
 
 A computed signal. Automatically re-evaluates when any of its reactive dependencies change.
@@ -186,6 +194,8 @@ var isAlive = s.UseMemo(s => s.D(health) > 0);
 
 Memos are like derived values — they track the signals they access,
 and update whenever those signals change.
+
+---
 
 ### Dependency Tracking
 
