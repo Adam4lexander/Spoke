@@ -2,13 +2,15 @@
 
 **Spoke** is a tiny declarative reactivity engine for Unity.
 
-It helps you write gameplay logic that automatically responds to state changes — no custom events, manual update loops, or tangled condition checks required.
+It helps you write gameplay logic that automatically reacts to state — without checking flags every frame, wiring up brittle events, or manually cleaning up when things change.
 
-- ✨ **Declarative logic** — express behavior in terms of what should happen, not when to check
-- 🧠 **Scoped effects** — logic mounts and cleans up automatically based on state.
-- 🎯 **Deterministic and predictable** — flushes in a stable order every time
+Instead of scattering logic across Update(), OnEnable(), and coroutines, Spoke lets you structure it into **scoped**, **self-cleaning** blocks that mount and unmount automatically.
+
+- ✨ **Declarative logic** — express _what_ should happen, not _when_ to check it
+- 🧠 **Scoped effects** — logic stays in sync with state and cleans up cleanly
+- 🎯 **Predictable** — reactive scopes flush in a stable, deterministic order
 - 📦 **Drop-in simple** — just two files, no setup or dependencies
-- 🧪 **Use it anywhere** — start small, add it to just one script, and grow from there
+- 🧪 **Use anywhere** — adopt it in one script or across your whole project
 
 ---
 
