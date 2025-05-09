@@ -242,6 +242,8 @@ That said, there are times where explicit dependencies are needed. Like if you n
 
 You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
 
+---
+
 ## What is with little-_s_
 
 You might have noticed I repeatedly use _s_ as the parameter name in the `EffectBlock`.
@@ -284,6 +286,8 @@ public class MyBehaviour : SpokeBehaviour {
 Spoke would catch that mistake and throw an error — but it’s better to avoid it altogether. Besides, trying to think of a good parameter name for an `Effect` three levels deep gets hard.
 
 The little-_s_ in comparison is unobtrusive yet immediately recognisable, and lets you focus on what matters.
+
+---
 
 ## Advanced Notes
 
