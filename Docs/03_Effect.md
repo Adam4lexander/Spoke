@@ -241,3 +241,48 @@ I personally prefer dynamic dependencies. They feel better. They're more fun. An
 That said, there are times where explicit dependencies are needed. Like if you need to remount an `Effect` from a pure event. Dynamic dependencies won’t catch pure events — only explicit dependencies will work in this case.
 
 You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
+
+## What is with little-_s_
+
+You might have noticed I repeatedly use _s_ as the parameter name in the `EffectBlock`.
+
+```csharp
+public class MyBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder s) {
+
+        s.UseEffect(s => {
+            s.UseEffect(s => {
+                s.UsePhase(IsEnabled, s => {
+
+                });
+            });
+        });
+
+        var num = s.UseMemo(s => {
+            // I use it here too, which isn't even an EffectBuilder! It's a MemoBuilder!
+            return 0;
+        });
+    }
+}
+```
+
+This is a convention I’ve adopted across all Spoke code. The _s_ stands for _Scope_ — or if you like, _Spoke_. It's the soul of the system. When you see a function that takes a little-_s_ you **know** you're in a reactive function.
+
+There's a practical reason too. It prevents accidental leakage of `EffectBuilder`'s down the hierarchy.
+
+```csharp
+public class MyBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder initBuilder) {
+
+        initBuilder.UseEffect(innerBuilder => {
+            initBuilder.UseEffect(/*...*/) // Oops wrong builder!
+        });
+    }
+}
+```
+
+Spoke would catch that mistake and throw an error — but it’s better to avoid it altogether. Besides, trying to think of a good parameter name for an `Effect` three levels deep gets hard.
+
+The little-_s_ in comparison is unobtrusive yet immediately recognisable, and lets you focus on what matters.
