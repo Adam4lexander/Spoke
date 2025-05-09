@@ -159,3 +159,85 @@ effect.Dispose(); // Prints: Effect cleaned up!
 ---
 
 ## Dependencies
+
+Remember the final parameter to the `Effect` constructor: `params ITrigger[] triggers`? Let's go back to that.
+
+In Spoke there are several objects (including `Effect`) that extend `SpokeEngine.Computation`. These have dependencies over a set of `ITrigger` which cause them to be disposed and then remounted when any of them trigger.
+
+For an `Effect` this means it will be disposed, including descendants, and then its `EffectBlock` is run again fresh.
+
+There are two ways that dependencies on an `Effect` can be defined:
+
+- **Explicit**: passing them explicitly in the constructor.
+- **Dynamic**: auto-binding to `ISignal`'s accessed in the `EffectBlock`.
+
+There are pros and cons to each. You can choose one or the other, or both, depending on your needs.
+
+---
+
+### Explicit Dependencies
+
+```csharp
+var myTrigger = Trigger.Create();
+var myState = State.Create(0);
+
+var effect = new Effect("MyEffect", myEngine, s => {
+    Debug.Log($"myState is {myState.Now}");
+}, myTrigger, myState); // any number of dependencies in final args
+
+// Instantiating effect Prints: myState is 0
+
+myTrigger.Invoke(); // Prints: myState is 0
+myState.Set(1);     // Prints: myState is 1
+```
+
+Any number of `ITrigger` can be given explicitly to the `Effect` contructor. The same is true for `UseEffect()`.
+
+- **Advantages**: Works with `ITrigger`, can give more control and clarity
+- **Disadvantages**: More verbose, requires more discipline, easy to forget a dependency
+
+---
+
+### Dynamic Dependencies
+
+Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
+
+`T D<T>(ISignal<T> signal);`
+
+```csharp
+var name = State.Create("Spokey");
+var age = State.Create(0);
+
+var effect = new Effect("MyEffect", myEngine, s => {
+    Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
+});
+
+// Instantiating effect Prints: name: Spokey, age: 0
+
+name.Set("Reacts"); // Prints: name: Reacts, age: 0
+age.Set(1);         // Prints: name: Reacts, age 1
+```
+
+`D()` is a method that wraps a `ISignal`. It makes that `ISignal` a dynamic dependency and then returns `ISignal.Now`.
+
+If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
+
+```csharp
+var effect = new Effect("MyEffect", myEngine, s => {
+    // Totally fine
+    if (s.D(condition)) {
+        DoSomething(s.D(foo));
+    } else {
+        SomethingElse(s.D(bar));
+    }
+});
+```
+
+- **Advantages**: Better ergonomics, more flexible, more powerful.
+- **Disadvantages**: Only supports `ISignal`, easier to misuse.
+
+I personally prefer dynamic dependencies. They feel better. They're more fun. And they handle complex logic more elegantly, like poking into nested signals.
+
+That said, there are times where explicit dependencies are needed. Like if you need to remount an `Effect` from a pure event. Dynamic dependencies won’t catch pure events — only explicit dependencies will work in this case.
+
+You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
