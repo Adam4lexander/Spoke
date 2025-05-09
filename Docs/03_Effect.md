@@ -191,7 +191,7 @@ myTrigger.Invoke(); // Prints: myState is 0
 myState.Set(1);     // Prints: myState is 1
 ```
 
-Any number of `ITrigger` can be given explicitly to the `Effect` contructor. The same is true for `UseEffect()`.
+Any number of `ITrigger` can be given explicitly to the `Effect` constructor. The same is true for `UseEffect()`.
 
 - **Advantages**: Works with `ITrigger`, can give more control and clarity
 - **Disadvantages**: More verbose, requires more discipline, easy to forget a dependency
