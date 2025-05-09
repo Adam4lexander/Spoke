@@ -27,8 +27,6 @@ memo.Dispose();
 
 Assuming `signalA` and `signalB` were both an `ISignal<int>`, that would mean that `memo` is an `ISignal<int>` too.
 
-> This shows how clean and expressive dynamic dependencies can be.
-
 You can create Memos with the `EffectBuilder` too:
 
 ```csharp
@@ -41,8 +39,27 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-Generally you'll create Memos with `UseMemo`, which means the memo is auto-cleaned when the parent `Effect` unmounts.
+> This shows how clean and expressive dynamic dependencies can be.
+
+Generally you'll create Memos with `UseMemo()`, which means the memo is auto-cleaned when the parent `Effect` unmounts.
 
 ---
 
 ## `MemoBuilder`
+
+The function passed to a `Memo` is sometimes called a _selector_ — it computes a new value from other signals.
+
+`Func<MemoBuilder, T>`
+
+The argument to this function, shown as little-_s_, is an instance of `MemoBuilder`. Let's look at that now:
+
+```csharp
+public interface MemoBuilder {
+    T D<T>(ISignal<T> signal);
+    T Use<T>(T disposable) where T : IDisposable;
+}
+```
+
+It's an **extremely** cut down version of the `EffectBuilder`. It reflects what `Memo` is for: **computing values** — not managing nested lifecycles.
+
+The `Use()` method is provided **just in case** the `Memo` is calculating a disposable value. Although this usecase should be uncommmon.
