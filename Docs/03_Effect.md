@@ -6,12 +6,12 @@ The term Effect comes from reactive programming. It refers to logic that reacts 
 
 In Spoke an `Effect` can be understood as follows:
 
-- It's an object which may be 'mounted' and 'disposed'.
+- It's an object which can be _mounted_ and _disposed_.
 - It's a container for child objects which implement IDisposable.
 - Those children might also be `Effect`s.
-- When an `Effect` disposes all it's descendants will be disposed too.
+- When an `Effect` is disposed, all its descendants will be disposed too.
 
-There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are each syntax sugar over the same basic concept. Spoke **could** exist with only `Effect`. The others exist for convenience.
+There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke **could** exist with only `Effect`. The others exist for convenience.
 
 ---
 
@@ -58,7 +58,7 @@ public class MyBehaviour : SpokeBehaviour {
         var effect = new Effect("innerEffect", s.SpokeEngine, s => {
             // This lambda is an EffectBlock
         });
-        s.Use(effect); // just so effect is auto-cleaned
+        s.Use(effect); // so effect is auto-cleaned
 
         s.UseEffect(s => {
             // This lambda is also an EffectBlock
@@ -83,13 +83,13 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-That's a lot of patterns, and I'm hinting at what `EffectBuilder` is too. The point I'm trying to make is that the `EffectBlock` is pervasive in Spoke, even though it takes different forms.
+That's a lot of patterns, and I'm hinting at what `EffectBuilder` is too. The takeaway is: `EffectBlock` shows up _everywhere_ in Spoke. Whether it's written inline, passed around as a lambda, or stored as a function — you're always working with one.
 
-Let's have a look what is the `EffectBuilder` next.
+Let’s take a look at what the `EffectBuilder` actually is.
 
 ## `EffectBuilder`
 
-When an `Effect` 'mounts' it runs it's `EffectBlock` and passes in an `EffectBuilder`. This is the `Effect`s **only** chance to build itself, once the `EffectBlock` returns the `Effect` is sealed. After that it cannot be changed unless its disposed and mounted again.
+When an `Effect` 'mounts' it runs its `EffectBlock` and passes in an `EffectBuilder`. This is the `Effect`'s **only** chance to build itself, once the `EffectBlock` returns, the `Effect` is sealed. After that, it cannot be changed unless it's disposed and mounted again.
 
 Let's have a look at the `EffectBuilder` interface.
 
@@ -115,15 +115,20 @@ public interface EffectBuilder {
 }
 ```
 
+Let's walk through the most important builder methods, starting with ownership.
+
 ---
 
-### Use
+### `Use`
 
-Many of the methods are prefixed with 'Use'. The most fundamental of these is:
+Most builder methods in Spoke are prefixed with `Use`. This isn't just naming convention — it reflects the system’s **ownership model**.
+
+The most fundamental of these is:
 
 `T Use<T>(T disposable) where T : IDisposable;`
 
-In Spoke the word 'Use' has a precise meaning. It means that the `Effect` should take ownership of an object that implements `IDisposable`. That object becomes a **child** of the `Effect`, and when the `Effect` is disposed the child will be disposed too.
+When you `Use(...)` something, you're saying:
+_“This effect now owns this resource. Dispose it when I unmount.”_
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
@@ -139,7 +144,7 @@ public class MyBehaviour : SpokeBehaviour {
 
 ---
 
-### OnCleanup
+### `OnCleanup`
 
 An `EffectBuilder` can register any number of cleanup actions. When the `Effect` is disposed it will first run each of these actions.
 
