@@ -49,6 +49,8 @@ myState.Update(x => x * 5);
 Debug.Log(myState.Now); // Prints: 25
 ```
 
+---
+
 ### `State<T>`
 
 `State<T>` is a concrete implementation of `IState`. It triggers when a **new** value is set.
@@ -78,6 +80,8 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
+---
+
 ### `UState<T>`
 
 Is just like `State<T>` except it is serializable by Unity and it shows up in the editor.
@@ -96,6 +100,8 @@ public class MyBehaviour : SpokeBehaviour {
 ```
 
 Reactivity is fully integrated with the Unity editor. `UState` responds to value changes in the Unity Editor, including Undo, deserialization, and runtime modifications. You could use it for pure editor scripts or behaviours with `[ExecuteAlways]`.
+
+---
 
 ## Advanced Notes
 
