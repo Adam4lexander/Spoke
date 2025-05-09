@@ -253,9 +253,7 @@ public class MyBehaviour : SpokeBehaviour {
 
         s.UseEffect(s => {
             s.UseEffect(s => {
-                s.UsePhase(IsEnabled, s => {
-
-                });
+                s.UsePhase(IsEnabled, s => { });
             });
         });
 
@@ -286,3 +284,13 @@ public class MyBehaviour : SpokeBehaviour {
 Spoke would catch that mistake and throw an error — but it’s better to avoid it altogether. Besides, trying to think of a good parameter name for an `Effect` three levels deep gets hard.
 
 The little-_s_ in comparison is unobtrusive yet immediately recognisable, and lets you focus on what matters.
+
+## Advanced Notes
+
+- **Deferred Execution**: Nested Effects are scheduled and deferred, then executed in order.
+
+- **Deterministic Flush**: Effects flush after Memos, in mount order. Execution is intuitive and consistent.
+
+- **Safe Cleanup**: Cleanup functions run in reverse order, then child `IDisposable`s are disposed in reverse.
+
+- **Zero GC Leaves**: Leaf Effects won't allocate GC on remount if the `EffectBlock` is allocation-free.
