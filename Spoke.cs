@@ -27,9 +27,6 @@ namespace Spoke {
         SpokeHandle Subscribe(Action action);
         void Unsubscribe(Action action);
     }
-    internal interface IDeferredTrigger {
-        void OnAfterNotify(Action action);
-    }
     public interface ITrigger<T> : ITrigger {
         SpokeHandle Subscribe(Action<T> action);
         void Unsubscribe(Action<T> action);
@@ -50,8 +47,8 @@ namespace Spoke {
         Dictionary<Delegate, List<int>> unsubLookup = new Dictionary<Delegate, List<int>>();
         Queue<T> events = new Queue<T>();
         DeferredQueue deferred = DeferredQueue.Create();
-        int idCount = 0; bool isAnyInactive;
         Action<int> _Unsub; Action _Flush;
+        int idCount = 0;
         public Trigger() { _Unsub = Unsub; _Flush = Flush; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(action, _ => action?.Invoke());
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(action, action);
@@ -60,19 +57,15 @@ namespace Spoke {
         public override void Unsubscribe(Action action) => Unsub(action);
         public void Unsubscribe(Action<T> action) => Unsub(action);
         void Flush() {
-            deferred.Hold();
             while (events.Count > 0) {
                 var evt = events.Dequeue();
                 var subList = subListPool.Get();
                 foreach (var item in subscriptions) subList.Add(item);
                 foreach (var item in subList) {
-                    if (item.IsActive)
-                        try { item.Action?.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
+                    try { item.Action?.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
                 }
                 subListPool.Return(subList);
-                ClearInactive();
             }
-            deferred.Release();
         }
         void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
@@ -87,9 +80,7 @@ namespace Spoke {
             for (int i = 0; i < subscriptions.Count; i++) {
                 var sub = subscriptions[i];
                 if (sub.Id == id) {
-                    sub.IsActive = false;
-                    subscriptions[i] = sub;
-                    isAnyInactive = true;
+                    subscriptions.RemoveAt(i);
                     if (unsubLookup.TryGetValue(sub.Key, out var idList)) {
                         idList.Remove(sub.Id);
                         if (idList.Count == 0) {
@@ -104,25 +95,21 @@ namespace Spoke {
         SpokeHandle Subscribe(Delegate key, Action<T> action) {
             if (key == null) return default;
             var nextId = idCount++;
-            var sub = new Subscription { Id = nextId, IsActive = true, Action = action, Key = key };
+            var sub = new Subscription { Id = nextId, Action = action, Key = key };
             subscriptions.Add(sub);
             if (!unsubLookup.TryGetValue(sub.Key, out var idList))
                 unsubLookup[sub.Key] = idList = intListPool.Get();
             idList.Add(nextId);
             return SpokeHandle.Of(nextId, _Unsub);
         }
-        void ClearInactive() {
-            if (!isAnyInactive) return;
-            for (int i = subscriptions.Count - 1; i >= 0; i--)
-                if (!subscriptions[i].IsActive) subscriptions.RemoveAt(i);
-            isAnyInactive = false;
-        }
         struct Subscription {
             public int Id;
-            public bool IsActive;
             public Action<T> Action;
             public Delegate Key;
         }
+    }
+    internal interface IDeferredTrigger {
+        void OnAfterNotify(Action action);
     }
     public struct SpokePool<T> where T : new() {
         Stack<T> pool; Action<T> reset;
