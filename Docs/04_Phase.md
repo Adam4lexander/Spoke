@@ -35,6 +35,8 @@ s.Use(new Phase("Phase", s.SpokeEngine, IsEnabled, s => {
 
 The inner block is another `EffectBlock`, and just like a regular `Effect`, you can nest anything inside: subscriptions, memos, other phases, reactions and cleanup handlers.
 
+---
+
 ## Dynamic Conditions
 
 A `Phase` can mount/unmount based on any reactive boolean:
