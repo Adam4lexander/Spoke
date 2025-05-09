@@ -42,3 +42,5 @@ Thumbs.db
 /LICENSE.meta
 /README.md.meta
 /Examples.meta
+/Docs.meta
+/Docs/**/*.meta
