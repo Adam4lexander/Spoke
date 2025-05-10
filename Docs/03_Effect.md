@@ -1,8 +1,8 @@
 # Effect
 
-Now we get to the good stuff. The `Effect` is where you will write all your code!
+Now we get to the good stuff. The `Effect` is where you will write almost all of your reactive game logic.
 
-The term Effect comes from reactive programming. It refers to logic that reacts to state changes and may cause side effects — like changing a component, spawning something, or updating game state. It's the boundary between reactivity and imperative execution.
+In reactive programming, an _effect_ refers to any logic that reacts to state changes and might cause side effects — like updating a component, spawning an entity, or applying damage. It’s the boundary between declarative reactivity and imperative action.
 
 In Spoke an `Effect` can be understood as follows:
 
@@ -11,13 +11,13 @@ In Spoke an `Effect` can be understood as follows:
 - Those children might also be `Effect`s.
 - When an `Effect` is disposed, all its descendants will be disposed too.
 
-There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke **could** exist with only `Effect`. The others exist for convenience.
+There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist to make your intent clearer, your code shorter, and your mental model sharper.
 
 ---
 
 ## Creating an Effect
 
-If you use `SpokeBehaviour` then you may never need to create an `Effect` manually, but here's how it's done:
+If you're using `SpokeBehaviour`, you may never need to create an `Effect` manually. But here’s how it's done:
 
 ```csharp
 // We'll get to SpokeEngine later
@@ -26,18 +26,22 @@ var engine = new SpokeEngine(FlushMode.Immediate);
 var effect = new Effect("MyEffect", engine, s => {
     // EffectBuilder logic
 });
+
 // ...
+
 effect.Dispose();
 ```
 
-Here is the constructor for `Effect`:
+The constructor for `Effect` is:
 
 `public Effect(string name, SpokeEngine engine, EffectBlock block, params ITrigger[] triggers)`
 
-First the `name` is how the `Effect` appears in debugging views. We'll get to the `engine` later. The remaining two parameters I'll dive into, but in summary:
+Let's break that down:
 
-- `block`: is a function that takes a builder object and 'creates' the `Effect`.
-- `triggers`: are explicit dependencies that remount the `Effect` when they trigger.
+- `name`: Appears in debugging views.
+- `engine`: We'll come back to this when we cover SpokeEngine.
+- `block`: A function that takes a builder object and creates the `Effect`.
+- `triggers`: Are explicit dependencies that remount the `Effect` when they trigger.
 
 ---
 
