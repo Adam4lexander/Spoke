@@ -187,15 +187,15 @@ If you're using `FlushMode.Immediate` (the default), flushes happen automaticall
 Here’s a high-level sketch of what the flush logic looks like:
 
 - Grab everything in the `scheduled` set
-- Divide into `Memo`s and `Effect`s
-- For `Memo`s:
+- Divide into `Memo` and `Effect` buckets
+- For Memos:
   - Topologically sort by dependencies
-  - Run each memo
-  - If new memos wer scheduled mid-run, repeat
-- For `Effect`s:
-  - Sort by reverse mount order (like a stack)
-  - Run each effect once
-  - If new memos were scheduled then return to memo phase
+  - Run each `Memo`
+  - If new Memos are scheduled, repeat
+- For Effects:
+  - Sort by mount order
+  - Run each `Effect`
+  - If new Memos are scheduled, return to Memos
 
 ---
 
