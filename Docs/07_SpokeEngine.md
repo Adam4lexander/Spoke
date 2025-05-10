@@ -57,7 +57,7 @@ Put simply, batching tells the engine: **"Don't flush yet."**
 
 In Spoke, batching happens in two ways:
 
-1. **Explicit Batching** – You call `SpokeEngine.Batch(() => { ... }) to group updates manually.
+1. **Explicit Batching** – You call `SpokeEngine.Batch(() => { ... })` to group updates manually.
 2. **Internal Deferral** – The engine automatically defers flushing during certain internal operations (like `Trigger.Invoke`) to ensure safety and consistency.
 
 Both mechanisms cause the engine to **defer a flush**.
