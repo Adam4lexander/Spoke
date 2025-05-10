@@ -1,6 +1,6 @@
 # SpokeEngine
 
-The `SpokeEngine` is the core runtime that powers reactive computation in Spoke. You may rarely interact with it directly — but it's the **most important component** in the system.
+The `SpokeEngine` is the core runtime that powers reactive computation in Spoke. You'll rarely need to interact with the `SpokeEngine` directly — but it's the **most foundational part** of Spoke's behaviour.
 
 Understanding it will complete your mental model of Spoke and make writing code more predictable.
 
@@ -24,7 +24,7 @@ var effect = new Effect("MyEffect", engine, s => { /* ... */ });
 var memo = new Memo("MyMemo", engine, s => { /* ... */ } );
 ```
 
-Every computation is bound to a `SpokeEngine` at the time it's created. That engine is where it will schedule itself whenever it needs to run.
+Each computation is bound to a `SpokeEngine` when created, and schedules itself there whenever it re-runs.
 
 When you create Effects via `UseEffect()`, `UsePhase()`, or `UseReaction()` — or Memos via `UseMemo()` — they automatically inherit the `SpokeEngine` from the parent context.
 
@@ -39,7 +39,7 @@ var effect = new Effect("MyEffect", engine, s => {
 ```
 
 Whenever an `Effect` or `Memo` is **created** — or when one of its dependencies **triggers** — it schedules itself onto its engine.
-This means it's added to a queue inside the `SpokeEngine`, ready to be flushed later as part of a batch.
+This means it's added to the `SpokeEngine`'s internal queue of scheduled computations, which will be flushed as part of the next update pass.
 
 The one exception is `Reaction`: it doesn’t schedule itself when created.
 Instead, it only schedules when one of its **explicit triggers** fires — which is exactly what makes it ideal for push-based, one-shot logic.
@@ -129,7 +129,7 @@ Why?
 
 Because we're already **inside a flush**.
 The `Init` method is an `EffectBlock`, which means it only runs **during** a flush.
-And during a flush, **all Effects and Memos are automatically deffered**.
+And during a flush, **all Effects and Memos are automatically deferred**.
 Every `EffectBlock` is effectively inside its own `SpokeEngine.Batch()`.
 
 That's why **manual batching only matters outside Spoke** — in external logic, like button handlers or coroutine steps.
@@ -139,7 +139,7 @@ Once a reactive trigger causes the engine to flush, **control will not return** 
 
 ## Flushing
 
-Once batching ends — whether explicitly via `engine.Batch(...)`, or implicitly after internal deferral — the `SpokeEngine` flushes all scheduled computations.
+Once batching ends the `SpokeEngine` flushes all scheduled computations.
 
 Flushing is what actually **executes** the work.
 All the scheduling and batching before this point simply ensures that the work is done **once**, at the **right time**, in the **right order**.
