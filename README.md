@@ -1,4 +1,4 @@
-# Spoke
+# 🔘 Spoke - _A reactive framework for simulated worlds_
 
 **Spoke** is a tiny declarative reactivity engine for Unity.
 
@@ -11,6 +11,23 @@ Instead of scattering logic across Update(), OnEnable(), and coroutines, Spoke l
 - 🎯 **Predictable** — reactive scopes flush in a stable, deterministic order
 - 📦 **Drop-in simple** — just two files, no setup or dependencies
 - 🧪 **Use anywhere** — adopt it in one script or across your whole project
+
+---
+
+## 💡 Why Spoke?
+
+Most complexity in code doesn't come from systems — it comes from **the glue.**
+
+We call it _plumbing code_ — messy, brittle, and usually dismissed with a shrug:
+
+> _"It's just plumbing"_
+
+Spoke attacks that problem head-on.
+
+It turns scattered glue code into **clean, declarative logic.**<br>
+It scales with complexity. It cleans up after itself. It makes **architecture feel like gameplay.**
+
+Spoke is the missing tool for making modular systems interconnect.
 
 ---
 
@@ -123,88 +140,16 @@ Take a peek at SpokeBehaviour if you're curious — it's tiny.
 
 ## 🧠 Core Concepts
 
-### Trigger
+The reactive model behind Spoke is built around a few simple primitives:
 
-The most basic reactive signal. Emits a one-shot event that remounts effects and recomputes memos.
+- **Trigger** - fire-and-forget events
+- **State** - reactive container for values
+- **Effect** / **Phase** / **Reaction** - self-cleaning blocks of logic
+- **Memo** - computed reactive value
+- **Dock** - Dynamic reactive container
+- **SpokeEngine** - Executor of reactive computation
 
-```csharp
-var damageTaken = Trigger.Create<DamageEvent>();
-damageTaken.Invoke(new DamageEvent(/*...*/));
-```
-
-Triggers are fire-and-forget pulses.
-They implement `ITrigger` / `ITrigger<T>`, so they can be subscribed to or used as dependencies in effects and memos.
-
----
-
-### State
-
-Reactive container for any value. When updated, it notifies dependent logic automatically.
-
-```csharp
-var isVisible = State.Create(true);
-isVisible.Set(false); // Triggers effects or memos that depend on it
-```
-
-`State<T>` implements `ISignal<T>` and `ITrigger<T>`, making it usable as both a value and a reactive trigger.
-
----
-
-### Effect / Phase / Reaction
-
-Declarative logic blocks that mount, unmount, and remount automatically based on reactive state.
-
-```csharp
-s.UseEffect(s => renderer.sharedMaterial.color = s.D(ColourSignal)); // Always mounted
-
-s.UsePhase(isAlive, s => Debug.Log("I'm alive!")); // Only mounted when condition is true
-
-s.UseReaction(s => CheckIsGameOver(), DamageEvent); // Mounts only after first dependency triggers
-```
-
-Effects can **own disposables**, including other effects, forming a nested ownership hierarchy.  
-When any dependency changes, the effect is **fully remounted** — its previous logic is cleaned up, then re-executed.  
-This keeps your logic in sync with state, and prevents stale behavior from lingering.
-
----
-
-### EffectBuilder
-
-Passed into every reactive block. Used to mount effects, subscriptions, and disposables within a scope.
-
-```csharp
-s.UseEffect((EffectBuilder s) => {
-    // Use[...] means: "I now own this IDisposable, and it will be cleaned up automatically"
-    s.Use(new MyCustomDisposable());
-    s.UseSubscribe(someTrigger, evt => { /* ... */ });
-    s.UseEffect(s => { /* ... */ });
-});
-```
-
-Every `Effect`, `Phase`, and `Reaction` receives an `EffectBuilder` —
-it defines what logic is mounted, and ensures automatic cleanup when the scope ends.
-
----
-
-### Memo
-
-A computed signal. Automatically re-evaluates when any of its reactive dependencies change.
-
-```csharp
-var isAlive = s.UseMemo(s => s.D(health) > 0);
-```
-
-Memos are like derived values — they track the signals they access,
-and update whenever those signals change.
-
----
-
-### Dependency Tracking
-
-> All reactive scopes (Effect, Phase, Reaction, Memo) can track dependencies either:
->
-> - **Dynamically**, using `s.D(...)` inside the block
-> - **Explicitly**, by passing signals as parameters
+📘 [Read the full documentation →](./Docs/)
 
 ---
 
