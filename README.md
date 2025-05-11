@@ -146,8 +146,8 @@ The reactive model behind Spoke is built around a few simple primitives:
 - **State** - reactive container for values
 - **Effect** / **Phase** / **Reaction** - self-cleaning blocks of logic
 - **Memo** - computed reactive value
-- **Dock** - Dynamic reactive container
-- **SpokeEngine** - Executor of reactive computation
+- **Dock** - dynamic reactive container
+- **SpokeEngine** - executor of reactive computation
 
 📘 [Read the full documentation →](./Docs/)
 
