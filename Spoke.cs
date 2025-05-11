@@ -386,7 +386,7 @@ namespace Spoke {
         ISpokeLogger logger;
         Action _flush;
         public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) {
-            _flush = Flush;
+            _flush = FlushNow;
             FlushMode = flushMode;
             this.logger = logger ?? new ConsoleSpokeLogger();
         }
@@ -397,11 +397,11 @@ namespace Spoke {
         public void LogFlush(string msg) => pendingLogs.Add(msg);
         void Schedule(Computation comp) {
             scheduled.Add(comp);
-            if (FlushMode == FlushMode.Immediate) PostFlush();
+            if (FlushMode == FlushMode.Immediate) Flush();
         }
-        public void PostFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
+        public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
         static readonly Comparison<Node> EffectComparison = (a, b) => b.CompareTo(a);
-        void Flush() {
+        void FlushNow() {
             if (scheduled.Count == 0) return;
             var maxPasses = 1000; var passes = 0;
             try {

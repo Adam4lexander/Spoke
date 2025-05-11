@@ -69,9 +69,9 @@ namespace Spoke.Examples {
             s.OnCleanup(() => sphere.label.text = origLabel);
 
             IEnumerator blinkRoutine() {
-                sphere.renderer.material.color = Color.green;
+                sphere.renderer.sharedMaterial.color = Color.green;
                 yield return new WaitForSeconds(0.5f);
-                sphere.renderer.material.color = Color.blue;
+                sphere.renderer.sharedMaterial.color = Color.blue;
             }
 
             var routineInstance = StartCoroutine(blinkRoutine());
@@ -79,7 +79,7 @@ namespace Spoke.Examples {
             // Stop the flash if this scope is cleaned up early
             s.OnCleanup(() => {
                 StopCoroutine(routineInstance);
-                sphere.renderer.material.color = Color.red;
+                sphere.renderer.sharedMaterial.color = Color.red;
             });
         };
 
