@@ -140,8 +140,8 @@ For complex graphs of Memos, Spoke makes no guarantee what order the Memos are r
 ```csharp
 var num = State.Create(100);
 
-var half = s.UseMemo(s => s.D(numState) / 2);
-var quarter = s.UseMemo(s => s.D(numState) / 4);
+var half = s.UseMemo(s => s.D(num) / 2);
+var quarter = s.UseMemo(s => s.D(num) / 4);
 
 var sum = s.UseMemo(s => s.D(half) + s.D(quarter));
 ```

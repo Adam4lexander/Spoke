@@ -205,7 +205,7 @@ This two-phase model is what makes Spoke predictable:
 
 - **Memos are allowed to "settle"**
 - **Effects see final values**
-- ** Flushes are atomic** — the queue is drained completely before any new flush can begin
+- **Flushes are atomic** — the queue is drained completely before any new flush can begin
 
 It’s this flush behavior that lets you write deeply reactive logic without thinking about intermediate states.
 You’ll never see half-updated values in your `Effect`s — only clean, consistent snapshots of the world.
