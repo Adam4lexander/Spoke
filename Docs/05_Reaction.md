@@ -57,7 +57,7 @@ s.UseReaction(s => {
 - Reacting to damage events:
 
 ```csharp
-s.UseReaction(DamageTaken, s => {
+s.UseReaction(s => {
     PlayHitAnimation();
-});
+}, DamageTaken);
 ```
