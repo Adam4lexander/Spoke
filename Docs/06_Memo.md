@@ -155,8 +155,8 @@ Well unfortunately this is a simple enough example that it will behave determini
 
 **But** if this was a more complex graph then it may not behave deterministically:
 
-- First execution will run `half`, then `quarter`, then `sum`
-- Second execution will run `quarter`, then `sum`, then `half` and then `sum` once more.
+- First execution may run `half`, then `quarter`, then `sum`
+- Second execution may run `quarter`, then `sum`, then `half` and then `sum` once more.
 
 So what does a more complex graph look like?
 
