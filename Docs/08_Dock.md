@@ -28,7 +28,7 @@ public class MyBehaviour : SpokeBehaviour {
 ```
 
 The `"key"` lets you replace or remove child resources later.
-Calling `dock.Drop("key") will dispose and unmount whatever was mounted under that key.
+Calling `dock.Drop("key")` will dispose and unmount whatever was mounted under that key.
 
 ---
 
