@@ -52,7 +52,7 @@ public class OverheadUISystem : SpokeBehaviour {
 
         // Mount a UI when an actor comes into range
         s.UseSubscribe(onActorInRange, actor => {
-            dock.UseEffect(actor, OverheadPanel(actor));
+            dock.UseEffect(actor, OverheadUI(actor));
         });
 
         // Unmount the UI when they go out of range
