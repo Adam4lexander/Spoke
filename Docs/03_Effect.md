@@ -59,7 +59,7 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
         // Init is an EffectBlock
 
-        var effect = new Effect("innerEffect", s.SpokeEngine, s => {
+        var effect = new Effect("innerEffect", s.Engine, s => {
             // This lambda is an EffectBlock
         });
         s.Use(effect); // so effect is auto-cleaned
@@ -141,7 +141,7 @@ public class MyBehaviour : SpokeBehaviour {
 
         s.UseEffect("MyEffect", s => { /* ... */ });
         // Is equivalent to
-        s.Use(new Effect("MyEffect", s.SpokeEngine, s => { /* ... */ }));
+        s.Use(new Effect("MyEffect", s.Engine, s => { /* ... */ }));
     }
 }
 ```

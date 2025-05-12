@@ -33,7 +33,7 @@ var engine = new SpokeEngine(FlushMode.Immediate);
 
 var effect = new Effect("MyEffect", engine, s => {
     s.UseEffect(s => {
-        var isSameEngine = s.SpokeEngine == engine; // True
+        var isSameEngine = s.Engine == engine; // True
     });
 });
 ```
