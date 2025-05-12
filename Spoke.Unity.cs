@@ -1,5 +1,6 @@
 // Spoke.Unity.cs
 // -----------------------------
+// > SpokeTeardown
 // > SpokeBehaviour
 // > SpokeSingleton
 // > UState
@@ -10,7 +11,6 @@ using System;
 using System.Collections;
 using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 
 #if UNITY_EDITOR
@@ -21,6 +21,24 @@ using System.Reflection;
 
 namespace Spoke {
 
+    // ============================== SpokeTeardown ============================================================
+    public static class SpokeTeardown {
+        static Trigger<Scene> scene = Trigger.Create<Scene>();
+        static Trigger app = Trigger.Create();
+        public static ITrigger<Scene> Scene { get { EnsureInit(); return scene; } }
+        public static ITrigger App { get { EnsureInit(); return app; } }
+        public static void SignalScene(Scene scene) { EnsureInit(); SpokeTeardown.scene.Invoke(scene); }
+        static bool isInitialized = false;
+        static void EnsureInit() {
+            if (isInitialized) return;
+            isInitialized = true;
+            Application.quitting += () => app.Invoke();
+#if UNITY_EDITOR
+            EditorApplication.playModeStateChanged += state => { if (state == PlayModeStateChange.ExitingPlayMode) app.Invoke(); };
+            AssemblyReloadEvents.beforeAssemblyReload += () => app.Invoke();
+#endif
+        }
+    }
     // ============================== SpokeBehaviour ============================================================
     public abstract class SpokeBehaviour : MonoBehaviour {
         State<bool> isAwake = State.Create(false);
@@ -37,6 +55,7 @@ namespace Spoke {
             }
         }
         Effect initScope;
+        SpokeHandle sceneTeardown, appTeardown;
         protected virtual SpokeEngine OverrideEngine() => null;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -44,6 +63,8 @@ namespace Spoke {
         }
         protected virtual void OnDestroy() {
             initScope?.Dispose();
+            sceneTeardown.Dispose();
+            appTeardown.Dispose();
             isAwake.Set(false);
         }
         protected virtual void OnEnable() {
@@ -60,6 +81,8 @@ namespace Spoke {
         }
         void DoInit() {
             initScope = new Effect($"{GetType().Name}:Init", SpokeEngine, Init);
+            sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) initScope.Dispose(); });
+            appTeardown = SpokeTeardown.App.Subscribe(() => initScope.Dispose());
             isAwake.Set(true);
         }
     }
@@ -86,16 +109,7 @@ namespace Spoke {
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
-            new Effect("Effect:EnsureStaticInit", engine, s => {
-                UnityAction<Scene, Scene> onActiveSceneChanged = (_, newScene) => isDestroyed.Set(false);
-                SceneManager.activeSceneChanged += onActiveSceneChanged;
-                s.OnCleanup(() => SceneManager.activeSceneChanged -= onActiveSceneChanged);
-#if UNITY_EDITOR
-                Action<PlayModeStateChange> onPlayModeStateChanged = _ => isDestroyed.Set(false);
-                EditorApplication.playModeStateChanged += onPlayModeStateChanged;
-                s.OnCleanup(() => EditorApplication.playModeStateChanged -= onPlayModeStateChanged);
-#endif
-            });
+            SpokeTeardown.App.Subscribe(() => isDestroyed.Set(false));
         }
         static void FindOrCreateInstance() {
             T nextInstance;
