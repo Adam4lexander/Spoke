@@ -107,7 +107,7 @@ Let's look at that same logic — but inside a reactive scope:
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
 
-    protected override void Init(EffectBlock s) {
+    protected override void Init(EffectBuilder s) {
 
         var className = State.Create("Warrior");
         var level = State.Create(1);
