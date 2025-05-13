@@ -85,7 +85,7 @@ namespace Spoke {
             public int Id; Action<T> ActionT; Action Action;
             public static Subscription Create(int id, Action<T> action) => new Subscription { Id = id, ActionT = action };
             public static Subscription Create(int id, Action action) => new Subscription { Id = id, Action = action };
-            public Delegate Key => ActionT != null ? ActionT : Action;
+            public Delegate Key => ActionT != null ? (Delegate)ActionT : Action;
             public void Invoke(T arg) {
                 if (ActionT != null) ActionT(arg);
                 else Action?.Invoke(); 
