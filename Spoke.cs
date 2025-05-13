@@ -88,7 +88,7 @@ namespace Spoke {
             public Delegate Key => ActionT != null ? (Delegate)ActionT : Action;
             public void Invoke(T arg) {
                 if (ActionT != null) ActionT(arg);
-                else Action?.Invoke(); 
+                else Action?.Invoke();
             }
         }
     }
@@ -444,49 +444,31 @@ namespace Spoke {
         }
         public abstract class Computation : Node {
             protected SpokeEngine engine;
-            DependencyTracker staticDeps = DependencyTracker.Create();
-            DependencyTracker dynamicDeps = DependencyTracker.Create();
-            DynamicTriggerTracker dynamicTriggerTracker = DynamicTriggerTracker.Create();
-            List<Computation> dependencies = new List<Computation>();
+            DependencyTracker tracker;
             bool isDirty;
             public Exception Fault { get; private set; }
-            public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(dependencies);
+            public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public Computation(string name, SpokeEngine engine, IEnumerable<ITrigger> triggers) : base(name) {
                 this.engine = engine;
                 engine.runFuncs[this] = Run;
-                foreach (var trigger in triggers) if (trigger != this) staticDeps.Add(trigger, ScheduleFromTrigger(trigger));
-                SyncDependencies();
+                tracker = DependencyTracker.Create(this);
+                foreach (var trigger in triggers) tracker.AddStatic(trigger);
+                tracker.SyncDependencies();
             }
             public override void Dispose() {
                 engine.runFuncs.Remove(this);
-                staticDeps.Dispose();
-                dynamicDeps.Dispose();
-                dependencies.Clear();
+                tracker.Dispose();
                 base.Dispose();
             }
             void Run() {
                 if (!isDirty || (Fault != null)) return;
-                dynamicTriggerTracker.Begin();
+                isDirty = false; // Set now in case I trigger myself
+                tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; return; }
-                if (dynamicTriggerTracker.End(out var nextDynamicTriggers)) {
-                    dynamicDeps.Dispose();
-                    foreach (var trigger in nextDynamicTriggers) dynamicDeps.Add(trigger, ScheduleFromTrigger(trigger));
-                    SyncDependencies();
-                }
-                isDirty = false;
+                tracker.EndDynamic();
             }
-            void SyncDependencies() {
-                dependencies.Clear();
-                foreach (var dep in staticDeps.Dependencies) dependencies.Add(dep);
-                foreach (var dep in dynamicDeps.Dependencies) dependencies.Add(dep);
-            }
-            protected void AddStaticTrigger(ITrigger trigger) {
-                staticDeps.Add(trigger, ScheduleFromTrigger(trigger));
-                SyncDependencies();
-            }
-            protected void AddDynamicTrigger(ITrigger dep) {
-                if (dep != this && !staticDeps.Has(dep)) dynamicTriggerTracker.Add(dep);
-            }
+            protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
+            protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
             protected abstract void OnRun();
             protected void LogFlush(string msg) => engine.LogFlush(msg);
             Action ScheduleFromTrigger(ITrigger trigger) => () => {
@@ -495,50 +477,57 @@ namespace Spoke {
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
             protected void Schedule() {
-                if (!isDirty) {
-                    isDirty = true;
-                    engine.Schedule(this);
-                }
+                if (isDirty) return;
+                isDirty = true;
+                engine.Schedule(this);
             }
             struct DependencyTracker : IDisposable {
-                List<ITrigger> triggers;
-                List<Computation> dependencies;
-                List<SpokeHandle> handles;
-                HashSet<ITrigger> seen;
-                public ReadOnlyList<ITrigger> Triggers => new ReadOnlyList<ITrigger>(triggers);
-                public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(dependencies);
-                public static DependencyTracker Create() => new DependencyTracker {
-                    triggers = new List<ITrigger>(),
+                Computation owner;
+                HashSet<ITrigger> staticTriggers, dynamicTriggers;
+                List<SpokeHandle> staticHandles, dynamicHandles;
+                List<(ITrigger t, Action a)> dynamicCache;
+                public List<Computation> dependencies;
+                public static DependencyTracker Create(Computation owner) => new DependencyTracker {
+                    owner = owner,
+                    staticTriggers = new HashSet<ITrigger>(),
+                    dynamicTriggers = new HashSet<ITrigger>(),
+                    staticHandles = new List<SpokeHandle>(),
+                    dynamicHandles = new List<SpokeHandle>(),
                     dependencies = new List<Computation>(),
-                    handles = new List<SpokeHandle>(),
-                    seen = new HashSet<ITrigger>()
+                    dynamicCache = new List<(ITrigger t, Action a)>()
                 };
-                public bool Has(ITrigger trigger) => seen.Contains(trigger);
-                public void Add(ITrigger trigger, Action action) {
-                    if (trigger == null || seen.Contains(trigger)) return;
-                    seen.Add(trigger);
-                    handles.Add(trigger.Subscribe(action));
-                    triggers.Add(trigger);
-                    if (trigger is Computation comp) Add(comp);
+                public void AddStatic(ITrigger trigger) {
+                    if (trigger == owner || !staticTriggers.Add(trigger)) return;
+                    staticHandles.Add(trigger.Subscribe(owner.ScheduleFromTrigger(trigger)));
                 }
-                public void Add(Computation comp) => dependencies.Add(comp);
+                public void BeginDynamic() {
+                    foreach (var handle in dynamicHandles) handle.Dispose();
+                    dynamicHandles.Clear();
+                    dynamicTriggers.Clear();
+                }
+                public void AddDynamic(ITrigger trigger) {
+                    if (trigger == owner || staticTriggers.Contains(trigger) || !dynamicTriggers.Add(trigger)) return;
+                    var trigCount = dynamicTriggers.Count;
+                    if (trigCount > dynamicCache.Count) dynamicCache.Add((trigger, owner.ScheduleFromTrigger(trigger)));
+                    if (dynamicCache[trigCount - 1].t != trigger) dynamicCache[trigCount - 1] = (trigger, owner.ScheduleFromTrigger(trigger));
+                    dynamicHandles.Add(trigger.Subscribe(dynamicCache[trigCount - 1].a));
+                }
+                public void EndDynamic() {
+                    while (dynamicCache.Count > dynamicHandles.Count) dynamicCache.RemoveAt(dynamicCache.Count - 1);
+                    SyncDependencies();
+                }
+                public void SyncDependencies() {
+                    dependencies.Clear();
+                    foreach (var trig in staticTriggers) if (trig is Computation comp) dependencies.Add(comp);
+                    foreach (var trig in dynamicTriggers) if (trig is Computation comp) dependencies.Add(comp);
+                }
                 public void Dispose() {
-                    foreach (var handle in handles) handle.Dispose();
-                    triggers.Clear();
-                    handles.Clear();
-                    seen.Clear();
-                }
-            }
-            struct DynamicTriggerTracker {
-                List<ITrigger> curr, next;
-                bool isChanged;
-                public static DynamicTriggerTracker Create() => new DynamicTriggerTracker { curr = new List<ITrigger>(), next = new List<ITrigger>() };
-                public void Begin() { next.Clear(); isChanged = false; }
-                public void Add(ITrigger trigger) { next.Add(trigger); isChanged = isChanged || next.Count > curr.Count || trigger != curr[next.Count - 1]; }
-                public bool End(out List<ITrigger> dynamicTriggers) {
-                    var tmp = curr; curr = next; next = tmp;
-                    dynamicTriggers = curr;
-                    return isChanged;
+                    staticTriggers.Clear(); dynamicTriggers.Clear();
+                    foreach (var handle in staticHandles) handle.Dispose();
+                    foreach (var handle in dynamicHandles) handle.Dispose();
+                    staticHandles.Clear(); dynamicHandles.Clear();
+                    dependencies.Clear();
+                    dynamicCache.Clear();
                 }
             }
         }
