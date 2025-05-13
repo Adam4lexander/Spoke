@@ -41,7 +41,7 @@ namespace Spoke {
         protected abstract void Unsub(int id);
     }
     public class Trigger<T> : Trigger, ITrigger<T>, IDeferredTrigger {
-        List<Subscription> subscriptions = new List<Subscription>();
+        List<Subscription> subs = new List<Subscription>();
         SpokePool<List<int>> intListPool = SpokePool<List<int>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
@@ -59,9 +59,9 @@ namespace Spoke {
             while (events.Count > 0) {
                 var evt = events.Dequeue();
                 var subList = subListPool.Get();
-                foreach (var item in subscriptions) subList.Add(item);
-                foreach (var item in subList) {
-                    try { item.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
+                foreach (var sub in subs) subList.Add(sub);
+                foreach (var sub in subList) {
+                    try { sub.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
                 }
                 subListPool.Return(subList);
             }
@@ -69,21 +69,16 @@ namespace Spoke {
         void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
             var idList = intListPool.Get();
-            foreach (var item in subscriptions) if (item.Key == action) idList.Add(item.Id);
+            foreach (var sub in subs) if (sub.Key == action) idList.Add(sub.Id);
             foreach (var id in idList) Unsub(id);
             intListPool.Return(idList);
         }
         protected override void Unsub(int id) {
-            for (int i = 0; i < subscriptions.Count; i++) {
-                var sub = subscriptions[i];
-                if (sub.Id == id) {
-                    subscriptions.RemoveAt(i);
-                    return;
-                }
-            }
+            for (int i = 0; i < subs.Count; i++)
+                if (subs[i].Id == id) { subs.RemoveAt(i); return; }
         }
         SpokeHandle Subscribe(Subscription sub) {
-            subscriptions.Add(sub);
+            subs.Add(sub);
             return SpokeHandle.Of(sub.Id, _Unsub);
         }
         struct Subscription {
@@ -91,7 +86,10 @@ namespace Spoke {
             public static Subscription Create(int id, Action<T> action) => new Subscription { Id = id, ActionT = action };
             public static Subscription Create(int id, Action action) => new Subscription { Id = id, Action = action };
             public Delegate Key => ActionT != null ? ActionT : Action;
-            public void Invoke(T arg) { ActionT?.Invoke(arg); Action?.Invoke(); }
+            public void Invoke(T arg) {
+                if (ActionT != null) ActionT(arg);
+                else Action?.Invoke(); 
+            }
         }
     }
     internal interface IDeferredTrigger {

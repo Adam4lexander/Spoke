@@ -62,10 +62,7 @@ namespace Spoke {
             DoInit();
         }
         protected virtual void OnDestroy() {
-            initScope?.Dispose();
-            sceneTeardown.Dispose();
-            appTeardown.Dispose();
-            isAwake.Set(false);
+            DoTeardown();
         }
         protected virtual void OnEnable() {
             if (initScope == null) {
@@ -81,9 +78,16 @@ namespace Spoke {
         }
         void DoInit() {
             initScope = new Effect($"{GetType().Name}:Init", SpokeEngine, Init);
-            sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) initScope.Dispose(); });
-            appTeardown = SpokeTeardown.App.Subscribe(() => initScope.Dispose());
+            sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
+            appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
+        }
+        void DoTeardown() {
+            sceneTeardown.Dispose();
+            appTeardown.Dispose();
+            enabled = false;
+            initScope?.Dispose();
+            isAwake.Set(false);
         }
     }
     // ============================== SpokeSingleton ============================================================
