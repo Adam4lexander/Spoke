@@ -584,7 +584,8 @@ namespace Spoke {
         public void OnFlushComputation(SpokeEngine.Computation c) { runHistory.Add(c); HasErrors |= c.Fault != null; }
         public bool HasErrors { get; private set; }
         public void LogFlush(ISpokeLogger logger, string msg) {
-            sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}] {msg}");
+            sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
+            foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
             foreach (var c in runHistory) roots.Add(c.Root);
             foreach (var root in roots) PrintRoot(root);
             if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
@@ -603,8 +604,14 @@ namespace Spoke {
             });
         }
         string NodeLabel(IDisposable node) {
-            var runIndex = runHistory.IndexOf(node as SpokeEngine.Computation);
-            return $"|--{(runIndex < 0 ? "" : $"({runIndex})-")}{node} ";
+            if (node is SpokeEngine.Computation comp) {
+                var indexes = new List<int>();
+                for (int i = 0; i < runHistory.Count; i++)
+                    if (ReferenceEquals(runHistory[i], comp)) indexes.Add(i);
+                var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
+                return $"|--{indexStr}{node} ";
+            }
+            return $"|--{node} ";
         }
         string FaultStatus(IDisposable node) {
             if (node is SpokeEngine.Computation comp && comp.Fault != null)
