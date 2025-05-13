@@ -100,6 +100,7 @@ Let's have a look at the `EffectBuilder` interface.
 ```csharp
 public interface EffectBuilder {
     SpokeEngine Engine { get; }
+    void Log(string msg);
     T D<T>(ISignal<T> signal);
     void Use(SpokeHandle trigger);
     T Use<T>(T disposable) where T : IDisposable;

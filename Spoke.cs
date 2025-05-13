@@ -133,6 +133,7 @@ namespace Spoke {
     // ============================== BaseEffect ============================================================
     public interface EffectBuilder {
         SpokeEngine Engine { get; }
+        void Log(string msg);
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
         T Use<T>(T disposable) where T : IDisposable;
@@ -174,6 +175,7 @@ namespace Spoke {
                 isMounted = false;
             }
             public SpokeEngine Engine => owner.engine;
+            public void Log(string msg) { NoMischief(); owner.LogFlush(msg); }
             public T D<T>(ISignal<T> signal) { NoMischief(); owner.AddDynamicTrigger(signal); return signal.Now; }
             public void Use(SpokeHandle trigger) { NoMischief(); owner.Own(trigger); }
             public T Use<T>(T disposable) where T : IDisposable { NoMischief(); owner.Own(disposable); return disposable; }
@@ -378,7 +380,11 @@ namespace Spoke {
             deferred.Hold();
             try { action(); } finally { deferred.Release(); }
         }
-        public void LogFlush(string msg) => pendingLogs.Add(msg);
+        public void LogBatch(string msg, Action action) => Batch(() => {
+            LogFlush(msg);
+            action();
+        });
+        void LogFlush(string msg) => pendingLogs.Add(msg);
         void Schedule(Computation comp) {
             scheduled.Add(comp);
             if (FlushMode == FlushMode.Immediate) Flush();
@@ -482,6 +488,7 @@ namespace Spoke {
                 if (dep != this && !staticDeps.Has(dep)) dynamicTriggerTracker.Add(dep);
             }
             protected abstract void OnRun();
+            protected void LogFlush(string msg) => engine.LogFlush(msg);
             Action ScheduleFromTrigger(ITrigger trigger) => () => {
                 engine.deferred.Hold();
                 Schedule();
