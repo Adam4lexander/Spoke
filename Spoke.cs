@@ -50,8 +50,8 @@ namespace Spoke {
         Action<int> _Unsub; Action _Flush;
         int idCount = 0;
         public Trigger() { _Unsub = Unsub; _Flush = Flush; }
-        public override SpokeHandle Subscribe(Action action) => Subscribe(action, _ => action?.Invoke());
-        public SpokeHandle Subscribe(Action<T> action) => Subscribe(action, action);
+        public override SpokeHandle Subscribe(Action action) => Subscribe(Subscription.Create(idCount++, action));
+        public SpokeHandle Subscribe(Action<T> action) => Subscribe(Subscription.Create(idCount++, action));
         public override void Invoke() => Invoke(default(T));
         public void Invoke(T param) { events.Enqueue(param); deferred.Enqueue(_Flush); }
         public override void Unsubscribe(Action action) => Unsub(action);
@@ -62,7 +62,7 @@ namespace Spoke {
                 var subList = subListPool.Get();
                 foreach (var item in subscriptions) subList.Add(item);
                 foreach (var item in subList) {
-                    try { item.Action?.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
+                    try { item.Invoke(evt); } catch (Exception ex) { SpokeError.Log("Trigger subscriber error", ex); }
                 }
                 subListPool.Return(subList);
             }
@@ -92,20 +92,19 @@ namespace Spoke {
                 }
             }
         }
-        SpokeHandle Subscribe(Delegate key, Action<T> action) {
-            if (key == null) return default;
-            var nextId = idCount++;
-            var sub = new Subscription { Id = nextId, Action = action, Key = key };
+        SpokeHandle Subscribe(Subscription sub) {
             subscriptions.Add(sub);
             if (!unsubLookup.TryGetValue(sub.Key, out var idList))
                 unsubLookup[sub.Key] = idList = intListPool.Get();
-            idList.Add(nextId);
-            return SpokeHandle.Of(nextId, _Unsub);
+            idList.Add(sub.Id);
+            return SpokeHandle.Of(sub.Id, _Unsub);
         }
         struct Subscription {
-            public int Id;
-            public Action<T> Action;
-            public Delegate Key;
+            public int Id; Action<T> ActionT; Action Action;
+            public static Subscription Create(int id, Action<T> action) => new Subscription { Id = id, ActionT = action };
+            public static Subscription Create(int id, Action action) => new Subscription { Id = id, Action = action };
+            public Delegate Key => ActionT != null ? ActionT : Action;
+            public void Invoke(T arg) { ActionT?.Invoke(arg); Action?.Invoke(); }
         }
     }
     internal interface IDeferredTrigger {
