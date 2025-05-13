@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 namespace Spoke.Examples {
 
-    public class HelloMemo : SpokeBehaviour {
+    public class SpokeMemo : SpokeBehaviour {
 
         [Header("References")]
         [SerializeField] Text countLabel;
