@@ -44,7 +44,6 @@ namespace Spoke {
         List<Subscription> subscriptions = new List<Subscription>();
         SpokePool<List<int>> intListPool = SpokePool<List<int>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
-        Dictionary<Delegate, List<int>> unsubLookup = new Dictionary<Delegate, List<int>>();
         Queue<T> events = new Queue<T>();
         DeferredQueue deferred = DeferredQueue.Create();
         Action<int> _Unsub; Action _Flush;
@@ -69,34 +68,22 @@ namespace Spoke {
         }
         void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
-            if (unsubLookup.TryGetValue(action, out var idList)) {
-                var ids = intListPool.Get();
-                foreach (var id in idList) ids.Add(id);
-                foreach (var id in ids) Unsub(id);
-                intListPool.Return(ids);
-            }
+            var idList = intListPool.Get();
+            foreach (var item in subscriptions) if (item.Key == action) idList.Add(item.Id);
+            foreach (var id in idList) Unsub(id);
+            intListPool.Return(idList);
         }
         protected override void Unsub(int id) {
             for (int i = 0; i < subscriptions.Count; i++) {
                 var sub = subscriptions[i];
                 if (sub.Id == id) {
                     subscriptions.RemoveAt(i);
-                    if (unsubLookup.TryGetValue(sub.Key, out var idList)) {
-                        idList.Remove(sub.Id);
-                        if (idList.Count == 0) {
-                            unsubLookup.Remove(sub.Key);
-                            intListPool.Return(idList);
-                        }
-                    }
                     return;
                 }
             }
         }
         SpokeHandle Subscribe(Subscription sub) {
             subscriptions.Add(sub);
-            if (!unsubLookup.TryGetValue(sub.Key, out var idList))
-                unsubLookup[sub.Key] = idList = intListPool.Get();
-            idList.Add(sub.Id);
             return SpokeHandle.Of(sub.Id, _Unsub);
         }
         struct Subscription {
