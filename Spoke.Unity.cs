@@ -106,7 +106,6 @@ namespace Spoke {
         public static ISignal<bool> IsDestroyed => isDestroyed;
         static State<T> instance = State.Create<T>();
         static State<bool> isDestroyed = State.Create(false);
-        static SpokeEngine engine = new SpokeEngine(FlushMode.Immediate);
         static bool isInitialized = false;
         protected virtual bool OverrideDontDestroyOnLoad => false;
         protected virtual string OverrideName => $"[!-------{typeof(T).Name}-------!]";
