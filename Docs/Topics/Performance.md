@@ -42,7 +42,7 @@ Measured results:
 
 ```
 - 0.38ms flush time
-- 0      GC alloc
+-    0KB GC alloc
 ```
 
 This is intentionally non-idiomatic usage — Spoke is designed to respond to meaningful, infrequent state changes, not to run tight computation loops.
