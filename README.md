@@ -22,7 +22,7 @@ We call it _plumbing code_ — messy, brittle, and usually dismissed with a shru
 
 > _"It's just plumbing"_
 
-Spoke attacks that problem head-on.
+Spoke elevates plumbing into a satisfying engineering problem.
 
 It turns scattered glue code into **clean, declarative logic.**<br>
 It scales with complexity. It cleans up after itself. It makes **architecture feel like gameplay.**
@@ -151,9 +151,41 @@ The reactive model behind Spoke is built around a few simple primitives:
 
 ---
 
+## 🎮 Origins
+
+Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and runtime composability:
+
+- **Mechs** are containers for **Servos**
+- **Servos** are containers for **Modules**
+- **Reactors** provide power to other **Modules**
+- **Sensors** detect blips and feed a shared, live targeting system
+- **Deflectors** increase armour across **Servos**, but draw power from **Reactors**
+- **Modules** are damaged, destroyed, repaired, disabled and reconfigured on the fly
+- Cockpit displays reflect functionality — based on which **Modules** are mounted, powered, and still operational
+
+This game has brutal requirements for dynamic, eventful logic.<br>
+For 6 years I tried to build an architecture that brought sanity to this chaos.
+
+**Spoke is the crystallized form of everything I've learned.**<br>
+Once it emerged in this form, all the complexity of my previous code evaporated.<br>
+Suddenly, building a modular-vehicle immersive simulator felt easy.
+
+I believe Spoke is a general-purpose pattern for game programming with huge potential.<br>
+It works across all code domains.<br>
+It’s useful in any project, but it shines as complexity grows.<br>
+The more deeply systems interact, the more value Spoke provides.
+
+---
+
 ## 📘 Documentation
 
 [Read the full documentation →](./Docs/)
+
+---
+
+## 🚀 Performance
+
+[See performance notes →](./Docs/Topics/Performance.md)
 
 ---
 
