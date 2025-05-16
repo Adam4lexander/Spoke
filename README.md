@@ -163,17 +163,11 @@ Spoke was developed to support my passion project: **_Power Grip Dragoons_** —
 - **Modules** are damaged, destroyed, repaired, disabled and reconfigured on the fly
 - Cockpit displays reflect functionality — based on which **Modules** are mounted, powered, and still operational
 
-This game has brutal requirements for dynamic, eventful logic.<br>
-For 6 years I tried to build an architecture that brought sanity to this chaos.
+This game has brutal requirements for dynamic, eventful logic. For 6 years I tried to build an architecture that brought sanity to this chaos.
 
-**Spoke is the crystallized form of everything I've learned.**<br>
-Once it emerged in this form, all the complexity of my previous code evaporated.<br>
-Suddenly, building a modular-vehicle immersive simulator felt easy.
+**Spoke is the crystallized form of everything I've learned.** Once it emerged in this form, all the complexity of my previous code evaporated. Suddenly, building a modular-vehicle immersive simulator felt easy.
 
-I believe Spoke is a general-purpose pattern for game programming with huge potential.<br>
-It works across all code domains.<br>
-It’s useful in any project, but it shines as complexity grows.<br>
-The more deeply systems interact, the more value Spoke provides.
+I believe Spoke is a general-purpose pattern for game programming with huge potential. It works across all code domains. It’s useful in any project, but it shines as complexity grows. The more deeply systems interact, the more value Spoke provides.
 
 ---
 
