@@ -224,17 +224,13 @@ namespace Spoke {
         protected override void OnRun() => Mount(block);
     }
     // ============================== Memo ============================================================
-    public interface MemoBuilder {
-        T D<T>(ISignal<T> signal);
-        T Use<T>(T disposable) where T : IDisposable;
-    }
     public class Memo<T> : SpokeEngine.Computation, ISignal<T>, IDeferredTrigger {
         State<T> state = State.Create<T>();
         public T Now => state.Now;
         Action<MemoBuilder> block;
-        MemoBuilderImpl builder;
+        MemoBuilder builder;
         public Memo(string name, SpokeEngine engine, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, engine, triggers) {
-            builder = new MemoBuilderImpl(this);
+            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Own });
             block = s => { if (selector != null) state.Set(selector(s)); };
             Schedule();
         }
@@ -244,12 +240,16 @@ namespace Spoke {
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
         protected override void OnRun() { ClearChildren(); block(builder); }
-        class MemoBuilderImpl : MemoBuilder {
-            Memo<T> owner;
-            public MemoBuilderImpl(Memo<T> owner) { this.owner = owner; }
-            public U D<U>(ISignal<U> signal) { owner.AddDynamicTrigger(signal); return signal.Now; }
-            public U Use<U>(U disposable) where U : IDisposable => owner.Own(disposable);
+    }
+    public class MemoBuilder { // Concrete class for IL2CPP AOT generation
+        internal struct Friend {
+            public Action<ITrigger> AddDynamicTrigger;
+            public Func<IDisposable, IDisposable> Own;
         }
+        Friend memo;
+        internal MemoBuilder(Friend memo) { this.memo = memo; }
+        public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
+        public U Use<U>(U disposable) where U : IDisposable { memo.Own(disposable); return disposable; }
     }
     // ============================== Dock ============================================================
     public interface IDock {
