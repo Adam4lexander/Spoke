@@ -79,6 +79,7 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         // Run Awake logic here
+
         s.OnCleanup(() => {
             // Run OnDestroy logic here
         });
@@ -116,8 +117,11 @@ public class MyBehaviour : MonoBehaviour {
     Effect effect;
 
     void Awake() {
+
         var engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
+
         effect = new Effect("MyEffect", engine, s => {
+
             s.UsePhase(isEnabled, s => {
                 // OnEnable logic
                 s.OnCleanup(() => {
@@ -128,6 +132,7 @@ public class MyBehaviour : MonoBehaviour {
     }
 
     void OnDestroy() => effect.Dispose();
+
     void OnEnable() => isEnabled.Set(true);
     void OnDisable() => isEnabled.Set(false);
 }

@@ -48,9 +48,10 @@ Used within Spoke scopes:
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
+
     protected override void Init(EffectBuilder s) {
-        s.UseSubscribe(myTrigger, evt => ReactToEvent(evt));
         // Subscribed when scope is mounted, auto-disposed when unmounted
+        s.UseSubscribe(myTrigger, evt => ReactToEvent(evt));
     }
 }
 ```

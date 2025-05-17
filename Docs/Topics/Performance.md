@@ -12,6 +12,7 @@ public class FlushLoopStressTest : SpokeBehaviour {
     State<int> counter = State.Create(0);
 
     protected override void Init(EffectBuilder s) {
+
         const int nIterations = 100;
 
         var splitLeft = s.UseMemo(s => Mathf.FloorToInt(s.D(counter) / 2f));

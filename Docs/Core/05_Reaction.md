@@ -20,7 +20,9 @@ You create a reaction inside an `EffectBlock` using `UseReaction`.
 
 ```csharp
 s.UseReaction(s => {
+
     Debug.Log("I took damage!");
+
 }, ReceiveDamage);
 ```
 
@@ -28,7 +30,9 @@ You can also create one manually:
 
 ```csharp
 var reaction = new Reaction("TookDamage", s.SpokeEngine, s => {
+
     Debug.Log("I took damage!");
+
 }, ReceiveDamage);
 ```
 
@@ -50,7 +54,9 @@ Think of a `Reaction` as a **stateless fire-once effect**, ideal for handling pu
 
 ```csharp
 s.UseReaction(s => {
+
     FlashLight();
+
 }, ReceivePing);
 ```
 
@@ -58,6 +64,8 @@ s.UseReaction(s => {
 
 ```csharp
 s.UseReaction(s => {
+
     PlayHitAnimation();
+
 }, DamageTaken);
 ```

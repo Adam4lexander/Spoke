@@ -32,7 +32,9 @@ When you create Effects via `UseEffect()`, `UsePhase()`, or `UseReaction()` — 
 var engine = new SpokeEngine(FlushMode.Immediate);
 
 var effect = new Effect("MyEffect", engine, s => {
+
     s.UseEffect(s => {
+
         var isSameEngine = s.Engine == engine; // True
     });
 });
@@ -76,6 +78,7 @@ var className = State.Create("Warrior");
 var level = State.Create(1);
 
 var effect = new Effect("MyEffect", engine, s => {
+
     Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
 });                       // Prints: class: Warrior, lvl: 1
 
@@ -90,6 +93,7 @@ Now let’s say you want to update both values together, and flush only once:
 
 ```csharp
 engine.Batch(() => {
+
     className.Set("Paladin");
     level.Set(2);
 });                       // Prints: class: Paladin, lvl: 2
@@ -113,6 +117,7 @@ public class MyBehaviour : SpokeBehaviour {
         var level = State.Create(1);
 
         s.UseEffect(s => {
+
             Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
         });
 

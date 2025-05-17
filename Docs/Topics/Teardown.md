@@ -46,7 +46,9 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         s.UsePhase(IsEnabled, s => {
+
             myRenderer.sharedMaterial.color = Color.green;
+
             s.OnCleanup(() => {
                 myRenderer.sharedMaterial.color = Color.red;
             });
@@ -67,6 +69,7 @@ Here’s what it exposes:
 
 ```csharp
 public static class SpokeTeardown {
+
     public static ITrigger App { get; }
     public static ITrigger<Scene> Scene { get; }
 
@@ -100,8 +103,11 @@ So, if you want to trigger `SpokeTeardown.Scene`, you must **trigger it manually
 
 ```csharp
 public void ChangeScene(string nextScene) {
+
     var currScene = SceneManager.GetActiveScene();
+    // Notify Spoke that the currScene is being unloaded
     SpokeTeardown.SignalScene(currScene);
+
     SceneManager.LoadScene(nextScene);
 }
 ```

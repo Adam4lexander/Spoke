@@ -22,6 +22,7 @@ public class FlushLoggerTest : SpokeBehaviour {
             s.Log("IsStarted Phase ran");
 
             s.UseEffect(s => {
+
                 s.Log("Effect-A ran");
             });
         });
@@ -75,6 +76,7 @@ You can also trigger the flush logger when batching reactive updates:
 
 ```csharp
 SpokeEngine.LogBatch("My log message", () => {
+
     someState.Set("someValue");
 });
 ```
@@ -93,10 +95,12 @@ public class ExceptionLoggingTest : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         s.UseEffect("SafeEffect", s => {
+
             // Safe Logic
         });
 
         s.UseEffect("DangerEffect", s => {
+
             throw new System.Exception("Something bad happened!");
         });
     }

@@ -29,6 +29,7 @@ This is equivalent to:
 
 ```csharp
 s.Use(new Phase("Phase", s.SpokeEngine, IsEnabled, s => {
+
     s.UseSubscribe(SomeTrigger, DoThing);
 }));
 ```

@@ -22,8 +22,11 @@ An `ISignal<T>` extends `ITrigger<T>` and adds a current value, accessed via `No
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
+
     protected override void Init(EffectBuilder s) {
+
         Debug.Log($"Signal started as {mySignal.Now}");
+
         s.UseSubscribe(mySignal, v => Debug.Log($"Signal changed to {v}"));
     }
 }
@@ -59,23 +62,25 @@ Debug.Log(myState.Now); // Prints: 25
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
+
     State<bool> boolState = State.Create(false);
     State<GameObject> goState = State.Create<GameObject>();
 
     protected override void Init(EffectBuilder s) {
+
         s.UseSubscribe(boolState, b => Debug.Log($"boolState is {b}"));
         s.UseSubscribe(goState, go => {
             if (go) Debug.Log($"goState is {go.name}");
             else Debug.Log($"goState is null");
         });
 
-        boolState.Set(true); // Prints: boolState is true
-        boolState.Set(true); // No change...
-        boolState.Update(b => !b); // Prints: boolState is false
+        boolState.Set(true);        // Prints: boolState is true
+        boolState.Set(true);        // No change...
+        boolState.Update(b => !b);  // Prints: boolState is false
 
         gameObject.name = "MyGameObject";
-        goState.Set(gameObject); // Prints: goState is MyGameObject
-        goState.Set(null); // Prints: goState is null
+        goState.Set(gameObject);    // Prints: goState is MyGameObject
+        goState.Set(null);          // Prints: goState is null
     }
 }
 ```

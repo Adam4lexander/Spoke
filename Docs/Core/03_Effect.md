@@ -99,23 +99,33 @@ Let's have a look at the `EffectBuilder` interface.
 
 ```csharp
 public interface EffectBuilder {
+
     SpokeEngine Engine { get; }
     void Log(string msg);
+
     T D<T>(ISignal<T> signal);
+
     void Use(SpokeHandle trigger);
     T Use<T>(T disposable) where T : IDisposable;
+
     void UseSubscribe(ITrigger trigger, Action action);
     void UseSubscribe<T>(ITrigger<T> trigger, Action<T> action);
+
     ISignal<T> UseMemo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers);
     ISignal<T> UseMemo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers);
+
     void UseEffect(EffectBlock func, params ITrigger[] triggers);
     void UseEffect(string name, EffectBlock func, params ITrigger[] triggers);
+
     void UseReaction(EffectBlock action, params ITrigger[] triggers);
     void UseReaction(string name, EffectBlock action, params ITrigger[] triggers);
+
     void UsePhase(ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
     void UsePhase(string name, ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
+
     IDock UseDock();
     IDock UseDock(string name);
+
     void OnCleanup(Action cleanup);
 }
 ```
@@ -141,7 +151,8 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         s.UseEffect("MyEffect", s => { /* ... */ });
-        // Is equivalent to
+
+        // Equivalent manual version:
         s.Use(new Effect("MyEffect", s.Engine, s => { /* ... */ }));
     }
 }
@@ -155,9 +166,12 @@ An `EffectBuilder` can register any number of cleanup actions. When the `Effect`
 
 ```csharp
 var effect = new Effect("MyEffect", MyEngine, s => {
+
     s.OnCleanup(() => Debug.Log("Effect cleaned up!"));
 });
+
 // ...
+
 effect.Dispose(); // Prints: Effect cleaned up!
 ```
 
@@ -187,7 +201,9 @@ var myTrigger = Trigger.Create();
 var myState = State.Create(0);
 
 var effect = new Effect("MyEffect", myEngine, s => {
+
     Debug.Log($"myState is {myState.Now}");
+
 }, myTrigger, myState); // any number of dependencies in final args
 
 // Instantiating effect Prints: myState is 0
@@ -214,6 +230,7 @@ var name = State.Create("Spokey");
 var age = State.Create(0);
 
 var effect = new Effect("MyEffect", myEngine, s => {
+
     Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
 });
 
@@ -259,7 +276,9 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         s.UseEffect(s => {
+
             s.UseEffect(s => {
+
                 s.UsePhase(IsEnabled, s => { });
             });
         });
@@ -282,6 +301,7 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder initBuilder) {
 
         initBuilder.UseEffect(innerBuilder => {
+
             initBuilder.UseEffect(/*...*/) // Oops wrong builder!
         });
     }

@@ -19,7 +19,9 @@ var memo = new Memo("MyMemo", engine, s => s.D(signalA) + s.D(signalB));
 
 // Or equivalently using explicit dependencies
 var memo = new Memo("MyMemo", engine, s => {
+
     return signalA.Now + signalB.Now;
+
 }, signalA, signalB);
 
 memo.Dispose();
@@ -55,6 +57,7 @@ The argument to this function, shown as little-_s_, is an instance of `MemoBuild
 
 ```csharp
 public interface MemoBuilder {
+
     T D<T>(ISignal<T> signal);
     T Use<T>(T disposable) where T : IDisposable;
 }
@@ -75,6 +78,7 @@ var partnersCash = State.Create(110);
 var totalCash = s.UseMemo(s => s.D(myCash) + s.D(partnersCash));
 
 var canBuyHouse = s.UseMemo(s => {
+
     if (s.D(totalCash) > 1000000) return "No!";
     else return "Double No!";
 });
@@ -103,6 +107,7 @@ public class MyBehaviour : SpokeBehaviour {
         var isAnimating = s.UseMemo(s => s.D(isAlive) && !s.D(isParalyzed) && !s.D(isFrozen));
 
         s.UseEffect(s => {
+
             if (!s.D(isAnimating)) return; // exit if Effect remounts with isAnimating.Now=false
 
             PlayAnimations();
@@ -126,6 +131,7 @@ s.UseMemo(s => s.D(num1) + s.D(num2));
 
 // Don't do this
 s.UseMemo(s => {
+
     if (s.D(isHit)) PlaySound(); // <-- Bad: side effect!
     return s.D(health) - 10;
 })
@@ -167,13 +173,19 @@ var halfState = State.Create(num.Now / 2);
 var quarterState = State.Create(num.Now / 4);
 
 s.UseEffect(s => {
+
     var half = s.UseMemo(s => s.D(num) / 2);
+
     s.UseSubscribe(half, halfState.Set);
+
 }, someTrigger);
 
 s.UseEffect(s => {
+
     var quarter = s.UseMemo(s => s.D(num) / 4);
+
     s.UseSubscribe(quarter, quarterState.Set);
+
 }, someOtherTrigger);
 
 var sum = s.UseMemo(s => s.D(halfState) + s.D(quarterState));
