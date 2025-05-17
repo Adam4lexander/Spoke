@@ -7,7 +7,7 @@ In reactive programming, an _effect_ refers to any logic that reacts to state ch
 In Spoke an `Effect` can be understood as follows:
 
 - It's an object which can be _mounted_ and _disposed_.
-- It's a container for child objects which implement IDisposable.
+- It's a container for child objects which implement `IDisposable`.
 - Those children might also be `Effect`s.
 - When an `Effect` is disposed, all its descendants will be disposed too.
 
