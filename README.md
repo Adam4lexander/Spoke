@@ -4,7 +4,7 @@
 
 It lets you write gameplay logic that reacts to state automatically — no flag-checking, no brittle events, no manual cleanup.
 
-Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it **into scoped, self-cleaning blocks** that mount and unmount on their own.
+Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
 
 - ✨ **Declarative logic** — express _what_ should happen, not _when_ to check it
 - 🧠 **Scoped effects** — stay in sync with state and clean up automatically
@@ -14,53 +14,78 @@ Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spo
 
 ---
 
-## 💡 Why Spoke?
+## 🤔 What is Spoke-style Reactivity?
 
-Most complexity in code doesn't come from systems — it comes from **the glue.**
+Spoke shares a DNA with reactivity engines on the frontend — such as `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations" — behaviour trees, not DOM trees.
 
-We call it _plumbing code_ — messy, brittle, and usually dismissed with a shrug:
-
-> _"It's just plumbing"_
-
-Spoke elevates plumbing into a satisfying engineering problem.
-
-It turns scattered glue code into **clean, declarative logic.**<br>
-It scales with complexity. It cleans up after itself. It makes **architecture feel like gameplay.**
-
-Spoke is the missing tool for making modular systems interconnect.
+If you have experience with reactive frameworks, Spoke will feel natural. If not, it's a paradigm shift, but once it clicks, it unlocks a new level of clarity and control.
 
 ---
 
-## 🔁 What can it do?
+## 💡 Why Spoke?
+
+Spoke was built to solve recurring pain points in Unity:
+
+- Spaghetti logic across `Awake`, `OnEnable`, `OnDisable` and `OnDestroy`
+- Difficulty managing initialization order between dependent components
+- Scene teardown chaos: accessing destroyed objects in `OnDisable`
+- Polling state in `Update` to detect and respond to changes
+- Gameplay systems that grow brittle as complexity increases
+- Solving them with the smallest possible framework
+
+Spoke enables a programming paradigm called _reactive programming_. It makes eventful, state-driven logic easier to express.
+
+You write logic like this:
+
+> "When this state exists — run this behaviour — and clean it up afterward."
+
+Here's an example:
+
+_When an enemy is nearby, turn my head to face them. When no enemy, face forwards._
+
+### 🟧 Vanilla Unity:
 
 ```csharp
-public class MyActor : SpokeBehaviour {
+void OnEnable() {
+    OnNearestEnemyChanged.AddEventListener(OnNearestEnemyChangedHandler);
+    OnNearestEnemyChangedHandler(NearestEnemy);
+}
 
-    public State<bool> CanHear { get; } = State.Create(true);
-    public Trigger<SoundStim> ReceiveSoundStim { get; } = Trigger.Create<SoundStim>();
-
-    protected override void Init(EffectBuilder s) {
-
-        var isActive = s.UseMemo(s =>
-            s.D(IsEnabled) && s.D(ActorManager.Instance.IsEnabled)
-        );
-
-        s.UsePhase(isActive, s => {
-
-            ActorManager.Instance.RegisterActor(this);
-            s.OnCleanup(() => ActorManager.Instance.UnregisterActor(this));
-
-            s.UsePhase(CanHear, ReactSoundStim);
-        });
+void OnDisable() {
+    OnNearestEnemyChanged.RemoveEventListener(OnNearestEnemyChangedHandler);
+    if (NearestEnemy == null) {
+        OnNearestEnemyChangedHandler(null);
     }
+}
 
-    EffectBlock ReactSoundStim => s => {
-        s.UseSubscribe(ReceiveSoundStim, evt => {
-            if (evt.IsHostile) Chase(evt.Target);
-        });
-    };
+void OnNearestEnemyChangedHandler(GameObject toEnemy) {
+    if (toEnemy != null) {
+        FaceEnemy(toEnemy);
+    } else {
+        FaceForwards();
+    }
 }
 ```
+
+### 🟦 Spoke:
+
+```csharp
+void Init(EffectBuilder s) {
+    s.UseEffect(s => {
+        if (s.D(NearestEnemy) == null) return;
+        FaceEnemy(NearestEnemy.Now);
+        s.OnCleanup(() => FaceForwards());
+    });
+}
+```
+
+The vanilla Unity version splits logic across multiple methods, with edge cases and bookkeeping. In Spoke, everything lives in one expressive block: **setup, reaction, and teardown**.
+
+It's not just shorter — it's **closer to how you actually think.**
+
+- Code is easier to understand
+- Fewer edge cases and lifecycle bugs
+- You can scale logic without losing clarity
 
 ---
 
@@ -170,9 +195,9 @@ Spoke was developed to support my passion project: **_Power Grip Dragoons_** —
 
 This game has brutal requirements for dynamic, eventful logic. For 6 years I tried to build an architecture that brought sanity to this chaos.
 
-**Spoke is the crystallized form of everything I've learned.** Once it emerged in this form, all the complexity of my previous code evaporated. Suddenly, building a _modular-vehicle immersive simulator_ felt easy.
+**Spoke is the crystallized form for what I've learned.** Once it emerged in this form, all the complexity of my previous code evaporated. Suddenly, building a _modular-vehicle immersive simulator_ felt easy.
 
-I believe Spoke is a general-purpose pattern for game programming with huge potential. It works across all code domains. It’s useful in any project, but it shines as complexity grows. The more deeply systems interact, the more value Spoke provides.
+I believe Spoke could be a general-purpose pattern for game programming with huge potential. I've found it works across all code domains. It’s useful in any project, and seems to shine as complexity grows. The more deeply systems interact, the more value Spoke provides.
 
 ---
 
