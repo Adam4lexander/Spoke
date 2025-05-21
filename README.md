@@ -71,7 +71,7 @@ void OnNearestEnemyChangedHandler(GameObject toEnemy) {
 
 ```csharp
 void Init(EffectBuilder s) {
-    s.UseEffect(s => {
+    s.UsePhase(IsEnabled, s => {
         if (s.D(NearestEnemy) == null) return;
         FaceEnemy(NearestEnemy.Now);
         s.OnCleanup(() => FaceForwards());
