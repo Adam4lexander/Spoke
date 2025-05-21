@@ -2,7 +2,7 @@
 
 **Spoke** is a tiny declarative reactivity engine for Unity.
 
-It lets you write gameplay logic that reacts to state automatically — no flag-checking, no brittle events, no manual cleanup.
+It lets you write gameplay logic that reacts to state automatically: no flag-checking, no brittle events, no manual cleanup.
 
 Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
 
@@ -16,7 +16,7 @@ Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spo
 
 ## 🤔 What is Spoke-style Reactivity?
 
-Spoke shares a DNA with reactivity engines on the frontend — such as `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations" — behaviour trees, not DOM trees.
+Spoke shares a DNA with frontend reactivity engines like `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations — behaviour trees, not DOM trees."
 
 If you have experience with reactive frameworks, Spoke will feel natural. If not, it's a paradigm shift, but once it clicks, it unlocks a new level of clarity and control.
 
@@ -81,7 +81,7 @@ void Init(EffectBuilder s) {
 
 The vanilla Unity version splits logic across multiple methods, with edge cases and bookkeeping. In Spoke, everything lives in one expressive block: **setup, reaction, and teardown**.
 
-It's not just shorter — it's **closer to how you actually think.**
+It's not just shorter. It's **closer to how you actually think.**
 
 - Code is easier to understand
 - Fewer edge cases and lifecycle bugs
