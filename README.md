@@ -48,12 +48,14 @@ _When an enemy is nearby, turn my head to face them. When no enemy, face forward
 ```csharp
 void OnEnable() {
     OnNearestEnemyChanged.AddEventListener(OnNearestEnemyChangedHandler);
-    OnNearestEnemyChangedHandler(NearestEnemy);
+    if (NearestEnemy != null) {
+        OnNearestEnemyChangedHandler(NearestEnemy);
+    }
 }
 
 void OnDisable() {
     OnNearestEnemyChanged.RemoveEventListener(OnNearestEnemyChangedHandler);
-    if (NearestEnemy == null) {
+    if (NearestEnemy != null) {
         OnNearestEnemyChangedHandler(null);
     }
 }
@@ -151,7 +153,7 @@ public class MyBehaviour : MonoBehaviour {
                 // OnEnable logic
                 s.OnCleanup(() => {
                     // OnDisable logic
-                })
+                });
             });
         });
     }
