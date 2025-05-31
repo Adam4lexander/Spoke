@@ -38,16 +38,16 @@ namespace Spoke {
         public abstract SpokeHandle Subscribe(Action action);
         public abstract void Invoke();
         public abstract void Unsubscribe(Action action);
-        protected abstract void Unsub(int id);
+        protected abstract void Unsub(long id);
     }
     public class Trigger<T> : Trigger, ITrigger<T>, IDeferredTrigger {
         List<Subscription> subs = new List<Subscription>();
-        SpokePool<List<int>> intListPool = SpokePool<List<int>>.Create(l => l.Clear());
+        SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
         DeferredQueue deferred = DeferredQueue.Create();
-        Action<int> _Unsub; Action _Flush;
-        int idCount = 0;
+        Action<long> _Unsub; Action _Flush;
+        long idCount = 0;
         public Trigger() { _Unsub = Unsub; _Flush = Flush; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(Subscription.Create(idCount++, action));
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(Subscription.Create(idCount++, action));
@@ -68,12 +68,12 @@ namespace Spoke {
         }
         void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
-            var idList = intListPool.Get();
+            var idList = longListPool.Get();
             foreach (var sub in subs) if (sub.Key == action) idList.Add(sub.Id);
             foreach (var id in idList) Unsub(id);
-            intListPool.Return(idList);
+            longListPool.Return(idList);
         }
-        protected override void Unsub(int id) {
+        protected override void Unsub(long id) {
             for (int i = 0; i < subs.Count; i++)
                 if (subs[i].Id == id) { subs.RemoveAt(i); return; }
         }
@@ -82,9 +82,9 @@ namespace Spoke {
             return SpokeHandle.Of(sub.Id, _Unsub);
         }
         struct Subscription {
-            public int Id; Action<T> ActionT; Action Action;
-            public static Subscription Create(int id, Action<T> action) => new Subscription { Id = id, ActionT = action };
-            public static Subscription Create(int id, Action action) => new Subscription { Id = id, Action = action };
+            public long Id; Action<T> ActionT; Action Action;
+            public static Subscription Create(long id, Action<T> action) => new Subscription { Id = id, ActionT = action };
+            public static Subscription Create(long id, Action action) => new Subscription { Id = id, Action = action };
             public Delegate Key => ActionT != null ? (Delegate)ActionT : Action;
             public void Invoke(T arg) {
                 if (ActionT != null) ActionT(arg);
@@ -282,27 +282,27 @@ namespace Spoke {
     }
     // ============================== Node ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
-        int id; Action<int> onDispose;
-        public static SpokeHandle Of(int id, Action<int> onDispose) => new SpokeHandle { id = id, onDispose = onDispose };
+        long id; Action<long> onDispose;
+        public static SpokeHandle Of(long id, Action<long> onDispose) => new SpokeHandle { id = id, onDispose = onDispose };
         public void Dispose() => onDispose?.Invoke(id);
         public bool Equals(SpokeHandle other) => id == other.id && onDispose == other.onDispose;
         public override bool Equals(object obj) => obj is SpokeHandle other && Equals(other);
         public override int GetHashCode() {
             int hashCode = -1348004479;
             hashCode = hashCode * -1521134295 + id.GetHashCode();
-            return hashCode * -1521134295 + EqualityComparer<Action<int>>.Default.GetHashCode(onDispose);
+            return hashCode * -1521134295 + EqualityComparer<Action<long>>.Default.GetHashCode(onDispose);
         }
         public static bool operator ==(SpokeHandle left, SpokeHandle right) => left.Equals(right);
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
     public abstract class Node : IDisposable, IComparable<Node> {
-        static uint RootCounter = 0;
+        static long RootCounter = 0;
         List<IDisposable> children = new List<IDisposable>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
         List<Action> cleanupFuncs = new List<Action>();
         bool isChildrenDisposing;
-        List<uint> coords = new List<uint>();
-        uint siblingCounter = 0;
+        List<long> coords = new List<long>();
+        long siblingCounter = 0;
         string name;
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
