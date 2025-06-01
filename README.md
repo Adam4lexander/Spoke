@@ -1,24 +1,14 @@
 # 🔘 Spoke - _A reactive framework for simulated worlds_
 
-**Spoke** is a tiny declarative reactivity engine for Unity.
+**Spoke** is a tiny reactivity engine for Unity.
 
 It lets you write gameplay logic that reacts to state automatically: no flag-checking, no brittle events, no manual cleanup.
 
 Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
 
-- ✨ **Declarative logic** — express _what_ should happen, not _when_ to check it
-- 🧠 **Scoped effects** — stay in sync with state and clean up automatically
-- 🎯 **Predictable** — reactive scopes flush in a stable, deterministic order
+- ✨ **Control complexity** — simplifies eventful, state-driven logic
 - 📦 **Drop-in simple** — two files, no setup, no dependencies
 - 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
-
----
-
-## 🤔 What is Spoke-style Reactivity?
-
-Spoke shares a DNA with frontend reactivity engines like `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations — behaviour trees, not DOM trees."
-
-If you have experience with reactive frameworks, Spoke will feel natural. If not, it's a paradigm shift, but once it clicks, it unlocks a new level of clarity and control.
 
 ---
 
@@ -180,6 +170,14 @@ The reactive model behind Spoke is built around a few simple primitives:
 - **Memo** - computed reactive value
 - **Dock** - dynamic reactive container
 - **SpokeEngine** - executor of reactive computation
+
+---
+
+## 🤔 What is Spoke-style Reactivity?
+
+Spoke shares a DNA with frontend reactivity engines like `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations — behaviour trees, not DOM trees."
+
+If you have experience with reactive frameworks, Spoke will feel natural. If not, it's a paradigm shift, but once it clicks, it unlocks a new level of clarity and control.
 
 ---
 
