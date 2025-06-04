@@ -20,7 +20,6 @@ using System.Text;
 namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
-    public delegate void EffectBlock<T>(EffectBuilder s, T param);
 
     // ============================== Trigger ============================================================
     public interface ITrigger {
@@ -137,19 +136,23 @@ namespace Spoke {
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
         T Use<T>(T disposable) where T : IDisposable;
-        void UseSubscribe(ITrigger trigger, Action action);
-        void UseSubscribe<T>(ITrigger<T> trigger, Action<T> action);
-        ISignal<T> UseMemo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers);
-        ISignal<T> UseMemo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers);
-        void UseEffect(EffectBlock func, params ITrigger[] triggers);
-        void UseEffect(string name, EffectBlock func, params ITrigger[] triggers);
-        void UseReaction(EffectBlock action, params ITrigger[] triggers);
-        void UseReaction(string name, EffectBlock action, params ITrigger[] triggers);
-        void UsePhase(ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
-        void UsePhase(string name, ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
-        IDock UseDock();
-        IDock UseDock(string name);
+        public T CreateContext<T>(T value);
+        public T GetContext<T>();
         void OnCleanup(Action cleanup);
+    }
+    public static partial class EffectBuilderExtensions {
+        public static void UseSubscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static void UseSubscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>("Memo", s.Engine, selector, triggers));
+        public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>(name, s.Engine, selector, triggers));
+        public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect("Effect", s.Engine, buildLogic, triggers));
+        public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect(name, s.Engine, buildLogic, triggers));
+        public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction("Reaction", s.Engine, block, triggers));
+        public static void UseReaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction(name, s.Engine, block, triggers));
+        public static void UsePhase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase("Phase", s.Engine, mountWhen, buildLogic, triggers));
+        public static void UsePhase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase(name, s.Engine, mountWhen, buildLogic, triggers));
+        public static IDock UseDock(this EffectBuilder s) => s.Use(new Dock("Dock", s.Engine));
+        public static IDock UseDock(this EffectBuilder s, string name) => s.Use(new Dock(name, s.Engine));
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
         EffectBuilderImpl builder;
@@ -179,18 +182,8 @@ namespace Spoke {
             public T D<T>(ISignal<T> signal) { NoMischief(); owner.AddDynamicTrigger(signal); return signal.Now; }
             public void Use(SpokeHandle trigger) { NoMischief(); owner.Own(trigger); }
             public T Use<T>(T disposable) where T : IDisposable { NoMischief(); owner.Own(disposable); return disposable; }
-            public void UseSubscribe(ITrigger trigger, Action action) => Use(trigger != null ? trigger.Subscribe(action) : default);
-            public void UseSubscribe<T>(ITrigger<T> trigger, Action<T> action) => Use(trigger != null ? trigger.Subscribe(action) : default);
-            public ISignal<T> UseMemo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers) => Use(new Memo<T>("Memo", Engine, selector, triggers));
-            public ISignal<T> UseMemo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => Use(new Memo<T>(name, Engine, selector, triggers));
-            public void UseEffect(EffectBlock buildLogic, params ITrigger[] triggers) => Use(new Effect("Effect", Engine, buildLogic, triggers));
-            public void UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) => Use(new Effect(name, Engine, buildLogic, triggers));
-            public void UseReaction(EffectBlock block, params ITrigger[] triggers) => Use(new Reaction("Reaction", Engine, block, triggers));
-            public void UseReaction(string name, EffectBlock block, params ITrigger[] triggers) => Use(new Reaction(name, Engine, block, triggers));
-            public void UsePhase(ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => Use(new Phase("Phase", Engine, mountWhen, buildLogic, triggers));
-            public void UsePhase(string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => Use(new Phase(name, Engine, mountWhen, buildLogic, triggers));
-            public IDock UseDock() => Use(new Dock("Dock", Engine));
-            public IDock UseDock(string name) => Use(new Dock(name, Engine));
+            public T CreateContext<T>(T value) { NoMischief(); owner.SetContext(value); return value; }
+            public T GetContext<T>() => owner.GetContext<T>();
             public void OnCleanup(Action fn) { NoMischief(); owner.OnCleanup(fn); }
             void NoMischief() { if (isSealed) throw new Exception("Cannot mutate effect: builder is sealed after mounting."); }
         }
@@ -297,6 +290,7 @@ namespace Spoke {
     }
     public abstract class Node : IDisposable, IComparable<Node> {
         static long RootCounter = 0;
+        Dictionary<Type, object> contexts = new Dictionary<Type, object>();
         List<IDisposable> children = new List<IDisposable>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
         List<Action> cleanupFuncs = new List<Action>();
@@ -343,6 +337,12 @@ namespace Spoke {
             if (index >= 0) { handle.Dispose(); handles.RemoveAt(index); }
         }
         protected void OnCleanup(Action fn) => cleanupFuncs.Add(fn);
+        protected void SetContext<T>(T value) => contexts[typeof(T)] = value;
+        protected T GetContext<T>() {
+            for (var curr = this; curr != null; curr = curr.Owner)
+                if (curr.contexts.TryGetValue(typeof(T), out var o)) return (T)o;
+            return default(T);
+        }
         protected void ClearChildren() {
             isChildrenDisposing = true;
             for (int i = cleanupFuncs.Count - 1; i >= 0; i--)
@@ -353,6 +353,7 @@ namespace Spoke {
             for (int i = children.Count - 1; i >= 0; i--)
                 try { children[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {children[i]}", e); }
             children.Clear();
+            contexts.Clear();
             siblingCounter = 0;
             isChildrenDisposing = false;
         }
