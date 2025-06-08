@@ -366,7 +366,6 @@ namespace Spoke {
         FlushLogger flushLogger = FlushLogger.Create();
         KahnTopoSorter toposorter = KahnTopoSorter.Create();
         HashSet<Computation> scheduled = new HashSet<Computation>();
-        Dictionary<Computation, Action> runFuncs = new Dictionary<Computation, Action>();
         DeferredQueue deferred = DeferredQueue.Create();
         FlushBuckets flushBuckets = FlushBuckets.Create();
         List<string> pendingLogs = new List<string>();
@@ -427,7 +426,7 @@ namespace Spoke {
             }
         }
         void FlushComputation(Computation comp) {
-            if (runFuncs.TryGetValue(comp, out var run)) run?.Invoke();
+            (comp as IRunnable).Run();
             flushLogger.OnFlushComputation(comp);
         }
         struct FlushBuckets {
@@ -442,26 +441,28 @@ namespace Spoke {
                 scheduled.Clear();
             }
         }
-        public abstract class Computation : Node {
+        interface IRunnable {
+            void Run();
+        }
+        public abstract class Computation : Node, IRunnable {
             protected SpokeEngine engine;
             DependencyTracker tracker;
-            bool isPending;
+            bool isPending, isDisposed;
             public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public Computation(string name, SpokeEngine engine, IEnumerable<ITrigger> triggers) : base(name) {
                 this.engine = engine;
-                engine.runFuncs[this] = Run;
                 tracker = DependencyTracker.Create(this);
                 foreach (var trigger in triggers) tracker.AddStatic(trigger);
                 tracker.SyncDependencies();
             }
             public override void Dispose() {
-                engine.runFuncs.Remove(this);
+                isDisposed = true;
                 tracker.Dispose();
                 base.Dispose();
             }
-            void Run() {
-                if (!isPending || (Fault != null)) return;
+            void IRunnable.Run() {
+                if (isDisposed || !isPending || (Fault != null)) return;
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }

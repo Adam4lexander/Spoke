@@ -210,12 +210,17 @@ namespace Spoke {
         public abstract SerializedProperty GetValueProperty(SerializedProperty property);
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label) {
             var val = GetValueProperty(property);
+            if (val == null) {
+                EditorGUI.LabelField(position, label, new GUIContent("Not serializable"));
+                return;
+            }
             EditorGUI.BeginChangeCheck();
             EditorGUI.PropertyField(position, val, label, true);
             if (EditorGUI.EndChangeCheck()) property.serializedObject.ApplyModifiedProperties();
         }
         public override float GetPropertyHeight(SerializedProperty property, GUIContent label) {
             var val = GetValueProperty(property);
+            if (val == null) return EditorGUIUtility.singleLineHeight;
             return EditorGUI.GetPropertyHeight(val, label, true);
         }
         public static object GetParent(SerializedProperty prop) {
