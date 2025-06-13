@@ -160,7 +160,7 @@ namespace Spoke {
             builder = new EffectBuilderImpl(this);
         }
         protected void Mount(EffectBlock block) => builder.Mount(block);
-        class EffectBuilderImpl : EffectBuilder {
+        class EffectBuilderImpl : EffectBuilder, IHasCoords {
             bool isSealed, isMounted;
             BaseEffect owner;
             public EffectBuilderImpl(BaseEffect owner) {
@@ -177,6 +177,7 @@ namespace Spoke {
                 owner.ClearChildren();
                 isMounted = false;
             }
+            ReadOnlyList<long> IHasCoords.GetCoords() => owner.Coords;
             public SpokeEngine Engine => owner.engine;
             public void Log(string msg) { NoMischief(); owner.LogFlush(msg); }
             public T D<T>(ISignal<T> signal) { NoMischief(); owner.AddDynamicTrigger(signal); return signal.Now; }
@@ -252,7 +253,7 @@ namespace Spoke {
         void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers);
         void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers);
     }
-    public class Dock : Node, IDock, IDisposable {
+    public class Dock : Node, IDock, IDisposable, IHasCoords {
         Dictionary<object, SpokeHandle> handles = new Dictionary<object, SpokeHandle>();
         Dictionary<object, IDisposable> disposables = new Dictionary<object, IDisposable>();
         SpokeEngine engine;
@@ -272,6 +273,7 @@ namespace Spoke {
             if (disposables.TryGetValue(key, out var child)) { Remove(child); disposables.Remove(key); }
             if (handles.TryGetValue(key, out var handle)) { Remove(handle); handles.Remove(key); }
         }
+        ReadOnlyList<long> IHasCoords.GetCoords() => Coords;
     }
     // ============================== Node ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
@@ -288,6 +290,9 @@ namespace Spoke {
         public static bool operator ==(SpokeHandle left, SpokeHandle right) => left.Equals(right);
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
+    internal interface IHasCoords {
+        ReadOnlyList<long> GetCoords();
+    }
     public abstract class Node : IDisposable, IComparable<Node> {
         static long RootCounter = 0;
         Dictionary<Type, object> contexts = new Dictionary<Type, object>();
@@ -298,6 +303,7 @@ namespace Spoke {
         List<long> coords = new List<long>();
         long siblingCounter = 0;
         string name;
+        protected ReadOnlyList<long> Coords => new ReadOnlyList<long>(coords);
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
         public ReadOnlyList<IDisposable> Children => new ReadOnlyList<IDisposable>(children);
@@ -559,7 +565,7 @@ namespace Spoke {
         readonly List<T> list;
         public ReadOnlyList(List<T> list) { this.list = list; }
         public List<T>.Enumerator GetEnumerator() => list.GetEnumerator();
-        public int Count => list.Count;
+        public int Count => list?.Count ?? 0;
         public T this[int index] => list[index];
     }
     // ============================== SpokeLogger ============================================================
