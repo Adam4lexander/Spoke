@@ -290,9 +290,7 @@ namespace Spoke {
         public static bool operator ==(SpokeHandle left, SpokeHandle right) => left.Equals(right);
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
-    internal interface IHasCoords {
-        ReadOnlyList<long> GetCoords();
-    }
+    internal interface IHasCoords { ReadOnlyList<long> GetCoords(); }
     public abstract class Node : IDisposable, IComparable<Node> {
         static long RootCounter = 0;
         Dictionary<Type, object> contexts = new Dictionary<Type, object>();
@@ -304,6 +302,7 @@ namespace Spoke {
         long siblingCounter = 0;
         string name;
         protected ReadOnlyList<long> Coords => new ReadOnlyList<long>(coords);
+        protected bool IsStale { get; private set; }
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
         public ReadOnlyList<IDisposable> Children => new ReadOnlyList<IDisposable>(children);
@@ -318,6 +317,10 @@ namespace Spoke {
             }
             return coords.Count.CompareTo(other.coords.Count);
         }
+        protected void MarkDescendantsStale() {
+            foreach (var c in Children)
+                if (c is Node n && !n.IsStale) { n.IsStale = true; n.MarkDescendantsStale(); }
+        }
         protected SpokeHandle Own(SpokeHandle handle) {
             NoMischief(); handles.Add(handle); return handle;
         }
@@ -329,6 +332,7 @@ namespace Spoke {
                 node.coords.Clear();
                 node.coords.AddRange(coords);
                 node.coords.Add(siblingCounter++);
+                if (IsStale) { node.IsStale = true; node.MarkDescendantsStale(); }
             }
             return child;
         }
@@ -447,9 +451,7 @@ namespace Spoke {
                 scheduled.Clear();
             }
         }
-        interface IRunnable {
-            void Run();
-        }
+        interface IRunnable { void Run(); }
         public abstract class Computation : Node, IRunnable {
             protected SpokeEngine engine;
             DependencyTracker tracker;
@@ -468,7 +470,7 @@ namespace Spoke {
                 base.Dispose();
             }
             void IRunnable.Run() {
-                if (isDisposed || !isPending || (Fault != null)) return;
+                if (isDisposed || !isPending || IsStale || (Fault != null)) return;
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
@@ -484,8 +486,9 @@ namespace Spoke {
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
             protected void Schedule() {
-                if (isPending) return;
+                if (isPending || IsStale) return;
                 isPending = true;
+                MarkDescendantsStale();
                 engine.Schedule(this);
             }
             struct DependencyTracker : IDisposable {
