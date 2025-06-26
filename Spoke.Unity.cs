@@ -107,12 +107,18 @@ namespace Spoke {
         static State<T> instance = State.Create<T>();
         static State<bool> isDestroyed = State.Create(false);
         static bool isInitialized = false;
+        static Scene instanceScene;
         protected virtual bool OverrideDontDestroyOnLoad => false;
         protected virtual string OverrideName => $"[!-------{typeof(T).Name}-------!]";
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
             SpokeTeardown.App.Subscribe(() => isDestroyed.Set(false));
+            SceneManager.sceneUnloaded += scene => {
+                if (scene != instanceScene) return;
+                instanceScene = default;
+                isDestroyed.Set(false);
+            };
         }
         static void FindOrCreateInstance() {
             T nextInstance;
@@ -127,14 +133,17 @@ namespace Spoke {
             }
             instance.Set(nextInstance);
         }
+        protected override void Awake() {
+            if (instance.Now != null && instance.Now != this) {
+                Debug.LogError($"Deleting duplicate instance of singleton {typeof(T).Name}");
+                Destroy(gameObject);
+                return;
+            }
+            instanceScene = gameObject.scene;
+            instance.Set(this as T);
+            base.Awake();
+        }
         protected override void Init(EffectBuilder s) {
-            s.UseEffect(s => {
-                var instanceNow = s.D(instance);
-                if (instanceNow != null && instanceNow != this) {
-                    Debug.LogError($"Deleting duplicate instance of singleton {typeof(T).Name}");
-                    Destroy(gameObject);
-                }
-            });
             s.OnCleanup(() => {
                 if (instance.Now == this) isDestroyed.Set(true);
             });
