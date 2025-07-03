@@ -161,32 +161,24 @@ namespace Spoke {
         }
         protected void Mount(EffectBlock block) => builder.Mount(block);
         class EffectBuilderImpl : EffectBuilder, IHasCoords {
-            bool isSealed, isMounted;
+            bool isMounted;
             BaseEffect owner;
             public EffectBuilderImpl(BaseEffect owner) {
                 this.owner = owner;
-                isSealed = true;
             }
             public void Mount(EffectBlock block) {
-                if (isMounted) Unmount();
-                isSealed = false;
-                try { block?.Invoke(this); } finally { isSealed = isMounted = true; }
-            }
-            public void Unmount() {
-                if (!isMounted) return;
-                owner.ClearChildren();
-                isMounted = false;
+                if (isMounted) owner.ClearChildren();
+                try { block?.Invoke(this); } finally { isMounted = true; owner.Seal(); }
             }
             ReadOnlyList<long> IHasCoords.GetCoords() => owner.Coords;
             public SpokeEngine Engine => owner.engine;
-            public void Log(string msg) { NoMischief(); owner.LogFlush(msg); }
-            public T D<T>(ISignal<T> signal) { NoMischief(); owner.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) { NoMischief(); owner.Use(trigger); }
-            public T Use<T>(T disposable) where T : IDisposable { NoMischief(); owner.Use(disposable); return disposable; }
-            public T CreateContext<T>(T value) { NoMischief(); owner.SetContext(value); return value; }
+            public void Log(string msg) => owner.LogFlush(msg);
+            public T D<T>(ISignal<T> signal) { owner.AddDynamicTrigger(signal); return signal.Now; }
+            public void Use(SpokeHandle trigger) => owner.Use(trigger);
+            public T Use<T>(T disposable) where T : IDisposable { owner.Use(disposable); return disposable; }
+            public T CreateContext<T>(T value) { owner.SetContext(value); return value; }
             public T GetContext<T>() => owner.GetContext<T>();
-            public void OnCleanup(Action fn) { NoMischief(); owner.OnCleanup(fn); }
-            void NoMischief() { if (isSealed) throw new Exception("Cannot mutate effect: builder is sealed after mounting."); }
+            public void OnCleanup(Action fn) => owner.OnCleanup(fn);
         }
     }
     // ============================== Effect ============================================================
@@ -277,23 +269,21 @@ namespace Spoke {
     }
     internal interface IHasCoords { ReadOnlyList<long> GetCoords(); }
     public abstract class Node : IDisposable, IComparable<Node> {
-        static long RootCounter = 0;
         Dictionary<Type, object> contexts = new Dictionary<Type, object>();
         List<IDisposable> children = new List<IDisposable>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
         Dictionary<object, IDisposable> dynamicChildren = new Dictionary<object, IDisposable>();
         Dictionary<object, SpokeHandle> dynamicHandles = new Dictionary<object, SpokeHandle>();
         List<Action> cleanupFuncs = new List<Action>();
-        bool isChildrenDisposing;
+        bool isChildrenDisposing, isSealed;
         List<long> coords = new List<long>();
         long siblingCounter = 0;
         string name;
         protected ReadOnlyList<long> Coords => new ReadOnlyList<long>(coords);
-        protected bool IsStale { get; private set; }
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
         public ReadOnlyList<IDisposable> Children => new ReadOnlyList<IDisposable>(children);
-        public Node(string name) { this.name = name; coords.Add(RootCounter++); }
+        public Node(string name) { this.name = name; }
         public override string ToString() => name ?? base.ToString();
         public virtual void Dispose() => ClearChildren();
         public int CompareTo(Node other) {
@@ -304,10 +294,7 @@ namespace Spoke {
             }
             return coords.Count.CompareTo(other.coords.Count);
         }
-        protected void MarkDescendantsStale() {
-            foreach (var c in Children)
-                if (c is Node n && !n.IsStale) { n.IsStale = true; n.MarkDescendantsStale(); }
-        }
+        protected void Seal() => isSealed = true;
         protected SpokeHandle Use(SpokeHandle handle) {
             NoMischief(); handles.Add(handle); return handle;
         }
@@ -341,15 +328,13 @@ namespace Spoke {
         void UsedBy(Node parent) {
             if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
             Owner = parent;
-            coords.Clear();
             coords.AddRange(parent.coords);
             coords.Add(parent.siblingCounter++);
-            if (parent.IsStale) { IsStale = true; MarkDescendantsStale(); }
             OnAttached();
         }
         protected abstract void OnAttached();
-        protected void OnCleanup(Action fn) => cleanupFuncs.Add(fn);
-        protected void SetContext<T>(T value) => contexts[typeof(T)] = value;
+        protected void OnCleanup(Action fn) { NoMischief(); cleanupFuncs.Add(fn); }
+        protected T SetContext<T>(T value) { NoMischief(); contexts[typeof(T)] = value; return value; }
         protected T GetContext<T>() {
             for (var curr = this; curr != null; curr = curr.Owner)
                 if (curr.contexts.TryGetValue(typeof(T), out var o)) return (T)o;
@@ -369,9 +354,13 @@ namespace Spoke {
             siblingCounter = 0;
             dynamicChildren.Clear();
             dynamicHandles.Clear();
+            isSealed = false;
             isChildrenDisposing = false;
         }
-        void NoMischief() { if (isChildrenDisposing) throw new Exception("Cannot mutate Node while it's disposing"); }
+        void NoMischief() { 
+            if (isChildrenDisposing) throw new Exception("Cannot mutate Node while it's disposing");
+            if (isSealed) throw new Exception("Cannot mutate Node after it's sealed");
+        }
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
@@ -468,6 +457,7 @@ namespace Spoke {
             protected SpokeEngine engine;
             DependencyTracker tracker;
             bool isPending, isDisposed, scheduleOnAttach;
+            StaleContext staleCtx;
             public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public Computation(string name, bool scheduleOnAttach, IEnumerable<ITrigger> triggers) : base(name) {
@@ -482,13 +472,14 @@ namespace Spoke {
                 base.Dispose();
             }
             void IRunnable.Run() {
-                if (isDisposed || !isPending || IsStale || (Fault != null)) return;
+                if (isDisposed || !isPending || staleCtx.IsStale || (Fault != null)) return;
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
             }
             protected override void OnAttached() {
                 engine = GetContext<SpokeEngine>();
+                staleCtx = SetContext(new StaleContext(GetContext<StaleContext>()));
                 if (scheduleOnAttach) Schedule();
             }
             protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
@@ -502,9 +493,9 @@ namespace Spoke {
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
             protected void Schedule() {
-                if (isPending || IsStale) return;
+                if (isPending || staleCtx.IsStale) return;
                 isPending = true;
-                MarkDescendantsStale();
+                staleCtx.MarkDescendantsStale();
                 engine.Schedule(this);
             }
             struct DependencyTracker : IDisposable {
@@ -557,6 +548,14 @@ namespace Spoke {
                     staticHandles.Clear(); dynamicHandles.Clear();
                     dependencies.Clear();
                 }
+            }
+        }
+        class StaleContext {
+            List<StaleContext> children = new List<StaleContext>();
+            public bool IsStale { get; private set; }
+            public StaleContext(StaleContext parent) { parent?.children.Add(this); }
+            public void MarkDescendantsStale() {
+                foreach (var c in children) if (!c.IsStale) { c.IsStale = true; c.MarkDescendantsStale(); }
             }
         }
     }
