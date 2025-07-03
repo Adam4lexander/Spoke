@@ -181,8 +181,8 @@ namespace Spoke {
             public SpokeEngine Engine => owner.engine;
             public void Log(string msg) { NoMischief(); owner.LogFlush(msg); }
             public T D<T>(ISignal<T> signal) { NoMischief(); owner.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) { NoMischief(); owner.Own(trigger); }
-            public T Use<T>(T disposable) where T : IDisposable { NoMischief(); owner.Own(disposable); return disposable; }
+            public void Use(SpokeHandle trigger) { NoMischief(); owner.Use(trigger); }
+            public T Use<T>(T disposable) where T : IDisposable { NoMischief(); owner.Use(disposable); return disposable; }
             public T CreateContext<T>(T value) { NoMischief(); owner.SetContext(value); return value; }
             public T GetContext<T>() => owner.GetContext<T>();
             public void OnCleanup(Action fn) { NoMischief(); owner.OnCleanup(fn); }
@@ -224,7 +224,7 @@ namespace Spoke {
         Action<MemoBuilder> block;
         MemoBuilder builder;
         public Memo(string name, SpokeEngine engine, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, engine, triggers) {
-            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Own });
+            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Use });
             block = s => { if (selector != null) state.Set(selector(s)); };
             Schedule();
         }
@@ -254,25 +254,13 @@ namespace Spoke {
         void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers);
     }
     public class Dock : Node, IDock, IDisposable, IHasCoords {
-        Dictionary<object, SpokeHandle> handles = new Dictionary<object, SpokeHandle>();
-        Dictionary<object, IDisposable> disposables = new Dictionary<object, IDisposable>();
         SpokeEngine engine;
         public Dock(string name, SpokeEngine engine) : base(name) { this.engine = engine; }
-        public void Use(object key, SpokeHandle handle) {
-            Drop(key);
-            handles[key] = Own(handle);
-        }
-        public T Use<T>(object key, T disposable) where T : IDisposable {
-            Drop(key);
-            disposables[key] = Own(disposable);
-            return disposable;
-        }
+        public new void Use(object key, SpokeHandle handle) => base.Use(key, handle);
+        public new T Use<T>(object key, T disposable) where T : IDisposable => base.Use(key, disposable);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
         public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, engine, buildLogic, triggers));
-        public void Drop(object key) {
-            if (disposables.TryGetValue(key, out var child)) { Remove(child); disposables.Remove(key); }
-            if (handles.TryGetValue(key, out var handle)) { Remove(handle); handles.Remove(key); }
-        }
+        public new void Drop(object key) => base.Drop(key);
         ReadOnlyList<long> IHasCoords.GetCoords() => Coords;
     }
     // ============================== Node ============================================================
@@ -296,6 +284,8 @@ namespace Spoke {
         Dictionary<Type, object> contexts = new Dictionary<Type, object>();
         List<IDisposable> children = new List<IDisposable>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
+        Dictionary<object, IDisposable> dynamicChildren = new Dictionary<object, IDisposable>();
+        Dictionary<object, SpokeHandle> dynamicHandles = new Dictionary<object, SpokeHandle>();
         List<Action> cleanupFuncs = new List<Action>();
         bool isChildrenDisposing;
         List<long> coords = new List<long>();
@@ -321,10 +311,14 @@ namespace Spoke {
             foreach (var c in Children)
                 if (c is Node n && !n.IsStale) { n.IsStale = true; n.MarkDescendantsStale(); }
         }
-        protected SpokeHandle Own(SpokeHandle handle) {
+        protected SpokeHandle Use(SpokeHandle handle) {
             NoMischief(); handles.Add(handle); return handle;
         }
-        protected T Own<T>(T child) where T : IDisposable {
+        protected SpokeHandle Use(object key, SpokeHandle handle) { 
+            Drop(key); 
+            return dynamicHandles[key] = Use(handle); 
+        }
+        protected T Use<T>(T child) where T : IDisposable {
             NoMischief();
             children.Add(child);
             if (child is Node node) {
@@ -336,15 +330,22 @@ namespace Spoke {
             }
             return child;
         }
-        protected void Remove(IDisposable child) {
-            NoMischief();
-            var index = children.IndexOf(child);
-            if (index >= 0) { child.Dispose(); children.RemoveAt(index); }
+        protected T Use<T>(object key, T child) where T : IDisposable {
+            Drop(key);
+            return (T)(dynamicChildren[key] = Use(child));
         }
-        protected void Remove(SpokeHandle handle) {
+        protected void Drop(object key) {
             NoMischief();
-            var index = handles.IndexOf(handle);
-            if (index >= 0) { handle.Dispose(); handles.RemoveAt(index); }
+            if (dynamicChildren.TryGetValue(key, out var child)) {
+                var index = children.IndexOf(child);
+                if (index >= 0) { child.Dispose(); children.RemoveAt(index); }
+                dynamicChildren.Remove(key);
+            }
+            if (dynamicHandles.TryGetValue(key, out var handle)) {
+                var index = handles.IndexOf(handle);
+                if (index >= 0) { handle.Dispose(); handles.RemoveAt(index); }
+                dynamicHandles.Remove(key);
+            }
         }
         protected void OnCleanup(Action fn) => cleanupFuncs.Add(fn);
         protected void SetContext<T>(T value) => contexts[typeof(T)] = value;
@@ -365,6 +366,8 @@ namespace Spoke {
             children.Clear();
             contexts.Clear();
             siblingCounter = 0;
+            dynamicChildren.Clear();
+            dynamicHandles.Clear();
             isChildrenDisposing = false;
         }
         void NoMischief() { if (isChildrenDisposing) throw new Exception("Cannot mutate Node while it's disposing"); }
