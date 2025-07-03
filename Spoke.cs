@@ -143,20 +143,20 @@ namespace Spoke {
     public static partial class EffectBuilderExtensions {
         public static void UseSubscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static void UseSubscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>("Memo", s.Engine, selector, triggers));
-        public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>(name, s.Engine, selector, triggers));
-        public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect("Effect", s.Engine, buildLogic, triggers));
-        public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect(name, s.Engine, buildLogic, triggers));
-        public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction("Reaction", s.Engine, block, triggers));
-        public static void UseReaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction(name, s.Engine, block, triggers));
-        public static void UsePhase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase("Phase", s.Engine, mountWhen, buildLogic, triggers));
-        public static void UsePhase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase(name, s.Engine, mountWhen, buildLogic, triggers));
-        public static IDock UseDock(this EffectBuilder s) => s.Use(new Dock("Dock", s.Engine));
-        public static IDock UseDock(this EffectBuilder s, string name) => s.Use(new Dock(name, s.Engine));
+        public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>("Memo", selector, triggers));
+        public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Use(new Memo<T>(name, selector, triggers));
+        public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect("Effect", buildLogic, triggers));
+        public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Effect(name, buildLogic, triggers));
+        public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction("Reaction", block, triggers));
+        public static void UseReaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Use(new Reaction(name, block, triggers));
+        public static void UsePhase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase("Phase", mountWhen, buildLogic, triggers));
+        public static void UsePhase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Use(new Phase(name, mountWhen, buildLogic, triggers));
+        public static IDock UseDock(this EffectBuilder s) => s.Use(new Dock("Dock"));
+        public static IDock UseDock(this EffectBuilder s, string name) => s.Use(new Dock(name));
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
         EffectBuilderImpl builder;
-        public BaseEffect(string name, SpokeEngine engine, params ITrigger[] triggers) : base(name, engine, triggers) {
+        public BaseEffect(string name, bool scheduleOnAttach, params ITrigger[] triggers) : base(name, scheduleOnAttach, triggers) {
             builder = new EffectBuilderImpl(this);
         }
         protected void Mount(EffectBlock block) => builder.Mount(block);
@@ -192,16 +192,15 @@ namespace Spoke {
     // ============================== Effect ============================================================
     public class Effect : BaseEffect {
         EffectBlock block;
-        public Effect(string name, SpokeEngine engine, EffectBlock block, params ITrigger[] triggers) : base(name, engine, triggers) {
+        public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, true, triggers) {
             this.block = block;
-            Schedule();
         }
         protected override void OnRun() => Mount(block);
     }
     // ============================== Reaction ============================================================
     public class Reaction : BaseEffect {
         EffectBlock block;
-        public Reaction(string name, SpokeEngine engine, EffectBlock block, params ITrigger[] triggers) : base(name, engine, triggers) {
+        public Reaction(string name, EffectBlock block, params ITrigger[] triggers) : base(name, false, triggers) {
             this.block = block;
         }
         protected override void OnRun() => Mount(block);
@@ -209,11 +208,10 @@ namespace Spoke {
     // ============================== Phase ============================================================
     public class Phase : BaseEffect {
         EffectBlock block;
-        public Phase(string name, SpokeEngine engine, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, engine, triggers) {
+        public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, true, triggers) {
             if (mountWhen == null) return;
             AddStaticTrigger(mountWhen);
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
-            Schedule();
         }
         protected override void OnRun() => Mount(block);
     }
@@ -223,10 +221,9 @@ namespace Spoke {
         public T Now => state.Now;
         Action<MemoBuilder> block;
         MemoBuilder builder;
-        public Memo(string name, SpokeEngine engine, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, engine, triggers) {
+        public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, true, triggers) {
             builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Use });
             block = s => { if (selector != null) state.Set(selector(s)); };
-            Schedule();
         }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
@@ -254,13 +251,13 @@ namespace Spoke {
         void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers);
     }
     public class Dock : Node, IDock, IDisposable, IHasCoords {
-        SpokeEngine engine;
-        public Dock(string name, SpokeEngine engine) : base(name) { this.engine = engine; }
+        public Dock(string name) : base(name) { }
         public new void Use(object key, SpokeHandle handle) => base.Use(key, handle);
         public new T Use<T>(object key, T disposable) where T : IDisposable => base.Use(key, disposable);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
-        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, engine, buildLogic, triggers));
+        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, buildLogic, triggers));
         public new void Drop(object key) => base.Drop(key);
+        protected override void OnAttached() { }
         ReadOnlyList<long> IHasCoords.GetCoords() => Coords;
     }
     // ============================== Node ============================================================
@@ -321,15 +318,18 @@ namespace Spoke {
         protected T Use<T>(T child) where T : IDisposable {
             NoMischief();
             children.Add(child);
-            if (child is Node node) {
-                node.Owner = this;
-                node.coords.Clear();
-                node.coords.AddRange(coords);
-                node.coords.Add(siblingCounter++);
-                if (IsStale) { node.IsStale = true; node.MarkDescendantsStale(); }
-            }
+            if (child is Node node) node.UsedBy(this);
             return child;
         }
+        void UsedBy(Node parent) {
+            if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
+            Owner = parent;
+            coords.AddRange(parent.coords);
+            coords.Add(parent.siblingCounter++);
+            if (parent.IsStale) { IsStale = true; MarkDescendantsStale(); }
+            OnAttached();
+        }
+        protected abstract void OnAttached();
         protected T Use<T>(object key, T child) where T : IDisposable {
             Drop(key);
             return (T)(dynamicChildren[key] = Use(child));
@@ -374,7 +374,7 @@ namespace Spoke {
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class SpokeEngine {
+    public class SpokeEngine : Node {
         public FlushMode FlushMode = FlushMode.Immediate;
         FlushLogger flushLogger = FlushLogger.Create();
         KahnTopoSorter toposorter = KahnTopoSorter.Create();
@@ -384,11 +384,15 @@ namespace Spoke {
         List<string> pendingLogs = new List<string>();
         ISpokeLogger logger;
         Action _flush;
-        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) {
+        public SpokeEngine(string name, FlushMode flushMode, ISpokeLogger logger = null) : base(name) {
             _flush = FlushNow;
             FlushMode = flushMode;
             this.logger = logger ?? new ConsoleSpokeLogger();
+            SetContext(this);
         }
+        public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
+        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, buildLogic, triggers));
+        public new void Drop(object key) => base.Drop(key);
         public void Batch(Action action) {
             deferred.Hold();
             try { action(); } finally { deferred.Release(); }
@@ -397,6 +401,7 @@ namespace Spoke {
             action();
             if (!deferred.IsEmpty) pendingLogs.Add(msg);
         });
+        protected override void OnAttached() { }
         void Schedule(Computation comp) {
             scheduled.Add(comp);
             if (FlushMode == FlushMode.Immediate) Flush();
@@ -458,11 +463,11 @@ namespace Spoke {
         public abstract class Computation : Node, IRunnable {
             protected SpokeEngine engine;
             DependencyTracker tracker;
-            bool isPending, isDisposed;
+            bool isPending, isDisposed, scheduleOnAttach;
             public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
-            public Computation(string name, SpokeEngine engine, IEnumerable<ITrigger> triggers) : base(name) {
-                this.engine = engine;
+            public Computation(string name, bool scheduleOnAttach, IEnumerable<ITrigger> triggers) : base(name) {
+                this.scheduleOnAttach = scheduleOnAttach;
                 tracker = DependencyTracker.Create(this);
                 foreach (var trigger in triggers) tracker.AddStatic(trigger);
                 tracker.SyncDependencies();
@@ -477,6 +482,10 @@ namespace Spoke {
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
+            }
+            protected override void OnAttached() {
+                engine = GetContext<SpokeEngine>();
+                if (scheduleOnAttach) Schedule();
             }
             protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
             protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);

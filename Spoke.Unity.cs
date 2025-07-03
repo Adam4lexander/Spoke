@@ -50,11 +50,11 @@ namespace Spoke {
         SpokeEngine engine;
         protected SpokeEngine SpokeEngine {
             get {
-                engine = engine ?? OverrideEngine() ?? new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
+                engine = engine ?? OverrideEngine() ?? new SpokeEngine($"{GetType().Name}:Engine", FlushMode.Immediate, new UnitySpokeLogger(this));
                 return engine;
             }
         }
-        Effect initScope;
+        bool isInitialized;
         SpokeHandle sceneTeardown, appTeardown;
         protected virtual SpokeEngine OverrideEngine() => null;
         protected abstract void Init(EffectBuilder s);
@@ -65,9 +65,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (initScope == null) {
-                DoInit(); // Domain reload may not run Awake
-            }
+            if (!isInitialized) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -77,7 +75,8 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            initScope = new Effect($"{GetType().Name}:Init", SpokeEngine, Init);
+            isInitialized = true;
+            SpokeEngine.UseEffect($"{GetType().Name}:Init", this, Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -86,7 +85,7 @@ namespace Spoke {
             sceneTeardown.Dispose();
             appTeardown.Dispose();
             enabled = false;
-            initScope?.Dispose();
+            SpokeEngine.Drop(this);
             isAwake.Set(false);
         }
     }
