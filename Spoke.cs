@@ -414,7 +414,7 @@ namespace Spoke {
                         var sortedMemos = toposorter.Sort(flushBuckets.Memos);
                         foreach (var comp in sortedMemos) {
                             flushBuckets.Memos.Remove(comp);
-                            FlushComputation(comp);
+                            (comp as IRunnable).Run();
                             var memoCount = flushBuckets.Memos.Count;
                             flushBuckets.Take(scheduled);
                             if (flushBuckets.Memos.Count > memoCount) break;
@@ -424,7 +424,7 @@ namespace Spoke {
                     while (flushBuckets.Memos.Count == 0 && flushBuckets.Effects.Count > 0) {
                         var comp = flushBuckets.Effects[flushBuckets.Effects.Count - 1];
                         flushBuckets.Effects.RemoveAt(flushBuckets.Effects.Count - 1);
-                        FlushComputation(comp);
+                        (comp as IRunnable).Run();
                         if (scheduled.Count > 0) { flushBuckets.Take(scheduled); break; }
                     }
                 }
@@ -435,10 +435,6 @@ namespace Spoke {
                 scheduled.Clear();
                 pendingLogs.Clear();
             }
-        }
-        void FlushComputation(Computation comp) {
-            (comp as IRunnable).Run();
-            flushLogger.OnFlushComputation(comp);
         }
         struct FlushBuckets {
             public HashSet<Computation> Memos { get; private set; }
@@ -477,6 +473,7 @@ namespace Spoke {
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
+                engine.flushLogger.OnFlushComputation(this);
             }
             protected override void OnAttached() {
                 engine = GetContext<SpokeEngine>();
