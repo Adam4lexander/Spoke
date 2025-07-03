@@ -382,8 +382,8 @@ namespace Spoke {
             SetContext(this);
         }
         public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            Use(currId++, new Effect(name, buildLogic, triggers));
-            return SpokeHandle.Of(currId, _releaseEffect);
+            Use(currId, new Effect(name, buildLogic, triggers));
+            return SpokeHandle.Of(currId++, _releaseEffect);
         }
         void ReleaseEffect(long id) => Drop(id);
         public void Batch(Action action) {
