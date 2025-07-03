@@ -54,8 +54,7 @@ namespace Spoke {
                 return engine;
             }
         }
-        bool isInitialized;
-        SpokeHandle sceneTeardown, appTeardown;
+        SpokeHandle sceneTeardown, appTeardown, initEffect;
         protected virtual SpokeEngine OverrideEngine() => null;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -65,7 +64,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (!isInitialized) DoInit(); // Domain reload may not run Awake
+            if (initEffect == default) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -75,8 +74,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            isInitialized = true;
-            SpokeEngine.UseEffect($"{GetType().Name}:Init", this, Init);
+            initEffect = SpokeEngine.UseEffect($"{GetType().Name}:Init", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -85,7 +83,7 @@ namespace Spoke {
             sceneTeardown.Dispose();
             appTeardown.Dispose();
             enabled = false;
-            SpokeEngine.Drop(this);
+            initEffect.Dispose();
             isAwake.Set(false);
         }
     }

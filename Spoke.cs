@@ -321,15 +321,6 @@ namespace Spoke {
             if (child is Node node) node.UsedBy(this);
             return child;
         }
-        void UsedBy(Node parent) {
-            if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
-            Owner = parent;
-            coords.AddRange(parent.coords);
-            coords.Add(parent.siblingCounter++);
-            if (parent.IsStale) { IsStale = true; MarkDescendantsStale(); }
-            OnAttached();
-        }
-        protected abstract void OnAttached();
         protected T Use<T>(object key, T child) where T : IDisposable {
             Drop(key);
             return (T)(dynamicChildren[key] = Use(child));
@@ -347,6 +338,16 @@ namespace Spoke {
                 dynamicHandles.Remove(key);
             }
         }
+        void UsedBy(Node parent) {
+            if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
+            Owner = parent;
+            coords.Clear();
+            coords.AddRange(parent.coords);
+            coords.Add(parent.siblingCounter++);
+            if (parent.IsStale) { IsStale = true; MarkDescendantsStale(); }
+            OnAttached();
+        }
+        protected abstract void OnAttached();
         protected void OnCleanup(Action fn) => cleanupFuncs.Add(fn);
         protected void SetContext<T>(T value) => contexts[typeof(T)] = value;
         protected T GetContext<T>() {
@@ -383,16 +384,19 @@ namespace Spoke {
         FlushBuckets flushBuckets = FlushBuckets.Create();
         List<string> pendingLogs = new List<string>();
         ISpokeLogger logger;
-        Action _flush;
+        Action _flush; Action<long> _releaseEffect;
+        long currId;
         public SpokeEngine(string name, FlushMode flushMode, ISpokeLogger logger = null) : base(name) {
-            _flush = FlushNow;
+            _flush = FlushNow; _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
             this.logger = logger ?? new ConsoleSpokeLogger();
             SetContext(this);
         }
-        public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
-        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, buildLogic, triggers));
-        public new void Drop(object key) => base.Drop(key);
+        public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
+            Use(currId++, new Effect(name, buildLogic, triggers));
+            return SpokeHandle.Of(currId, _releaseEffect);
+        }
+        void ReleaseEffect(long id) => Drop(id);
         public void Batch(Action action) {
             deferred.Hold();
             try { action(); } finally { deferred.Release(); }
