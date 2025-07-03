@@ -469,6 +469,7 @@ namespace Spoke {
             public override void Dispose() {
                 isDisposed = true;
                 tracker.Dispose();
+                staleCtx.Dispose();
                 base.Dispose();
             }
             void IRunnable.Run() {
@@ -550,12 +551,19 @@ namespace Spoke {
                 }
             }
         }
-        class StaleContext {
+        class StaleContext : IDisposable {
+            StaleContext parent;
             List<StaleContext> children = new List<StaleContext>();
             public bool IsStale { get; private set; }
-            public StaleContext(StaleContext parent) { parent?.children.Add(this); }
+            public StaleContext(StaleContext parent) { this.parent = parent; parent?.children.Add(this); }
             public void MarkDescendantsStale() {
                 foreach (var c in children) if (!c.IsStale) { c.IsStale = true; c.MarkDescendantsStale(); }
+            }
+            public void Dispose() {
+                children.Clear();
+                if (!(parent?.IsStale) ?? false) parent.children.Remove(this);
+                IsStale = false;
+                parent = null;
             }
         }
     }
