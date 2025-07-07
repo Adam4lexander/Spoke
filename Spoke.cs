@@ -136,8 +136,9 @@ namespace Spoke {
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
         T Use<T>(T disposable) where T : IDisposable;
-        public T CreateContext<T>(T value);
-        public T GetContext<T>();
+        public T CreateContext<T>(Builder<T> builder = default) where T : IFacet;
+        public T GetContext<T>() where T : IFacet;
+        public bool TryGetContext<T>(out T context) where T : IFacet;
         void OnCleanup(Action cleanup);
     }
     public static partial class EffectBuilderExtensions {
@@ -167,18 +168,19 @@ namespace Spoke {
                 this.owner = owner;
             }
             public void Mount(EffectBlock block) {
-                if (isMounted) owner.ClearChildren();
-                try { block?.Invoke(this); } finally { isMounted = true; owner.Seal(); }
+                if (isMounted) owner.Mutator.Clear();
+                try { block?.Invoke(this); } finally { isMounted = true; owner.Mutator.Seal(); }
             }
             ReadOnlyList<long> IHasCoords.GetCoords() => owner.Coords;
             public SpokeEngine Engine => owner.engine;
             public void Log(string msg) => owner.LogFlush(msg);
             public T D<T>(ISignal<T> signal) { owner.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) => owner.Use(trigger);
-            public T Use<T>(T disposable) where T : IDisposable { owner.Use(disposable); return disposable; }
-            public T CreateContext<T>(T value) { owner.SetContext(value); return value; }
-            public T GetContext<T>() => owner.GetContext<T>();
-            public void OnCleanup(Action fn) => owner.OnCleanup(fn);
+            public void Use(SpokeHandle trigger) => owner.Mutator.Use(trigger);
+            public T Use<T>(T disposable) where T : IDisposable { owner.Mutator.Use(disposable); return disposable; }
+            public T CreateContext<T>(Builder<T> builder) where T : IFacet => owner.Mutator.CreateContext(builder);
+            public T GetContext<T>() where T : IFacet => owner.Mutator.GetContext<T>();
+            public bool TryGetContext<T>(out T context) where T : IFacet => owner.Mutator.TryGetContext(out context);
+            public void OnCleanup(Action fn) => owner.Mutator.OnCleanup(fn);
         }
     }
     // ============================== Effect ============================================================
@@ -214,7 +216,7 @@ namespace Spoke {
         Action<MemoBuilder> block;
         MemoBuilder builder;
         public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, true, triggers) {
-            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Use });
+            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, Own = Mutator.Use });
             block = s => { if (selector != null) state.Set(selector(s)); };
         }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
@@ -222,7 +224,7 @@ namespace Spoke {
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
-        protected override void OnRun() { ClearChildren(); block(builder); }
+        protected override void OnRun() { Mutator.Clear(); block(builder); }
     }
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
@@ -244,11 +246,11 @@ namespace Spoke {
     }
     public class Dock : Node, IDock, IDisposable, IHasCoords {
         public Dock(string name) : base(name) { }
-        public new void Use(object key, SpokeHandle handle) => base.Use(key, handle);
-        public new T Use<T>(object key, T disposable) where T : IDisposable => base.Use(key, disposable);
+        public void Use(object key, SpokeHandle handle) => base.Mutator.Use(key, handle);
+        public T Use<T>(object key, T disposable) where T : IDisposable => base.Mutator.Use(key, disposable);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
         public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Use(key, new Effect(name, buildLogic, triggers));
-        public new void Drop(object key) => base.Drop(key);
+        public void Drop(object key) => base.Mutator.Drop(key);
         protected override void OnAttached() { }
         ReadOnlyList<long> IHasCoords.GetCoords() => Coords;
     }
@@ -268,24 +270,49 @@ namespace Spoke {
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
     internal interface IHasCoords { ReadOnlyList<long> GetCoords(); }
+    public interface NodeMutator {
+        void Seal();
+        SpokeHandle Use(SpokeHandle handle);
+        SpokeHandle Use(object key, SpokeHandle handle);
+        T Use<T>(T child) where T : IDisposable;
+        T Use<T>(object key, T child) where T : IDisposable;
+        void Drop(object key);
+        void OnCleanup(Action fn);
+        T CreateContext<T>(Builder<T> builder = default) where T : IFacet;
+        T CreateComponent<T>(Builder<T> builder = default) where T : IFacet;
+        bool TryGetContext<T>(out T context) where T : IFacet;
+        bool TryGetComponent<T>(out T component) where T : IFacet;
+        T GetContext<T>() where T : IFacet;
+        T GetComponent<T>() where T : IFacet;
+        void Clear();
+    }
+    public interface IFacet { }
+    public struct Builder<T> {
+        Action<T> con;
+        public Builder(Action<T> constructor = default) { con = constructor; }
+        public T Build() {
+            var inst = Activator.CreateInstance<T>();
+            try { con?.Invoke(inst); } catch (Exception e) { SpokeError.Log("Error building object", e); }
+            return inst;
+        }
+    }
     public abstract class Node : IDisposable, IComparable<Node> {
-        Dictionary<Type, object> contexts = new Dictionary<Type, object>();
+        string name;
         List<IDisposable> children = new List<IDisposable>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
         Dictionary<object, IDisposable> dynamicChildren = new Dictionary<object, IDisposable>();
         Dictionary<object, SpokeHandle> dynamicHandles = new Dictionary<object, SpokeHandle>();
-        List<Action> cleanupFuncs = new List<Action>();
-        bool isChildrenDisposing, isSealed;
         List<long> coords = new List<long>();
+        MutatorImpl mutator;
         long siblingCounter = 0;
-        string name;
+        protected NodeMutator Mutator => mutator;
         protected ReadOnlyList<long> Coords => new ReadOnlyList<long>(coords);
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
         public ReadOnlyList<IDisposable> Children => new ReadOnlyList<IDisposable>(children);
-        public Node(string name) { this.name = name; }
+        public Node(string name) { this.name = name; mutator = new MutatorImpl(this); }
         public override string ToString() => name ?? base.ToString();
-        public virtual void Dispose() => ClearChildren();
+        public virtual void Dispose() => mutator.Clear();
         public int CompareTo(Node other) {
             var minDepth = Math.Min(coords.Count, other.coords.Count);
             for (int i = 0; i < minDepth; i++) {
@@ -293,37 +320,6 @@ namespace Spoke {
                 if (cmp != 0) return cmp;
             }
             return coords.Count.CompareTo(other.coords.Count);
-        }
-        protected void Seal() => isSealed = true;
-        protected SpokeHandle Use(SpokeHandle handle) {
-            NoMischief(); handles.Add(handle); return handle;
-        }
-        protected SpokeHandle Use(object key, SpokeHandle handle) { 
-            Drop(key); 
-            return dynamicHandles[key] = Use(handle); 
-        }
-        protected T Use<T>(T child) where T : IDisposable {
-            NoMischief();
-            children.Add(child);
-            if (child is Node node) node.UsedBy(this);
-            return child;
-        }
-        protected T Use<T>(object key, T child) where T : IDisposable {
-            Drop(key);
-            return (T)(dynamicChildren[key] = Use(child));
-        }
-        protected void Drop(object key) {
-            NoMischief();
-            if (dynamicChildren.TryGetValue(key, out var child)) {
-                var index = children.IndexOf(child);
-                if (index >= 0) { child.Dispose(); children.RemoveAt(index); }
-                dynamicChildren.Remove(key);
-            }
-            if (dynamicHandles.TryGetValue(key, out var handle)) {
-                var index = handles.IndexOf(handle);
-                if (index >= 0) { handle.Dispose(); handles.RemoveAt(index); }
-                dynamicHandles.Remove(key);
-            }
         }
         void UsedBy(Node parent) {
             if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
@@ -333,38 +329,99 @@ namespace Spoke {
             OnAttached();
         }
         protected abstract void OnAttached();
-        protected void OnCleanup(Action fn) { NoMischief(); cleanupFuncs.Add(fn); }
-        protected T SetContext<T>(T value) { NoMischief(); contexts[typeof(T)] = value; return value; }
-        protected T GetContext<T>() {
-            for (var curr = this; curr != null; curr = curr.Owner)
-                if (curr.contexts.TryGetValue(typeof(T), out var o)) return (T)o;
-            return default(T);
-        }
-        protected void ClearChildren() {
-            isChildrenDisposing = true;
-            for (int i = cleanupFuncs.Count - 1; i >= 0; i--)
-                try { cleanupFuncs[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
-            cleanupFuncs.Clear();
-            foreach (var triggerChild in handles) triggerChild.Dispose();
-            handles.Clear();
-            for (int i = children.Count - 1; i >= 0; i--)
-                try { children[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {children[i]}", e); }
-            children.Clear();
-            contexts.Clear();
-            siblingCounter = 0;
-            dynamicChildren.Clear();
-            dynamicHandles.Clear();
-            isSealed = false;
-            isChildrenDisposing = false;
-        }
-        void NoMischief() { 
-            if (isChildrenDisposing) throw new Exception("Cannot mutate Node while it's disposing");
-            if (isSealed) throw new Exception("Cannot mutate Node after it's sealed");
+        class MutatorImpl : NodeMutator {
+            Node node;
+            Dictionary<Type, object> contexts = new Dictionary<Type, object>();
+            Dictionary<Type, object> components = new Dictionary<Type, object>();
+            List<Action> cleanupFuncs = new List<Action>();
+            bool isChildrenDisposing, isSealed;
+            public MutatorImpl(Node node) {
+                this.node = node;
+            }
+            public void Seal() => isSealed = true;
+            public SpokeHandle Use(SpokeHandle handle) {
+                NoMischief(); node.handles.Add(handle); return handle;
+            }
+            public SpokeHandle Use(object key, SpokeHandle handle) {
+                Drop(key);
+                return node.dynamicHandles[key] = Use(handle);
+            }
+            public T Use<T>(T child) where T : IDisposable {
+                NoMischief();
+                node.children.Add(child);
+                if (child is Node cn) cn.UsedBy(node);
+                return child;
+            }
+            public T Use<T>(object key, T child) where T : IDisposable {
+                Drop(key);
+                return (T)(node.dynamicChildren[key] = Use(child));
+            }
+            public void Drop(object key) {
+                NoMischief();
+                if (node.dynamicChildren.TryGetValue(key, out var child)) {
+                    var index = node.children.IndexOf(child);
+                    if (index >= 0) { child.Dispose(); node.children.RemoveAt(index); }
+                    node.dynamicChildren.Remove(key);
+                }
+                if (node.dynamicHandles.TryGetValue(key, out var handle)) {
+                    var index = node.handles.IndexOf(handle);
+                    if (index >= 0) { handle.Dispose(); node.handles.RemoveAt(index); }
+                    node.dynamicHandles.Remove(key);
+                }
+            }
+            public void OnCleanup(Action fn) { NoMischief(); cleanupFuncs.Add(fn); }
+            public T CreateContext<T>(Builder<T> builder) where T : IFacet { NoMischief(); return (T)(contexts[typeof(T)] = builder.Build()); }
+            public T CreateComponent<T>(Builder<T> builder) where T : IFacet { NoMischief(); return (T)(components[typeof(T)] = builder.Build()); }
+            public bool TryGetContext<T>(out T context) where T : IFacet {
+                context = default(T);
+                for (var curr = node; curr != null; curr = curr.Owner)
+                    if (curr.mutator.contexts.TryGetValue(typeof(T), out var o)) { context = (T)o; return true; }
+                return false;
+            }
+            public bool TryGetComponent<T>(out T component) where T : IFacet {
+                component = default(T);
+                if (components.TryGetValue(typeof(T), out var o)) { component = (T)o; return true; }
+                return false;
+            }
+            public T GetContext<T>() where T : IFacet {
+                if (TryGetContext<T>(out var o)) return o;
+                throw new Exception($"Context {typeof(T)} not found on {node}");
+            }
+            public T GetComponent<T>() where T : IFacet {
+                if (TryGetComponent<T>(out var o)) return o;
+                throw new Exception($"Component {typeof(T)} not found on {node}");
+            }
+            public void Clear() {
+                isChildrenDisposing = true;
+                for (int i = cleanupFuncs.Count - 1; i >= 0; i--)
+                    try { cleanupFuncs[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
+                cleanupFuncs.Clear();
+                foreach (var triggerChild in node.handles) triggerChild.Dispose();
+                node.handles.Clear();
+                for (int i = node.children.Count - 1; i >= 0; i--)
+                    try { node.children[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {node.children[i]}", e); }
+                node.children.Clear();
+                contexts.Clear();
+                components.Clear();
+                node.siblingCounter = 0;
+                node.dynamicChildren.Clear();
+                node.dynamicHandles.Clear();
+                isSealed = false;
+                isChildrenDisposing = false;
+            }
+            void NoMischief() {
+                if (isChildrenDisposing) throw new Exception("Cannot mutate Node while it's disposing");
+                if (isSealed) throw new Exception("Cannot mutate Node after it's sealed");
+            }
         }
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
     public class SpokeEngine : Node {
+        class EngineContext : IFacet {
+            public SpokeEngine engine { get; private set; }
+            public static Builder<EngineContext> Builder(SpokeEngine engine) => new(facet => facet.engine = engine);
+        }
         public FlushMode FlushMode = FlushMode.Immediate;
         FlushLogger flushLogger = FlushLogger.Create();
         KahnTopoSorter toposorter = KahnTopoSorter.Create();
@@ -379,13 +436,13 @@ namespace Spoke {
             _flush = FlushNow; _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
             this.logger = logger ?? new ConsoleSpokeLogger();
-            SetContext(this);
+            Mutator.CreateContext(EngineContext.Builder(this));
         }
         public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            Use(currId, new Effect(name, buildLogic, triggers));
+            Mutator.Use(currId, new Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
-        void ReleaseEffect(long id) => Drop(id);
+        void ReleaseEffect(long id) => Mutator.Drop(id);
         public void Batch(Action action) {
             deferred.Hold();
             try { action(); } finally { deferred.Release(); }
@@ -476,8 +533,9 @@ namespace Spoke {
                 engine.flushLogger.OnFlushComputation(this);
             }
             protected override void OnAttached() {
-                engine = GetContext<SpokeEngine>();
-                staleCtx = SetContext(new StaleContext(GetContext<StaleContext>()));
+                engine = Mutator.GetContext<EngineContext>().engine;
+                Mutator.TryGetContext<StaleContext>(out var parentContext);
+                staleCtx = Mutator.CreateContext(StaleContext.Builder(parentContext));
                 if (scheduleOnAttach) Schedule();
             }
             protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
@@ -548,11 +606,10 @@ namespace Spoke {
                 }
             }
         }
-        class StaleContext : IDisposable {
+        class StaleContext : IFacet, IDisposable {
             StaleContext parent;
             List<StaleContext> children = new List<StaleContext>();
             public bool IsStale { get; private set; }
-            public StaleContext(StaleContext parent) { this.parent = parent; parent?.children.Add(this); }
             public void MarkDescendantsStale() {
                 foreach (var c in children) if (!c.IsStale) { c.IsStale = true; c.MarkDescendantsStale(); }
             }
@@ -562,6 +619,10 @@ namespace Spoke {
                 IsStale = false;
                 parent = null;
             }
+            public static Builder<StaleContext> Builder(StaleContext parent) => new(facet => {
+                facet.parent = parent;
+                parent?.children.Add(facet);
+            });
         }
     }
     internal struct DeferredQueue {
