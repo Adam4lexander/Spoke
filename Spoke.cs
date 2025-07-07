@@ -156,9 +156,9 @@ namespace Spoke {
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
         EffectBuilderImpl builder;
-        protected override void Build(string name, bool scheduleOnAttach, IEnumerable<ITrigger> triggers) {
+        protected override void Build(string name, IEnumerable<ITrigger> triggers) {
+            base.Build(name, triggers);
             builder = new EffectBuilderImpl(this);
-            base.Build(name, scheduleOnAttach, triggers);
         }
         protected void Mount(EffectBlock block) => builder.Mount(block);
         class EffectBuilderImpl : EffectBuilder, IHasCoords {
@@ -186,8 +186,9 @@ namespace Spoke {
     public class Effect : BaseEffect {
         EffectBlock block;
         public static Builder<Effect> Builder(string name, EffectBlock block, params ITrigger[] triggers) => new(that => {
+            that.Build(name, triggers);
             that.block = block;
-            that.Build(name, true, triggers);
+            that.Schedule();
         });
         protected override void OnRun() => Mount(block);
     }
@@ -195,8 +196,8 @@ namespace Spoke {
     public class Reaction : BaseEffect {
         EffectBlock block;
         public static Builder<Reaction> Builder(string name, EffectBlock block, params ITrigger[] triggers) => new(that => {
+            that.Build(name, triggers);
             that.block = block;
-            that.Build(name, false, triggers);
         });
         protected override void OnRun() => Mount(block);
     }
@@ -204,11 +205,11 @@ namespace Spoke {
     public class Phase : BaseEffect {
         EffectBlock block;
         public static Builder<Phase> Builder(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) => new(that => {
-            if (mountWhen != null) {
-                that.AddStaticTrigger(mountWhen);
-                that.block = s => { if (mountWhen.Now) block?.Invoke(s); };
-            }
-            that.Build(name, true, triggers);
+            that.Build(name, triggers);
+            if (mountWhen == null) return;
+            that.AddStaticTrigger(mountWhen);
+            that.block = s => { if (mountWhen.Now) block?.Invoke(s); };
+            that.Schedule();
         });
         protected override void OnRun() => Mount(block);
     }
@@ -219,9 +220,10 @@ namespace Spoke {
         Action<MemoBuilder> block;
         MemoBuilder builder;
         public static Builder<Memo<T>> Builder(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => new(that => {
+            that.Build(name, triggers);
             that.builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = that.AddDynamicTrigger, Own = that.Owner.Use });
             that.block = s => { if (selector != null) that.state.Set(selector(s)); };
-            that.Build(name, true, triggers);
+            that.Schedule();
         });
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
@@ -376,7 +378,7 @@ namespace Spoke {
         protected Node() { 
             mutator = new MutatorImpl(this);
         }
-        public bool TryGetIdentity<T>(out T identity) where T : Facet => (identity = (T)UntypedIdentity) != null;
+        public bool TryGetIdentity<T>(out T identity) where T : Facet => (identity = (UntypedIdentity as T)) != null;
         public override string ToString() => UntypedIdentity.ToString();
         public virtual void Dispose() {
             mutator.ClearChildren();
@@ -571,7 +573,7 @@ namespace Spoke {
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public override string ToString() => name ?? base.ToString();
             public int CompareTo(Computation other) => Owner.Coords.CompareTo(other.Owner.Coords);
-            protected virtual void Build(string name, bool scheduleOnAttach, IEnumerable<ITrigger> triggers) {
+            protected virtual void Build(string name, IEnumerable<ITrigger> triggers) {
                 this.name = name;
                 tracker = DependencyTracker.Create(this);
                 foreach (var trigger in triggers) tracker.AddStatic(trigger);
@@ -579,7 +581,6 @@ namespace Spoke {
                 Owner.TryGetContext(out engine);
                 Owner.TryGetContext<Computation>(out var parentComp);
                 staleCtx = new StaleContext(parentComp?.staleCtx);
-                if (scheduleOnAttach) Schedule();
             }
             protected override void OnDisposed() {
                 isDisposed = true;
