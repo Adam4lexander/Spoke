@@ -150,8 +150,8 @@ namespace Spoke {
         public static void UseReaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Component(Reaction.Builder(name, block, triggers));
         public static void UsePhase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(Phase.Builder("Phase", mountWhen, buildLogic, triggers));
         public static void UsePhase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(Phase.Builder(name, mountWhen, buildLogic, triggers));
-        public static IDock UseDock(this EffectBuilder s) => s.Component(Dock.Builder("Dock"));
-        public static IDock UseDock(this EffectBuilder s, string name) => s.Component(Dock.Builder(name));
+        public static Dock UseDock(this EffectBuilder s) => s.Component(Dock.Builder("Dock"));
+        public static Dock UseDock(this EffectBuilder s, string name) => s.Component(Dock.Builder(name));
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
         EffectBuilderImpl builder;
@@ -239,13 +239,7 @@ namespace Spoke {
         public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
     }
     // ============================== Dock ============================================================
-    public interface IDock {
-        void Use(object key, SpokeHandle handle);
-        void Drop(object key);
-        void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers);
-        void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers);
-    }
-    public class Dock : Facet, IDock, IHasCoords {
+    public class Dock : Facet, IHasCoords {
         string name;
         public override string ToString() => name ?? base.ToString();
         public static Builder<Dock> Builder(string name) => new(that => {
