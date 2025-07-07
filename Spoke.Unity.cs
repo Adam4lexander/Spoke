@@ -50,7 +50,7 @@ namespace Spoke {
         SpokeEngine engine;
         protected SpokeEngine SpokeEngine {
             get {
-                engine = engine ?? OverrideEngine() ?? new SpokeEngine($"{GetType().Name}:Engine", FlushMode.Immediate, new UnitySpokeLogger(this));
+                engine = engine ?? OverrideEngine() ?? SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger(this));
                 return engine;
             }
         }
