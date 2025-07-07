@@ -289,24 +289,27 @@ namespace Spoke {
             Node GetNode();
             void Attach(NodeMutator nodeMut, Node nodeAct);
         }
+        bool wasAttached;
         NodeMutator _owner;
         protected NodeMutator Owner { 
             get {
-                if (_owner == null) throw new InvalidOperationException("Facet is not yet attached to the tree");
+                if (!wasAttached) throw new InvalidOperationException("Facet is not yet attached to the tree");
                 return _owner;
             } 
         }
         Node nodeActual;
         Node IFacetFriend.GetNode() => nodeActual;
         void IFacetFriend.Attach(NodeMutator nodeMutable, Node nodeActual) {
-            if (_owner != null) throw new InvalidOperationException("Tried to attach a facet which was already attached");
+            if (wasAttached) throw new InvalidOperationException("Tried to attach a facet which was already attached");
             _owner = nodeMutable;
             this.nodeActual = nodeActual;
+            wasAttached = true;
             Attached();
         }
         void ILifecycle.Cleanup() {
             Cleanup();
             _owner = null;
+            nodeActual = null;
         }
         protected abstract void Attached();
         protected abstract void Cleanup();
