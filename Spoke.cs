@@ -135,7 +135,6 @@ namespace Spoke {
         void Log(string msg);
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
-        T Use<T>(T disposable) where T : IDisposable;
         T Component<T>(Builder<T> builder) where T : Facet;
         public bool TryGetContext<T>(out T context) where T : Facet;
         void OnCleanup(Action cleanup);
@@ -176,7 +175,6 @@ namespace Spoke {
             public void Log(string msg) => effect.LogFlush(msg);
             public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
             public void Use(SpokeHandle trigger) => effect.Owner.Use(trigger);
-            public T Use<T>(T disposable) where T : IDisposable { effect.Owner.Use(disposable); return disposable; }
             public T Component<T>(Builder<T> builder) where T : Facet => effect.Owner.Component(builder);
             public bool TryGetContext<T>(out T context) where T : Facet => effect.Owner.TryGetContext(out context);
             public void OnCleanup(Action fn) => effect.Owner.OnCleanup(fn);
@@ -221,7 +219,7 @@ namespace Spoke {
         MemoBuilder builder;
         public static Builder<Memo<T>> Builder(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => new(that => {
             that.Build(name, triggers);
-            that.builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = that.AddDynamicTrigger, Own = that.Owner.Use });
+            that.builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = that.AddDynamicTrigger });
             that.block = s => { if (selector != null) that.state.Set(selector(s)); };
             that.Schedule();
         });
@@ -235,17 +233,14 @@ namespace Spoke {
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
             public Action<ITrigger> AddDynamicTrigger;
-            public Func<IDisposable, IDisposable> Own;
         }
         Friend memo;
         internal MemoBuilder(Friend memo) { this.memo = memo; }
         public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
-        public U Use<U>(U disposable) where U : IDisposable { memo.Own(disposable); return disposable; }
     }
     // ============================== Dock ============================================================
     public interface IDock {
         void Use(object key, SpokeHandle handle);
-        T Use<T>(object key, T disposable) where T : IDisposable;
         void Drop(object key);
         void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers);
         void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers);
@@ -257,12 +252,11 @@ namespace Spoke {
             that.name = name;
         });
         public void Use(object key, SpokeHandle handle) => Owner.Use(key, handle);
-        public T Use<T>(object key, T disposable) where T : IDisposable => Owner.Use(key, disposable);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
         public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Owner.Component(key, Effect.Builder(name, buildLogic, triggers));
         public void Drop(object key) => Owner.Drop(key);
         TreeCoords IHasCoords.GetCoords() => Owner.Coords;
-        protected override void OnDisposed() { }
+        protected override void Cleanup() { }
     }
     // ============================== Node ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
@@ -280,13 +274,12 @@ namespace Spoke {
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
     internal interface IHasCoords { TreeCoords GetCoords(); }
+    internal interface ILifecycle { void Cleanup(); }
     public interface NodeMutator {
         TreeCoords Coords { get; }
         void Seal();
         SpokeHandle Use(SpokeHandle handle);
         SpokeHandle Use(object key, SpokeHandle handle);
-        T Use<T>(T child) where T : IDisposable;
-        T Use<T>(object key, T child) where T : IDisposable;
         T Component<T>(Builder<T> builder) where T : Facet;
         T Component<T>(object key, Builder<T> builder) where T : Facet;
         void Drop(object key);
@@ -296,10 +289,9 @@ namespace Spoke {
         void ClearChildren();
     }
     public abstract class Facet : Facet.IFacetFriend {
-        internal interface IFacetFriend {
+        internal interface IFacetFriend : ILifecycle {
             Node GetNode();
             void SetOwner(NodeMutator nodeMut, Node nodeAct);
-            void Dispose();
         }
         protected NodeMutator Owner { get; private set; }
         Node nodeActual;
@@ -308,11 +300,11 @@ namespace Spoke {
             Owner = nodeMutable;
             this.nodeActual = nodeActual;
         }
-        void IFacetFriend.Dispose() {
-            OnDisposed();
+        void ILifecycle.Cleanup() {
+            Cleanup();
             Owner = null;
         }
-        protected abstract void OnDisposed();
+        protected abstract void Cleanup();
     }
     public struct Builder<T> {
         Action<T> con;
@@ -357,15 +349,15 @@ namespace Spoke {
             return myDepth.CompareTo(otherDepth);
         }
     }
-    public abstract class Node : IDisposable {
+    public abstract class Node : ILifecycle {
         public static Node<T> CreateRoot<T>(Builder<T> builder) where T : Facet {
             var node = new Node<T>(builder);
             node.OnAttached();
             return node;
         }
-        List<IDisposable> children = new List<IDisposable>();
+        List<Node> children = new List<Node>();
         List<SpokeHandle> handles = new List<SpokeHandle>();
-        Dictionary<object, IDisposable> dynamicChildren = new Dictionary<object, IDisposable>();
+        Dictionary<object, Node> dynamicChildren = new Dictionary<object, Node>();
         Dictionary<object, SpokeHandle> dynamicHandles = new Dictionary<object, SpokeHandle>();
         TreeCoords coords;
         MutatorImpl mutator;
@@ -374,15 +366,15 @@ namespace Spoke {
         protected NodeMutator Mutator => mutator;
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
-        public ReadOnlyList<IDisposable> Children => new ReadOnlyList<IDisposable>(children);
+        public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
         protected Node() { 
             mutator = new MutatorImpl(this);
         }
         public bool TryGetIdentity<T>(out T identity) where T : Facet => (identity = (UntypedIdentity as T)) != null;
         public override string ToString() => UntypedIdentity.ToString();
-        public virtual void Dispose() {
+        void ILifecycle.Cleanup() {
             mutator.ClearChildren();
-            (UntypedIdentity as Facet.IFacetFriend).Dispose();
+            (UntypedIdentity as ILifecycle).Cleanup();
         }
         void UsedBy(Node parent) {
             if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
@@ -407,29 +399,26 @@ namespace Spoke {
                 Drop(key);
                 return node.dynamicHandles[key] = Use(handle);
             }
-            public T Use<T>(T child) where T : IDisposable {
-                NoMischief();
-                node.children.Add(child);
-                if (child is Node cn) cn.UsedBy(node);
-                return child;
-            }
-            public T Use<T>(object key, T child) where T : IDisposable {
-                Drop(key);
-                return (T)(node.dynamicChildren[key] = Use(child));
-            }
             public T Component<T>(Builder<T> builder) where T : Facet {
                 NoMischief();
-                return Use(new Node<T>(builder)).Identity;
+                var childNode = new Node<T>(builder);
+                node.children.Add(childNode);
+                childNode.UsedBy(node);
+                return childNode.Identity;
             }
             public T Component<T>(object key, Builder<T> builder) where T : Facet {
                 Drop(key);
-                return Use(key, new Node<T>(builder)).Identity;
+                var childNode = new Node<T>(builder);
+                node.dynamicChildren.Add(key, childNode);
+                node.children.Add(childNode);
+                childNode.UsedBy(node);
+                return childNode.Identity;
             }
             public void Drop(object key) {
                 NoMischief();
                 if (node.dynamicChildren.TryGetValue(key, out var child)) {
                     var index = node.children.IndexOf(child);
-                    if (index >= 0) { child.Dispose(); node.children.RemoveAt(index); }
+                    if (index >= 0) { (child as ILifecycle).Cleanup(); node.children.RemoveAt(index); }
                     node.dynamicChildren.Remove(key);
                 }
                 if (node.dynamicHandles.TryGetValue(key, out var handle)) {
@@ -461,7 +450,7 @@ namespace Spoke {
                 foreach (var triggerChild in node.handles) triggerChild.Dispose();
                 node.handles.Clear();
                 for (int i = node.children.Count - 1; i >= 0; i--)
-                    try { node.children[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to dispose child of '{this}': {node.children[i]}", e); }
+                    try { (node.children[i] as ILifecycle).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {node.children[i]}", e); }
                 node.children.Clear();
                 node.siblingCounter = 0;
                 node.dynamicChildren.Clear();
@@ -549,7 +538,7 @@ namespace Spoke {
                 pendingLogs.Clear();
             }
         }
-        protected override void OnDisposed() { }
+        protected override void Cleanup() { }
         struct FlushBuckets {
             public HashSet<Computation> Memos { get; private set; }
             public List<Computation> Effects { get; private set; }
@@ -582,7 +571,7 @@ namespace Spoke {
                 Owner.TryGetContext<Computation>(out var parentComp);
                 staleCtx = new StaleContext(parentComp?.staleCtx);
             }
-            protected override void OnDisposed() {
+            protected override void Cleanup() {
                 isDisposed = true;
                 tracker.Dispose();
                 staleCtx.Dispose();
@@ -741,19 +730,20 @@ namespace Spoke {
         }
         void PrintErrors() {
             foreach (var c in runHistory)
-                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
+                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel((c as Facet.IFacetFriend).GetNode())} ---\n{c.Fault}");
         }
         void PrintRoot(Node root) {
             var that = this;
             sb.AppendLine();
             Traverse(0, root, (depth, x) => {
-                var runIndex = that.runHistory.IndexOf(x as SpokeEngine.Computation);
+                x.TryGetIdentity<SpokeEngine.Computation>(out var comp);
+                var runIndex = that.runHistory.IndexOf(comp);
                 for (int i = 0; i < depth; i++) that.sb.Append("    ");
                 that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
             });
         }
-        string NodeLabel(object node) {
-            if (node is SpokeEngine.Computation comp) {
+        string NodeLabel(Node node) {
+            if (node.TryGetIdentity<SpokeEngine.Computation>(out var comp)) {
                 var indexes = new List<int>();
                 for (int i = 0; i < runHistory.Count; i++)
                     if (ReferenceEquals(runHistory[i], comp)) indexes.Add(i);
@@ -762,17 +752,15 @@ namespace Spoke {
             }
             return $"|--{node} ";
         }
-        string FaultStatus(IDisposable node) {
-            if (node is SpokeEngine.Computation comp && comp.Fault != null)
+        string FaultStatus(Node node) {
+            if (node.TryGetIdentity<SpokeEngine.Computation>(out var comp) && comp.Fault != null)
                 if (runHistory.Contains(comp)) return $"[Faulted: {comp.Fault.GetType().Name}]";
                 else return "[Faulted]";
             return "";
         }
-        void Traverse(int depth, IDisposable obj, Action<int, IDisposable> action) {
-            action?.Invoke(depth, obj);
-            if (obj is Node node)
-                foreach (var child in node.Children)
-                    Traverse(depth + 1, child, action);
+        void Traverse(int depth, Node node, Action<int, Node> action) {
+            action?.Invoke(depth, node);
+            foreach (var child in node.Children) Traverse(depth + 1, child, action);
         }
     }
     // ============================== KahnTopoSorter ============================================================
