@@ -282,6 +282,7 @@ namespace Spoke {
         void OnCleanup(Action fn);
         bool TryGetContext<T>(out T context) where T : Facet;
         bool TryGetComponent<T>(out T component) where T : Facet;
+        List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet;
         void ClearChildren();
     }
     public abstract class Facet : Facet.IFacetFriend {
@@ -291,11 +292,11 @@ namespace Spoke {
         }
         bool wasAttached;
         NodeMutator _owner;
-        protected NodeMutator Owner { 
+        protected NodeMutator Owner {
             get {
                 if (!wasAttached) throw new InvalidOperationException("Facet is not yet attached to the tree");
                 return _owner;
-            } 
+            }
         }
         Node nodeActual;
         Node IFacetFriend.GetNode() => nodeActual;
@@ -308,8 +309,6 @@ namespace Spoke {
         }
         void ILifecycle.Cleanup() {
             Cleanup();
-            _owner = null;
-            nodeActual = null;
         }
         protected abstract void Attached();
         protected abstract void Cleanup();
@@ -361,7 +360,7 @@ namespace Spoke {
         public Node Owner { get; private set; }
         public Node Root => Owner != null ? Owner.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
-        protected Node() { 
+        protected Node() {
             mutator = new MutatorImpl(this);
         }
         public bool TryGetIdentity<T>(out T identity) where T : Facet => (identity = (UntypedIdentity as T)) != null;
@@ -430,11 +429,18 @@ namespace Spoke {
             }
             public bool TryGetComponent<T>(out T component) where T : Facet {
                 if (node.TryGetIdentity(out component)) return true;
-                foreach (var child in node.Children) {
-                    if (!(child is Node n)) continue;
+                foreach (var n in node.Children) {
                     if (n.Mutator.TryGetComponent(out component)) return true;
                 }
                 return false;
+            }
+            public List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet {
+                storeIn = storeIn ?? new List<T>();
+                if (node.TryGetIdentity<T>(out var component)) storeIn.Add(component);
+                foreach (var n in node.Children) {
+                    n.Mutator.GetComponents(storeIn);
+                }
+                return storeIn;
             }
             public void ClearChildren() {
                 isChildrenDisposing = true;
