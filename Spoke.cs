@@ -159,7 +159,7 @@ namespace Spoke {
             builder = new EffectBuilderImpl(this);
         }
         protected void Mount(EffectBlock block) => builder.Mount(block);
-        class EffectBuilderImpl : EffectBuilder, IHasCoords {
+        class EffectBuilderImpl : EffectBuilder {
             bool isMounted;
             BaseEffect effect;
             public EffectBuilderImpl(BaseEffect owner) {
@@ -169,7 +169,6 @@ namespace Spoke {
                 if (isMounted) effect.Owner.ClearChildren();
                 try { block?.Invoke(this); } finally { isMounted = true; effect.Owner.Seal(); }
             }
-            TreeCoords IHasCoords.GetCoords() => effect.Owner.Coords;
             public SpokeEngine Engine => effect.engine;
             public void Log(string msg) => effect.LogFlush(msg);
             public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
@@ -242,15 +241,15 @@ namespace Spoke {
         public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
     }
     // ============================== Dock ============================================================
-    public class Dock : Facet, IHasCoords {
+    public class Dock : Facet {
         string name;
         public override string ToString() => name ?? base.ToString();
         public Dock(string name) { this.name = name; }
         public void Use(object key, SpokeHandle handle) => Owner.Use(key, handle);
+        public T Component<T>(object key, T identity) where T : Facet => Owner.Component(key, identity);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
-        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Owner.Component(key, new Effect(name, buildLogic, triggers));
+        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Component(key, new Effect(name, buildLogic, triggers));
         public void Drop(object key) => Owner.Drop(key);
-        TreeCoords IHasCoords.GetCoords() => Owner.Coords;
         protected override void Attached() { }
         protected override void Cleanup() { }
     }
@@ -269,7 +268,6 @@ namespace Spoke {
         public static bool operator ==(SpokeHandle left, SpokeHandle right) => left.Equals(right);
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
     }
-    internal interface IHasCoords { TreeCoords GetCoords(); }
     internal interface ILifecycle { void Cleanup(); }
     public interface NodeMutator {
         TreeCoords Coords { get; }
@@ -291,26 +289,22 @@ namespace Spoke {
             Node GetNode();
             void Attach(NodeMutator nodeMut, Node nodeAct);
         }
-        bool wasAttached;
         NodeMutator _owner;
         protected NodeMutator Owner {
             get {
-                if (!wasAttached) throw new InvalidOperationException("Facet is not yet attached to the tree");
+                if (_owner == null) throw new InvalidOperationException("Facet is not yet attached to the tree");
                 return _owner;
             }
         }
         Node nodeActual;
         Node IFacetFriend.GetNode() => nodeActual;
         void IFacetFriend.Attach(NodeMutator nodeMutable, Node nodeActual) {
-            if (wasAttached) throw new InvalidOperationException("Tried to attach a facet which was already attached");
+            if (_owner != null) throw new InvalidOperationException("Tried to attach a facet which was already attached");
             _owner = nodeMutable;
             this.nodeActual = nodeActual;
-            wasAttached = true;
             Attached();
         }
-        void ILifecycle.Cleanup() {
-            Cleanup();
-        }
+        void ILifecycle.Cleanup() => Cleanup();
         protected abstract void Attached();
         protected abstract void Cleanup();
     }
