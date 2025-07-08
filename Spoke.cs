@@ -356,11 +356,10 @@ namespace Spoke {
         TreeCoords coords;
         MutatorImpl mutator;
         long siblingCounter = 0;
+        Node Prev, Next;
         protected abstract Facet UntypedIdentity { get; }
         protected NodeMutator Mutator => mutator;
         public Node Parent { get; private set; }
-        public Node Prev { get; private set; }
-        public Node Next { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
         protected Node() {
