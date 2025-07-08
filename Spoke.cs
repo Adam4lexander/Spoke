@@ -136,7 +136,7 @@ namespace Spoke {
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
         T Component<T>(T identity) where T : Facet;
-        public bool TryGetContext<T>(out T context) where T : Facet;
+        public bool TryGetAmbient<T>(out T context) where T : Facet;
         void OnCleanup(Action cleanup);
     }
     public static partial class EffectBuilderExtensions {
@@ -175,7 +175,7 @@ namespace Spoke {
             public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
             public void Use(SpokeHandle trigger) => effect.Owner.Use(trigger);
             public T Component<T>(T identity) where T : Facet => effect.Owner.Component(identity);
-            public bool TryGetContext<T>(out T context) where T : Facet => effect.Owner.TryGetContext(out context);
+            public bool TryGetAmbient<T>(out T context) where T : Facet => effect.Owner.TryGetAmbient(out context);
             public void OnCleanup(Action fn) => effect.Owner.OnCleanup(fn);
         }
     }
@@ -283,6 +283,7 @@ namespace Spoke {
         bool TryGetContext<T>(out T context) where T : Facet;
         bool TryGetComponent<T>(out T component) where T : Facet;
         List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet;
+        bool TryGetAmbient<T>(out T ambient) where T : Facet;
         void ClearChildren();
     }
     public abstract class Facet : Facet.IFacetFriend {
@@ -357,8 +358,10 @@ namespace Spoke {
         long siblingCounter = 0;
         protected abstract Facet UntypedIdentity { get; }
         protected NodeMutator Mutator => mutator;
-        public Node Owner { get; private set; }
-        public Node Root => Owner != null ? Owner.Root : this;
+        public Node Parent { get; private set; }
+        public Node Prev { get; private set; }
+        public Node Next { get; private set; }
+        public Node Root => Parent != null ? Parent.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
         protected Node() {
             mutator = new MutatorImpl(this);
@@ -368,10 +371,14 @@ namespace Spoke {
         void ILifecycle.Cleanup() {
             mutator.ClearChildren();
             (UntypedIdentity as ILifecycle).Cleanup();
+            if (Next != null) Next.Prev = Prev;
+            if (Prev != null) Prev.Next = Next;
+            Next = Prev = null;
         }
-        void UsedBy(Node parent) {
-            if (Owner != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Owner}");
-            Owner = parent;
+        void UsedBy(Node parent, Node prev) {
+            if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
+            Parent = parent;
+            Prev = prev;
             coords = parent.coords.Extend(parent.siblingCounter++);
             OnAttached();
         }
@@ -395,16 +402,20 @@ namespace Spoke {
             public T Component<T>(T identity) where T : Facet {
                 NoMischief();
                 var childNode = new Node<T>(identity);
+                var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : node;
+                if (prevNode != null) prevNode.Next = childNode;
                 node.children.Add(childNode);
-                childNode.UsedBy(node);
+                childNode.UsedBy(node, prevNode);
                 return childNode.Identity;
             }
             public T Component<T>(object key, T identity) where T : Facet {
                 Drop(key);
                 var childNode = new Node<T>(identity);
+                var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : node;
+                if (prevNode != null) prevNode.Next = childNode;
                 node.dynamicChildren.Add(key, childNode);
                 node.children.Add(childNode);
-                childNode.UsedBy(node);
+                childNode.UsedBy(node, prevNode);
                 return childNode.Identity;
             }
             public void Drop(object key) {
@@ -423,7 +434,7 @@ namespace Spoke {
             public void OnCleanup(Action fn) { NoMischief(); cleanupFuncs.Add(fn); }
             public bool TryGetContext<T>(out T context) where T : Facet {
                 context = default(T);
-                for (var curr = node.Owner; curr != null; curr = curr.Owner)
+                for (var curr = node.Parent; curr != null; curr = curr.Parent)
                     if (curr.TryGetIdentity<T>(out var o)) { context = o; return true; }
                 return false;
             }
@@ -432,6 +443,12 @@ namespace Spoke {
                 foreach (var n in node.Children) {
                     if (n.Mutator.TryGetComponent(out component)) return true;
                 }
+                return false;
+            }
+            public bool TryGetAmbient<T>(out T ambient) where T : Facet {
+                ambient = default(T);
+                for (var curr = node.Prev; curr != null; curr = curr.Prev)
+                    if (curr.TryGetIdentity<T>(out var o)) { ambient = o; return true; }
                 return false;
             }
             public List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet {
@@ -556,8 +573,8 @@ namespace Spoke {
         public abstract class Computation : Facet, IRunnable, IComparable<Computation> {
             protected SpokeEngine engine;
             DependencyTracker tracker;
-            bool isPending, isDisposed;
-            StaleContext staleCtx;
+            bool isPending, isDisposed, isStale;
+            List<Computation> childComps = new List<Computation>();
             string name;
             public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
@@ -571,16 +588,15 @@ namespace Spoke {
             }
             protected override void Attached() {
                 Owner.TryGetContext(out engine);
-                Owner.TryGetContext<Computation>(out var parentComp);
-                staleCtx = new StaleContext(parentComp?.staleCtx);
+                if (Owner.TryGetContext<Computation>(out var parentComp)) parentComp.childComps.Add(this);
             }
             protected override void Cleanup() {
                 isDisposed = true;
                 tracker.Dispose();
-                staleCtx.Dispose();
+                if (Owner.TryGetComponent<Computation>(out var parentComp)) parentComp.childComps.Remove(this);
             }
             void IRunnable.Run() {
-                if (isDisposed || !isPending || staleCtx.IsStale || (Fault != null)) return;
+                if (isDisposed || !isPending || isStale || (Fault != null)) return;
                 isPending = false; // Set now in case I trigger myself
                 tracker.BeginDynamic();
                 try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
@@ -597,10 +613,13 @@ namespace Spoke {
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
             protected void Schedule() {
-                if (isPending || staleCtx.IsStale) return;
+                if (isPending || isStale) return;
                 isPending = true;
-                staleCtx.MarkDescendantsStale();
+                MarkDescendantsStale();
                 engine.Schedule(this);
+            }
+            void MarkDescendantsStale() {
+                foreach (var c in childComps) if (!c.isStale) { c.isStale = true; c.MarkDescendantsStale(); }
             }
             struct DependencyTracker : IDisposable {
                 Computation owner;
@@ -652,24 +671,6 @@ namespace Spoke {
                     staticHandles.Clear(); dynamicHandles.Clear();
                     dependencies.Clear();
                 }
-            }
-        }
-        class StaleContext : IDisposable {
-            StaleContext parent;
-            List<StaleContext> children = new List<StaleContext>();
-            public bool IsStale { get; private set; }
-            public StaleContext(StaleContext parent) {
-                this.parent = parent;
-                parent?.children.Add(this);
-            }
-            public void MarkDescendantsStale() {
-                foreach (var c in children) if (!c.IsStale) { c.IsStale = true; c.MarkDescendantsStale(); }
-            }
-            public void Dispose() {
-                children.Clear();
-                if (!(parent?.IsStale) ?? false) parent.children.Remove(this);
-                IsStale = false;
-                parent = null;
             }
         }
     }
