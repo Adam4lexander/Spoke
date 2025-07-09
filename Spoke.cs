@@ -147,62 +147,51 @@ namespace Spoke {
         public static Dock UseDock(this EffectBuilder s, string name) => s.Component(new Dock(name));
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
+        protected EffectBlock block;
         EffectBuilderImpl builder;
         public BaseEffect(string name, IEnumerable<ITrigger> triggers) : base(name, triggers) {
             builder = new EffectBuilderImpl(this);
         }
-        protected void Mount(EffectBlock block) => builder.Mount(block);
+        protected override void OnRun(SpokeBuilder s) => builder.Mount(s, block);
         class EffectBuilderImpl : EffectBuilder {
-            bool isMounted;
             BaseEffect effect;
+            SpokeBuilder s;
             public EffectBuilderImpl(BaseEffect owner) {
                 this.effect = owner;
             }
-            public void Mount(EffectBlock block) {
-                if (isMounted) effect.Owner.ClearChildren();
-                try { block?.Invoke(this); } finally { isMounted = true; effect.Owner.Seal(); }
+            public void Mount(SpokeBuilder s, EffectBlock block) {
+                this.s = s;
+                block?.Invoke(this);
             }
             public SpokeEngine Engine => effect.engine;
             public void Log(string msg) => effect.LogFlush(msg);
             public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) => effect.Owner.Use(trigger);
-            public T Component<T>(T identity) where T : Facet => effect.Owner.Component(identity);
-            public bool TryGetAmbient<T>(out T context) where T : Facet => effect.Owner.TryGetAmbient(out context);
-            public void OnCleanup(Action fn) => effect.Owner.OnCleanup(fn);
+            public void Use(SpokeHandle trigger) => s.Use(trigger);
+            public T Component<T>(T identity) where T : Facet => s.Component(identity);
+            public bool TryGetAmbient<T>(out T context) where T : Facet => effect.TryGetAmbient(out context);
+            public void OnCleanup(Action fn) => s.OnCleanup(fn);
         }
     }
     // ============================== Effect ============================================================
     public class Effect : BaseEffect {
-        EffectBlock block;
         public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = block;
+            OnAttached(_ => Schedule());
         }
-        protected override void Attached() {
-            base.Attached();
-            Schedule();
-        }
-        protected override void OnRun() => Mount(block);
     }
     // ============================== Reaction ============================================================
     public class Reaction : BaseEffect {
-        EffectBlock block;
         public Reaction(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = block;
         }
-        protected override void OnRun() => Mount(block);
     }
     // ============================== Phase ============================================================
     public class Phase : BaseEffect {
-        EffectBlock block;
         public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             AddStaticTrigger(mountWhen);
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
+            OnAttached(_ => Schedule());
         }
-        protected override void Attached() {
-            base.Attached();
-            Schedule();
-        }
-        protected override void OnRun() => Mount(block);
     }
     // ============================== Memo ============================================================
     public class Memo<T> : SpokeEngine.Computation, ISignal<T>, IDeferredTrigger {
@@ -213,17 +202,14 @@ namespace Spoke {
         public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, triggers) {
             builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger });
             block = s => { if (selector != null) state.Set(selector(s)); };
+            OnAttached(_ => Schedule());
         }
-        protected override void Attached() {
-            base.Attached();
-            Schedule();
-        }
+        protected override void OnRun(SpokeBuilder s) => block(builder);
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
-        protected override void OnRun() { Owner.ClearChildren(); block(builder); }
     }
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
@@ -237,18 +223,18 @@ namespace Spoke {
     public class Dock : Facet {
         string name;
         public override string ToString() => name ?? base.ToString();
-        public Dock(string name) { this.name = name; }
-        public void Use(object key, SpokeHandle handle) => Owner.Use(key, handle);
-        public T Component<T>(object key, T identity) where T : Facet => Owner.Component(key, identity);
+        public Dock(string name) {
+            this.name = name;
+            OnAttached(cleanup => Schedule());
+        }
+        public new T Component<T>(object key, T identity) where T : Facet => base.DynamicComponent(key, identity);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
         public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Component(key, new Effect(name, buildLogic, triggers));
-        public void Drop(object key) => Owner.Drop(key);
-        protected override void Attached() { }
-        protected override void Cleanup() { }
+        public new void Drop(object key) => base.DropComponent(key);
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class SpokeEngine : Facet {
+    public class SpokeEngine : ExecutionEngine {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Identity;
         public FlushMode FlushMode = FlushMode.Immediate;
         FlushLogger flushLogger = FlushLogger.Create();
@@ -267,10 +253,10 @@ namespace Spoke {
             logger = logger ?? new ConsoleSpokeLogger();
         }
         public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            Owner.Component(currId, new Effect(name, buildLogic, triggers));
+            DynamicComponent(currId, new Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
-        void ReleaseEffect(long id) => Owner.Drop(id);
+        void ReleaseEffect(long id) => DropComponent(id);
         public void Batch(Action action) {
             deferred.Hold();
             try { action(); } finally { deferred.Release(); }
@@ -279,9 +265,13 @@ namespace Spoke {
             action();
             if (!deferred.IsEmpty) pendingLogs.Add(msg);
         });
-        void Schedule(Computation comp) {
-            scheduled.Add(comp);
-            if (FlushMode == FlushMode.Immediate) Flush();
+        protected override void Schedule(Node node) {
+            if (node.TryGetIdentity<Computation>(out var comp)) {
+                scheduled.Add(comp);
+                if (FlushMode == FlushMode.Immediate) Flush();
+            } else {
+                Execute(node);
+            }
         }
         public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
         static readonly Comparison<Computation> EffectComparison = (a, b) => b.CompareTo(a);
@@ -298,7 +288,7 @@ namespace Spoke {
                         var sortedMemos = toposorter.Sort(flushBuckets.Memos);
                         foreach (var comp in sortedMemos) {
                             flushBuckets.Memos.Remove(comp);
-                            (comp as IRunnable).Run();
+                            Execute(comp);
                             var memoCount = flushBuckets.Memos.Count;
                             flushBuckets.Take(scheduled);
                             if (flushBuckets.Memos.Count > memoCount) break;
@@ -308,7 +298,7 @@ namespace Spoke {
                     while (flushBuckets.Memos.Count == 0 && flushBuckets.Effects.Count > 0) {
                         var comp = flushBuckets.Effects[flushBuckets.Effects.Count - 1];
                         flushBuckets.Effects.RemoveAt(flushBuckets.Effects.Count - 1);
-                        (comp as IRunnable).Run();
+                        Execute(comp);
                         if (scheduled.Count > 0) { flushBuckets.Take(scheduled); break; }
                     }
                 }
@@ -320,8 +310,6 @@ namespace Spoke {
                 pendingLogs.Clear();
             }
         }
-        protected override void Attached() { }
-        protected override void Cleanup() { }
         struct FlushBuckets {
             public HashSet<Computation> Memos { get; private set; }
             public List<Computation> Effects { get; private set; }
@@ -334,8 +322,7 @@ namespace Spoke {
                 scheduled.Clear();
             }
         }
-        interface IRunnable { void Run(); }
-        public abstract class Computation : Facet, IRunnable, IComparable<Computation> {
+        public abstract class Computation : Facet, IComparable<Computation> {
             protected SpokeEngine engine;
             DependencyTracker tracker;
             bool isPending, isDisposed, isStale;
@@ -344,32 +331,34 @@ namespace Spoke {
             public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public override string ToString() => name ?? base.ToString();
-            public int CompareTo(Computation other) => Owner.Coords.CompareTo(other.Owner.Coords);
+            public int CompareTo(Computation other) => Coords.CompareTo(other.Coords);
             public Computation(string name, IEnumerable<ITrigger> triggers) {
                 this.name = name;
                 tracker = DependencyTracker.Create(this);
                 foreach (var trigger in triggers) tracker.AddStatic(trigger);
                 tracker.SyncDependencies();
+                OnAttached(cleanup => {
+                    TryGetContext(out engine);
+                    cleanup(() => {
+                        isDisposed = true;
+                        tracker.Dispose();
+                    });
+                    if (TryGetContext<Computation>(out var parentComp)) {
+                        parentComp.childComps.Add(this);
+                        cleanup(() => parentComp.childComps.Remove(this));
+                    }
+                });
+                OnMounted(s => {
+                    if (isDisposed || !isPending || isStale || (Fault != null)) return;
+                    isPending = false; // Set now in case I trigger myself
+                    tracker.BeginDynamic();
+                    try { OnRun(s); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
+                    engine.flushLogger.OnFlushComputation(this);
+                });
             }
-            protected override void Attached() {
-                Owner.TryGetContext(out engine);
-                if (Owner.TryGetContext<Computation>(out var parentComp)) parentComp.childComps.Add(this);
-            }
-            protected override void Cleanup() {
-                isDisposed = true;
-                tracker.Dispose();
-                if (Owner.TryGetComponent<Computation>(out var parentComp)) parentComp.childComps.Remove(this);
-            }
-            void IRunnable.Run() {
-                if (isDisposed || !isPending || isStale || (Fault != null)) return;
-                isPending = false; // Set now in case I trigger myself
-                tracker.BeginDynamic();
-                try { OnRun(); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
-                engine.flushLogger.OnFlushComputation(this);
-            }
+            protected abstract void OnRun(SpokeBuilder s);
             protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
             protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-            protected abstract void OnRun();
             protected void LogFlush(string msg) => engine.pendingLogs.Add(msg);
             Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
                 if (index >= tracker.depIndex) return;
@@ -377,11 +366,11 @@ namespace Spoke {
                 Schedule();
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
-            protected void Schedule() {
+            protected override void Schedule() {
                 if (isPending || isStale) return;
                 isPending = true;
                 MarkDescendantsStale();
-                engine.Schedule(this);
+                base.Schedule();
             }
             void MarkDescendantsStale() {
                 foreach (var c in childComps) if (!c.isStale) { c.isStale = true; c.MarkDescendantsStale(); }
