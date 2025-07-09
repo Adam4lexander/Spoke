@@ -51,7 +51,8 @@ namespace Spoke.Examples {
                 s.UsePhase(mountInnerPhase, FlashSphere("Phase (Inner)", innerPhaseSphere), flashCommand);
 
             }, flashCommand);
-
+            s.Log("HELLO");
+            s.UseEffect(s => throw new Exception("NO"));
             // UseReaction: Does *not* mount until a dependency is triggered.
             // It runs only when triggered -- perfect for one-shot logic that doesn't need to persist
             s.UseReaction(FlashSphere("Reaction", reactionSphere), flashCommand);

@@ -9,7 +9,7 @@
 // > Memo
 // > Dock
 // > SpokeEngine
-// > SpokeLogger
+// > FlushLogger
 // > KahnTopoSorter
 
 using System;
@@ -250,7 +250,7 @@ namespace Spoke {
             _flush = FlushNow;
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
-            logger = logger ?? new ConsoleSpokeLogger();
+            this.logger = logger ?? new ConsoleSpokeLogger();
         }
         public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
             DynamicComponent(currId, new Effect(name, buildLogic, triggers));
@@ -288,7 +288,7 @@ namespace Spoke {
                         var sortedMemos = toposorter.Sort(flushBuckets.Memos);
                         foreach (var comp in sortedMemos) {
                             flushBuckets.Memos.Remove(comp);
-                            Execute(comp);
+                            if (Execute(comp)) flushLogger.OnFlushNode((comp as IFacetFriend).GetNode());
                             var memoCount = flushBuckets.Memos.Count;
                             flushBuckets.Take(scheduled);
                             if (flushBuckets.Memos.Count > memoCount) break;
@@ -298,7 +298,7 @@ namespace Spoke {
                     while (flushBuckets.Memos.Count == 0 && flushBuckets.Effects.Count > 0) {
                         var comp = flushBuckets.Effects[flushBuckets.Effects.Count - 1];
                         flushBuckets.Effects.RemoveAt(flushBuckets.Effects.Count - 1);
-                        Execute(comp);
+                        if (Execute(comp)) flushLogger.OnFlushNode((comp as IFacetFriend).GetNode());
                         if (scheduled.Count > 0) { flushBuckets.Take(scheduled); break; }
                     }
                 }
@@ -336,13 +336,11 @@ namespace Spoke {
                 tracker.SyncDependencies();
                 OnAttached(cleanup => {
                     TryGetContext(out engine);
-                    cleanup(() => {
-                        tracker.Dispose();
-                    });
+                    cleanup(() => tracker.Dispose());
                 });
                 OnMounted(s => {
                     tracker.BeginDynamic();
-                    try { OnRun(s); } finally { tracker.EndDynamic(); engine.flushLogger.OnFlushComputation(this); }
+                    try { OnRun(s); } finally { tracker.EndDynamic(); }
                 });
             }
             protected abstract void OnRun(SpokeBuilder s);
@@ -428,64 +426,49 @@ namespace Spoke {
             IsDraining = false;
         }
     }
-    // ============================== SpokeLogger ============================================================
-    public interface ISpokeLogger {
-        void Log(string message);
-        void Error(string message);
-    }
-    public class ConsoleSpokeLogger : ISpokeLogger {
-        public void Log(string msg) => Console.WriteLine(msg);
-        public void Error(string msg) => Console.WriteLine(msg);
-    }
-    public static class SpokeError {
-        internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
-    }
+    // ============================== FlushLogger ============================================================
     public struct FlushLogger {
         StringBuilder sb;
-        List<SpokeEngine.Computation> runHistory;
+        List<Node> runHistory;
         HashSet<Node> roots;
         public static FlushLogger Create() => new FlushLogger {
             sb = new StringBuilder(),
-            runHistory = new List<SpokeEngine.Computation>(),
+            runHistory = new List<Node>(),
             roots = new HashSet<Node>()
         };
         public void OnFlushStart() { sb.Clear(); roots.Clear(); runHistory.Clear(); HasErrors = false; }
-        public void OnFlushComputation(SpokeEngine.Computation c) { runHistory.Add(c); HasErrors |= c.Fault != null; }
+        public void OnFlushNode(Node n) { runHistory.Add(n); HasErrors |= n.Fault != null; }
         public bool HasErrors { get; private set; }
         public void LogFlush(ISpokeLogger logger, string msg) {
             sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
             foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-            foreach (var c in runHistory) roots.Add((c as Facet.IFacetFriend).GetNode().Root);
+            foreach (var c in runHistory) roots.Add(c.Root);
             foreach (var root in roots) PrintRoot(root);
             if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
         }
         void PrintErrors() {
             foreach (var c in runHistory)
-                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel((c as Facet.IFacetFriend).GetNode())} ---\n{c.Fault}");
+                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
         }
         void PrintRoot(Node root) {
             var that = this;
             sb.AppendLine();
             Traverse(0, root, (depth, x) => {
-                x.TryGetIdentity<SpokeEngine.Computation>(out var comp);
-                var runIndex = that.runHistory.IndexOf(comp);
+                var runIndex = that.runHistory.IndexOf(x);
                 for (int i = 0; i < depth; i++) that.sb.Append("    ");
                 that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
             });
         }
         string NodeLabel(Node node) {
-            if (node.TryGetIdentity<SpokeEngine.Computation>(out var comp)) {
-                var indexes = new List<int>();
-                for (int i = 0; i < runHistory.Count; i++)
-                    if (ReferenceEquals(runHistory[i], comp)) indexes.Add(i);
-                var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
-                return $"|--{indexStr}{node} ";
-            }
-            return $"|--{node} ";
+            var indexes = new List<int>();
+            for (int i = 0; i < runHistory.Count; i++)
+                if (ReferenceEquals(runHistory[i], node)) indexes.Add(i);
+            var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
+            return $"|--{indexStr}{node} ";
         }
         string FaultStatus(Node node) {
-            if (node.TryGetIdentity<SpokeEngine.Computation>(out var comp) && comp.Fault != null)
-                if (runHistory.Contains(comp)) return $"[Faulted: {comp.Fault.GetType().Name}]";
+            if (node.Fault != null)
+                if (runHistory.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
                 else return "[Faulted]";
             return "";
         }

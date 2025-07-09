@@ -5,6 +5,7 @@
 // > Facet
 // > ExecutionEngine
 // > SpokeHandle
+// > SpokeLogger
 // > SpokePool
 // > ReadOnlyList
 
@@ -47,7 +48,7 @@ namespace Spoke {
             Identity = identity;
         }
     }
-    internal interface IExecutable { void Execute(); }
+    internal interface IExecutable { bool Execute(); }
     public abstract class Node : ILifecycle, IExecutable {
         public static Node<T> CreateRoot<T>(T identity) where T : Facet {
             var node = new Node<T>(identity);
@@ -69,6 +70,7 @@ namespace Spoke {
         public Node Parent { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
+        public Exception Fault { get; private set; }
         protected Node() {
             builder = new SpokeBuilderImpl(this);
         }
@@ -99,13 +101,14 @@ namespace Spoke {
             TryGetContext(out engine);
             (UntypedIdentity as Facet.IFacetFriend).Attach(this);
         }
-        void IExecutable.Execute() {
-            if (isStale || (UntypedIdentity.Fault != null)) return;
+        bool IExecutable.Execute() {
+            if (isStale || Fault != null) return false;
             isPending = false; // Set now in case I trigger myself
             Unmount();
             isSealed = false;
-            (UntypedIdentity as Facet.IFacetFriend).Mount(builder);
+            try { (UntypedIdentity as Facet.IFacetFriend).Mount(builder); } catch (Exception e) { Fault = e; }
             isSealed = true;
+            return true;
         }
         public bool TryGetComponent<T>(out T component) where T : Facet {
             if (TryGetIdentity(out component)) return true;
@@ -209,7 +212,6 @@ namespace Spoke {
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
         List<SpokeBlock> mountBlocks = new List<SpokeBlock>();
-        public Exception Fault { get; private set; }
         protected TreeCoords Coords => node.Coords;
         Node IFacetFriend.GetNode() => node;
         void IFacetFriend.Attach(Node toNode) {
@@ -225,8 +227,7 @@ namespace Spoke {
             // stops the modified enumeration errors.
             var spl = splPool.Get();
             foreach (var fn in mountBlocks) spl.Add(fn);
-            try { foreach (var fn in spl) fn?.Invoke(s); } catch (Exception ex) { Fault = ex; }
-            splPool.Return(spl);
+            try { foreach (var fn in spl) fn?.Invoke(s); } finally { splPool.Return(spl); }
         }
         void ILifecycle.Cleanup() {
             foreach (var fn in cleanupBlocks) fn?.Invoke();
@@ -261,8 +262,8 @@ namespace Spoke {
         }
         void INodeScheduler.Schedule(Node node) => Schedule(node);
         protected abstract void Schedule(Node node);
-        protected void Execute(Node node) => (node as IExecutable).Execute();
-        protected void Execute(Facet facet) => Execute((facet as IFacetFriend).GetNode());
+        protected bool Execute(Node node) => (node as IExecutable).Execute();
+        protected bool Execute(Facet facet) => Execute((facet as IFacetFriend).GetNode());
     }
     // ============================== SpokeHandle ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
@@ -278,6 +279,18 @@ namespace Spoke {
         }
         public static bool operator ==(SpokeHandle left, SpokeHandle right) => left.Equals(right);
         public static bool operator !=(SpokeHandle left, SpokeHandle right) => !left.Equals(right);
+    }
+    // ============================== SpokeLogger ============================================================
+    public interface ISpokeLogger {
+        void Log(string message);
+        void Error(string message);
+    }
+    public class ConsoleSpokeLogger : ISpokeLogger {
+        public void Log(string msg) => Console.WriteLine(msg);
+        public void Error(string msg) => Console.WriteLine(msg);
+    }
+    public static class SpokeError {
+        internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
     }
     // ============================== SpokePool ============================================================
     public struct SpokePool<T> where T : new() {
