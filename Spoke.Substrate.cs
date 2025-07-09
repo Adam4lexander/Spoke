@@ -64,7 +64,7 @@ namespace Spoke {
         long siblingCounter = 0;
         Node Prev, Next;
         ExecutionEngine engine;
-        bool isUnmounting, isSealed = true;
+        bool isUnmounting, isPending, isStale, isSealed = true;
         protected abstract Facet UntypedIdentity { get; }
         public Node Parent { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
@@ -76,6 +76,9 @@ namespace Spoke {
         public override string ToString() => UntypedIdentity.ToString();
         public void Schedule() {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
+            if (isPending || isStale) return;
+            isPending = true;
+            CascadeIsStale();
             (engine as INodeScheduler).Schedule(this);
         }
         void ILifecycle.Cleanup() {
@@ -97,6 +100,8 @@ namespace Spoke {
             (UntypedIdentity as Facet.IFacetFriend).Attach(this);
         }
         void IExecutable.Execute() {
+            if (isStale || (UntypedIdentity.Fault != null)) return;
+            isPending = false; // Set now in case I trigger myself
             Unmount();
             isSealed = false;
             (UntypedIdentity as Facet.IFacetFriend).Mount(builder);
@@ -145,6 +150,11 @@ namespace Spoke {
             var index = children.IndexOf(child);
             if (index >= 0) { (child as ILifecycle).Cleanup(); children.RemoveAt(index); }
             dynamicChildren.Remove(key);
+        }
+        void CascadeIsStale() {
+            foreach (var n in Children) {
+                if (!n.isStale) { n.isStale = true; n.CascadeIsStale(); }
+            }
         }
         void Unmount() {
             isUnmounting = true;
@@ -199,6 +209,7 @@ namespace Spoke {
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
         List<SpokeBlock> mountBlocks = new List<SpokeBlock>();
+        public Exception Fault { get; private set; }
         protected TreeCoords Coords => node.Coords;
         Node IFacetFriend.GetNode() => node;
         void IFacetFriend.Attach(Node toNode) {
@@ -214,7 +225,7 @@ namespace Spoke {
             // stops the modified enumeration errors.
             var spl = splPool.Get();
             foreach (var fn in mountBlocks) spl.Add(fn);
-            foreach (var fn in spl) fn?.Invoke(s);
+            try { foreach (var fn in spl) fn?.Invoke(s); } catch (Exception ex) { Fault = ex; }
             splPool.Return(spl);
         }
         void ILifecycle.Cleanup() {
@@ -236,7 +247,7 @@ namespace Spoke {
         protected bool TryGetAmbient<T>(out T ambient) where T : Facet => node.TryGetAmbient(out ambient);
         protected T DynamicComponent<T>(object key, T identity) where T : Facet => node.DynamicComponent(key, identity);
         protected void DropComponent(object key) => node.DropComponent(key);
-        protected virtual void Schedule() => node.Schedule();
+        protected void Schedule() => node.Schedule();
     }
     // ============================== ExecutionEngine ============================================================
     internal interface INodeScheduler { void Schedule(Node node); }

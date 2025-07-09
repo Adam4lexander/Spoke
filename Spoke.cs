@@ -227,10 +227,10 @@ namespace Spoke {
             this.name = name;
             OnAttached(cleanup => Schedule());
         }
-        public new T Component<T>(object key, T identity) where T : Facet => base.DynamicComponent(key, identity);
+        public T Component<T>(object key, T identity) where T : Facet => DynamicComponent(key, identity);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
         public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Component(key, new Effect(name, buildLogic, triggers));
-        public new void Drop(object key) => base.DropComponent(key);
+        public void Drop(object key) => DropComponent(key);
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
@@ -325,10 +325,7 @@ namespace Spoke {
         public abstract class Computation : Facet, IComparable<Computation> {
             protected SpokeEngine engine;
             DependencyTracker tracker;
-            bool isPending, isDisposed, isStale;
-            List<Computation> childComps = new List<Computation>();
             string name;
-            public Exception Fault { get; private set; }
             public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public override string ToString() => name ?? base.ToString();
             public int CompareTo(Computation other) => Coords.CompareTo(other.Coords);
@@ -340,20 +337,12 @@ namespace Spoke {
                 OnAttached(cleanup => {
                     TryGetContext(out engine);
                     cleanup(() => {
-                        isDisposed = true;
                         tracker.Dispose();
                     });
-                    if (TryGetContext<Computation>(out var parentComp)) {
-                        parentComp.childComps.Add(this);
-                        cleanup(() => parentComp.childComps.Remove(this));
-                    }
                 });
                 OnMounted(s => {
-                    if (isDisposed || !isPending || isStale || (Fault != null)) return;
-                    isPending = false; // Set now in case I trigger myself
                     tracker.BeginDynamic();
-                    try { OnRun(s); } catch (Exception ex) { Fault = ex; } finally { tracker.EndDynamic(); }
-                    engine.flushLogger.OnFlushComputation(this);
+                    try { OnRun(s); } finally { tracker.EndDynamic(); engine.flushLogger.OnFlushComputation(this); }
                 });
             }
             protected abstract void OnRun(SpokeBuilder s);
@@ -366,15 +355,6 @@ namespace Spoke {
                 Schedule();
                 (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
             };
-            protected override void Schedule() {
-                if (isPending || isStale) return;
-                isPending = true;
-                MarkDescendantsStale();
-                base.Schedule();
-            }
-            void MarkDescendantsStale() {
-                foreach (var c in childComps) if (!c.isStale) { c.isStale = true; c.MarkDescendantsStale(); }
-            }
             struct DependencyTracker : IDisposable {
                 Computation owner;
                 HashSet<ITrigger> seen;
