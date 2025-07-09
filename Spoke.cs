@@ -10,7 +10,6 @@
 // > Dock
 // > SpokeEngine
 // > FlushLogger
-// > KahnTopoSorter
 
 using System;
 using System.Collections.Generic;
@@ -238,10 +237,9 @@ namespace Spoke {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Identity;
         public FlushMode FlushMode = FlushMode.Immediate;
         FlushLogger flushLogger = FlushLogger.Create();
-        KahnTopoSorter toposorter = KahnTopoSorter.Create();
         HashSet<Computation> scheduled = new HashSet<Computation>();
+        List<Computation> toRun = new List<Computation>();
         DeferredQueue deferred = DeferredQueue.Create();
-        FlushBuckets flushBuckets = FlushBuckets.Create();
         List<string> pendingLogs = new List<string>();
         ISpokeLogger logger;
         Action _flush; Action<long> _releaseEffect;
@@ -280,26 +278,17 @@ namespace Spoke {
             var maxPasses = 1000; var passes = 0;
             try {
                 flushLogger.OnFlushStart();
-                flushBuckets.Clear();
-                flushBuckets.Take(scheduled);
-                while (flushBuckets.Memos.Count + flushBuckets.Effects.Count > 0) {
+                toRun.Clear();
+                while (scheduled.Count > 0) {
                     if (++passes > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    while (flushBuckets.Memos.Count > 0) {
-                        var sortedMemos = toposorter.Sort(flushBuckets.Memos);
-                        foreach (var comp in sortedMemos) {
-                            flushBuckets.Memos.Remove(comp);
-                            if (Execute(comp)) flushLogger.OnFlushNode((comp as IFacetFriend).GetNode());
-                            var memoCount = flushBuckets.Memos.Count;
-                            flushBuckets.Take(scheduled);
-                            if (flushBuckets.Memos.Count > memoCount) break;
-                        }
-                    }
-                    flushBuckets.Effects.Sort(EffectComparison); // Reverse-order, to pop items from end of list
-                    while (flushBuckets.Memos.Count == 0 && flushBuckets.Effects.Count > 0) {
-                        var comp = flushBuckets.Effects[flushBuckets.Effects.Count - 1];
-                        flushBuckets.Effects.RemoveAt(flushBuckets.Effects.Count - 1);
+                    foreach (var c in scheduled) toRun.Add(c);
+                    scheduled.Clear();
+                    toRun.Sort(EffectComparison); // Reverse-order, to pop items from end of list
+                    while (toRun.Count > 0) {
+                        var comp = toRun[toRun.Count - 1];
+                        toRun.RemoveAt(toRun.Count - 1);
                         if (Execute(comp)) flushLogger.OnFlushNode((comp as IFacetFriend).GetNode());
-                        if (scheduled.Count > 0) { flushBuckets.Take(scheduled); break; }
+                        if (scheduled.Count > 0) break;
                     }
                 }
                 if (pendingLogs.Count > 0 || flushLogger.HasErrors) flushLogger.LogFlush(logger, string.Join(",", pendingLogs));
@@ -308,18 +297,6 @@ namespace Spoke {
             } finally {
                 scheduled.Clear();
                 pendingLogs.Clear();
-            }
-        }
-        struct FlushBuckets {
-            public HashSet<Computation> Memos { get; private set; }
-            public List<Computation> Effects { get; private set; }
-            public static FlushBuckets Create() => new FlushBuckets { Memos = new HashSet<Computation>(), Effects = new List<Computation>() };
-            public void Clear() { Memos.Clear(); Effects.Clear(); }
-            public void Take(HashSet<Computation> scheduled) {
-                foreach (var comp in scheduled)
-                    if (comp is BaseEffect) Effects.Add(comp);
-                    else Memos.Add(comp);
-                scheduled.Clear();
             }
         }
         public abstract class Computation : Facet, IComparable<Computation> {
@@ -475,52 +452,6 @@ namespace Spoke {
         void Traverse(int depth, Node node, Action<int, Node> action) {
             action?.Invoke(depth, node);
             foreach (var child in node.Children) Traverse(depth + 1, child, action);
-        }
-    }
-    // ============================== KahnTopoSorter ============================================================
-    internal struct KahnTopoSorter {
-        List<SpokeEngine.Computation> sorted;
-        Dictionary<SpokeEngine.Computation, int> inDegree;
-        Dictionary<SpokeEngine.Computation, List<SpokeEngine.Computation>> dependentsMap;
-        Queue<SpokeEngine.Computation> queue;
-        SpokePool<List<SpokeEngine.Computation>> listPool;
-        public static KahnTopoSorter Create() => new KahnTopoSorter {
-            sorted = new List<SpokeEngine.Computation>(),
-            inDegree = new Dictionary<SpokeEngine.Computation, int>(),
-            dependentsMap = new Dictionary<SpokeEngine.Computation, List<SpokeEngine.Computation>>(),
-            queue = new Queue<SpokeEngine.Computation>(),
-            listPool = SpokePool<List<SpokeEngine.Computation>>.Create(l => l.Clear())
-        };
-        public List<SpokeEngine.Computation> Sort(HashSet<SpokeEngine.Computation> dirty) {
-            sorted.Clear();
-            foreach (var comp in dirty) {
-                var count = 0;
-                foreach (var dep in comp.Dependencies) {
-                    if (dirty.Contains(dep)) {
-                        count++;
-                        if (!dependentsMap.TryGetValue(dep, out var deps))
-                            dependentsMap[dep] = deps = listPool.Get();
-                        deps.Add(comp);
-                    }
-                }
-                inDegree[comp] = count;
-            }
-            foreach (var comp in dirty) if (inDegree[comp] == 0) queue.Enqueue(comp);
-            while (queue.Count > 0) {
-                var comp = queue.Dequeue();
-                sorted.Add(comp);
-                if (!dependentsMap.TryGetValue(comp, out var dependents)) continue;
-                foreach (var dep in dependents) if (--inDegree[dep] == 0) queue.Enqueue(dep);
-            }
-            Reset();
-            if (sorted.Count != dirty.Count) throw new Exception("Cycle detected in computation graph!");
-            return sorted;
-        }
-        void Reset() {
-            foreach (var pair in dependentsMap) listPool.Return(pair.Value);
-            inDegree.Clear();
-            dependentsMap.Clear();
-            queue.Clear();
         }
     }
 }
