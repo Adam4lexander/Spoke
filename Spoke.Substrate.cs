@@ -133,8 +133,10 @@ namespace Spoke {
         }
         public bool TryGetAmbient<T>(out T ambient) where T : Facet {
             ambient = default(T);
-            for (var curr = Prev; curr != null; curr = curr.Prev)
-                if (curr.TryGetIdentity<T>(out var o)) { ambient = o; return true; }
+            var start = Prev ?? Parent;
+            for (var anc = start; anc != null; anc = anc.Parent)
+                for (var curr = anc; curr != null; curr = curr.Prev)
+                    if (curr.TryGetIdentity<T>(out var o)) { ambient = o; return true; }
             return false;
         }
         public T DynamicComponent<T>(object key, T identity) where T : Facet {
@@ -185,7 +187,7 @@ namespace Spoke {
             public T Component<T>(T identity) where T : Facet {
                 NoMischief();
                 var childNode = new Node<T>(identity);
-                var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : node;
+                var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : null;
                 if (prevNode != null) prevNode.Next = childNode;
                 node.children.Add(childNode);
                 childNode.UsedBy(node, prevNode);
