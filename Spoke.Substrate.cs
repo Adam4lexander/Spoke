@@ -220,6 +220,7 @@ namespace Spoke {
             Action<Action> addCleanup = fn => cleanupBlocks.Add(fn);
             foreach (var fn in attachBlocks) fn?.Invoke(addCleanup);
             attachBlocks.Clear();
+            if (node.Parent != null) Schedule();
         }
         void IFacetFriend.Mount(SpokeBuilder s) {
             // TODO: Keyed components can unmount themselves before this function completes.

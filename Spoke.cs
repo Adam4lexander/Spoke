@@ -178,13 +178,13 @@ namespace Spoke {
     public class Effect : BaseEffect {
         public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = block;
-            OnAttached(_ => Schedule());
         }
     }
     // ============================== Reaction ============================================================
     public class Reaction : BaseEffect {
         public Reaction(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            this.block = block;
+            var isFirst = true;
+            this.block = s => { if (!isFirst) block?.Invoke(s); else isFirst = false; };
         }
     }
     // ============================== Phase ============================================================
@@ -192,7 +192,6 @@ namespace Spoke {
         public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             AddStaticTrigger(mountWhen);
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
-            OnAttached(_ => Schedule());
         }
     }
     // ============================== Effect<T> ============================================================
@@ -201,7 +200,6 @@ namespace Spoke {
         public T Now => state.Now;
         public Effect(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = Mount(block);
-            OnAttached(_ => Schedule());
         }
         EffectBlock Mount(EffectBlock<IRef<T>> block) => s => {
             if (block == null) return;
@@ -209,7 +207,7 @@ namespace Spoke {
             if (result is ISignal<T> signal) s.UseSubscribe(signal, x => state.Set(x));
             s.Component(new Scope(s => state.Set(result.Now)));
         };
-        class Scope : Facet { public Scope(SpokeBlock block) { OnAttached(_ => Schedule()); OnMounted(block); } }
+        class Scope : Facet { public Scope(SpokeBlock block) { OnMounted(block); } }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
@@ -225,7 +223,6 @@ namespace Spoke {
         public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, triggers) {
             builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger });
             block = s => { if (selector != null) state.Set(selector(s)); };
-            OnAttached(_ => Schedule());
         }
         protected override void OnRun(SpokeBuilder s) => block(builder);
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
@@ -248,7 +245,6 @@ namespace Spoke {
         public override string ToString() => name ?? base.ToString();
         public Dock(string name) {
             this.name = name;
-            OnAttached(cleanup => Schedule());
         }
         public T Component<T>(object key, T identity) where T : Facet => DynamicComponent(key, identity);
         public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
