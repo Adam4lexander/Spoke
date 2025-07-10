@@ -212,9 +212,9 @@ namespace Spoke {
             if (block == null) return;
             var result = block.Invoke(s);
             if (result is ISignal<T> signal) s.UseSubscribe(signal, x => state.Set(x));
-            state.Set(result.Now);
-            // TODO: Copy value after mount is complete
+            s.Component(new Scope(s => state.Set(result.Now)));
         };
+        class Scope : Facet { public Scope(SpokeBlock block) => OnMounted(block); }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
