@@ -4,13 +4,16 @@
 // > Node
 // > Facet
 // > ExecutionEngine
+// > DeferredQueue
 // > SpokeHandle
 // > SpokeLogger
+// > FlushLogger
 // > SpokePool
 // > ReadOnlyList
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Spoke {
 
@@ -48,7 +51,7 @@ namespace Spoke {
             Identity = identity;
         }
     }
-    internal interface IExecutable { bool Execute(); }
+    internal interface IExecutable { void Execute(); }
     public abstract class Node : ILifecycle, IExecutable {
         public static Node<T> CreateRoot<T>(T identity) where T : Facet {
             var node = new Node<T>(identity);
@@ -65,7 +68,7 @@ namespace Spoke {
         long siblingCounter = 0;
         Node Prev, Next;
         ExecutionEngine engine;
-        bool isUnmounting, isPending, isStale, isSealed = true;
+        bool isUnmounting, isPending, isSealed = true;
         protected abstract Facet UntypedIdentity { get; }
         public Node Parent { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
@@ -78,9 +81,8 @@ namespace Spoke {
         public override string ToString() => UntypedIdentity.ToString();
         public void Schedule() {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
-            if (isPending || isStale) return;
+            if (isPending) return;
             isPending = true;
-            CascadeIsStale();
             (engine as INodeScheduler).Schedule(this);
         }
         void ILifecycle.Cleanup() {
@@ -99,16 +101,14 @@ namespace Spoke {
         }
         void OnAttached() {
             TryGetContext(out engine);
-            (UntypedIdentity as Facet.IFacetFriend).Attach(this);
+            (UntypedIdentity as IFacetFriend).Attach(this);
         }
-        bool IExecutable.Execute() {
-            if (isStale || Fault != null) return false;
+        void IExecutable.Execute() {
             isPending = false; // Set now in case I trigger myself
             Unmount();
             isSealed = false;
-            try { (UntypedIdentity as Facet.IFacetFriend).Mount(builder); } catch (Exception e) { Fault = e; }
+            try { (UntypedIdentity as IFacetFriend).Mount(builder); } catch (Exception e) { Fault = e; }
             isSealed = true;
-            return true;
         }
         public bool TryGetComponent<T>(out T component) where T : Facet {
             if (TryGetIdentity(out component)) return true;
@@ -156,11 +156,6 @@ namespace Spoke {
             if (index >= 0) { (child as ILifecycle).Cleanup(); children.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
-        void CascadeIsStale() {
-            foreach (var n in Children) {
-                if (!n.isStale) { n.isStale = true; n.CascadeIsStale(); }
-            }
-        }
         void Unmount() {
             isUnmounting = true;
             for (int i = mountCleanupFuncs.Count - 1; i >= 0; i--)
@@ -203,17 +198,16 @@ namespace Spoke {
     // ============================== Facet ============================================================
     public delegate void AttachBlock(Action<Action> cleanup);
     public delegate void SpokeBlock(SpokeBuilder s);
-    public abstract class Facet : Facet.IFacetFriend {
-        SpokePool<List<SpokeBlock>> splPool = SpokePool<List<SpokeBlock>>.Create(l => l.Clear());
-        internal interface IFacetFriend : ILifecycle {
-            Node GetNode();
-            void Attach(Node nodeAct);
-            void Mount(SpokeBuilder s);
-        }
+    internal interface IFacetFriend : ILifecycle {
+        Node GetNode();
+        void Attach(Node nodeAct);
+        void Mount(SpokeBuilder s);
+    }
+    public abstract class Facet : IFacetFriend {
         Node node;
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
-        List<SpokeBlock> mountBlocks = new List<SpokeBlock>();
+        SpokeBlock mountBlock;
         protected TreeCoords Coords => node.Coords;
         Node IFacetFriend.GetNode() => node;
         void IFacetFriend.Attach(Node toNode) {
@@ -225,15 +219,11 @@ namespace Spoke {
         }
         void IFacetFriend.Mount(SpokeBuilder s) {
             // TODO: Keyed components can unmount themselves before this function completes.
-            // It's probably dangerous... For now I'm copying blocks to a new list. At least it
-            // stops the modified enumeration errors.
-            var spl = splPool.Get();
-            foreach (var fn in mountBlocks) spl.Add(fn);
-            try { foreach (var fn in spl) fn?.Invoke(s); } finally { splPool.Return(spl); }
+            mountBlock?.Invoke(s);
         }
         void ILifecycle.Cleanup() {
             foreach (var fn in cleanupBlocks) fn?.Invoke();
-            mountBlocks.Clear();
+            mountBlock = null;
             cleanupBlocks.Clear();
         }
         protected void OnAttached(AttachBlock block) {
@@ -242,7 +232,8 @@ namespace Spoke {
         }
         protected void OnMounted(SpokeBlock block) {
             if (node != null) throw new InvalidOperationException("Facet is already attached");
-            mountBlocks.Add(block);
+            if (mountBlock != null) throw new InvalidOperationException("Facet already has a mount block");
+            mountBlock = block;
         }
         protected bool TryGetContext<T>(out T context) where T : Facet => node.TryGetContext(out context);
         protected bool TryGetComponent<T>(out T component) where T : Facet => node.TryGetComponent(out component);
@@ -255,17 +246,67 @@ namespace Spoke {
     // ============================== ExecutionEngine ============================================================
     internal interface INodeScheduler { void Schedule(Node node); }
     public abstract class ExecutionEngine : Facet, INodeScheduler {
+        List<Node> incoming = new List<Node>();
+        HashSet<Node> execSet = new HashSet<Node>();
+        List<Node> execOrder = new List<Node>();
+        DeferredQueue deferred = DeferredQueue.Create();
+        Action _takeScheduled;
         protected ExecutionEngine Parent { get; private set; }
+        protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
+        protected bool HasPending => Next != null;
         public ExecutionEngine() {
+            _takeScheduled = TakeScheduled;
             OnAttached(cleanup => {
                 if (TryGetContext<ExecutionEngine>(out var parent)) Parent = parent;
                 cleanup(() => Parent = null);
             });
         }
-        void INodeScheduler.Schedule(Node node) => Schedule(node);
-        protected abstract void Schedule(Node node);
-        protected bool Execute(Node node) => (node as IExecutable).Execute();
-        protected bool Execute(Facet facet) => Execute((facet as IFacetFriend).GetNode());
+        void INodeScheduler.Schedule(Node node) {
+            if (execSet.Contains(node)) return;
+            incoming.Add(node);
+            deferred.Enqueue(_takeScheduled);
+        }
+        static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
+        void TakeScheduled() {
+            if (incoming.Count == 0) return;
+            var prevIsPending = HasPending;
+            foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
+            incoming.Clear();
+            execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
+            if (!prevIsPending) OnPending();
+        }
+        protected Node ExecuteNext() {
+            if (execOrder.Count == 0) return null;
+            deferred.Hold();
+            var exec = Next;
+            execSet.Remove(exec);
+            execOrder.RemoveAt(execOrder.Count - 1);
+            (exec as IExecutable).Execute();
+            deferred.Release();
+            return exec;
+        }
+        protected abstract void OnPending();
+    }
+    // ============================== DeferredQueue ============================================================
+    internal struct DeferredQueue {
+        int holdCount; Queue<Action> queue;
+        public bool IsDraining { get; private set; }
+        public bool IsEmpty => queue.Count == 0 && !IsDraining;
+        public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
+        public void Hold() => holdCount++;
+        public void Release() {
+            if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
+            if ((--holdCount) == 0 && !IsDraining) Drain();
+        }
+        public void Enqueue(Action action) {
+            queue.Enqueue(action);
+            if (holdCount == 0 && !IsDraining) Drain();
+        }
+        void Drain() {
+            IsDraining = true;
+            while (queue.Count > 0) queue.Dequeue()();
+            IsDraining = false;
+        }
     }
     // ============================== SpokeHandle ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
@@ -293,6 +334,57 @@ namespace Spoke {
     }
     public static class SpokeError {
         internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
+    }
+    // ============================== FlushLogger ============================================================
+    public struct FlushLogger {
+        StringBuilder sb;
+        List<Node> runHistory;
+        HashSet<Node> roots;
+        public static FlushLogger Create() => new FlushLogger {
+            sb = new StringBuilder(),
+            runHistory = new List<Node>(),
+            roots = new HashSet<Node>()
+        };
+        public void OnFlushStart() { sb.Clear(); roots.Clear(); runHistory.Clear(); HasErrors = false; }
+        public void OnFlushNode(Node n) { runHistory.Add(n); HasErrors |= n.Fault != null; }
+        public bool HasErrors { get; private set; }
+        public void LogFlush(ISpokeLogger logger, string msg) {
+            sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
+            foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
+            foreach (var c in runHistory) roots.Add(c.Root);
+            foreach (var root in roots) PrintRoot(root);
+            if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
+        }
+        void PrintErrors() {
+            foreach (var c in runHistory)
+                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
+        }
+        void PrintRoot(Node root) {
+            var that = this;
+            sb.AppendLine();
+            Traverse(0, root, (depth, x) => {
+                var runIndex = that.runHistory.IndexOf(x);
+                for (int i = 0; i < depth; i++) that.sb.Append("    ");
+                that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
+            });
+        }
+        string NodeLabel(Node node) {
+            var indexes = new List<int>();
+            for (int i = 0; i < runHistory.Count; i++)
+                if (ReferenceEquals(runHistory[i], node)) indexes.Add(i);
+            var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
+            return $"|--{indexStr}{node} ";
+        }
+        string FaultStatus(Node node) {
+            if (node.Fault != null)
+                if (runHistory.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
+                else return "[Faulted]";
+            return "";
+        }
+        void Traverse(int depth, Node node, Action<int, Node> action) {
+            action?.Invoke(depth, node);
+            foreach (var child in node.Children) Traverse(depth + 1, child, action);
+        }
     }
     // ============================== SpokePool ============================================================
     public struct SpokePool<T> where T : new() {

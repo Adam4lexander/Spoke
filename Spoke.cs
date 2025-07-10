@@ -6,18 +6,18 @@
 // > Effect
 // > Reaction
 // > Phase
+// > Computed
 // > Memo
 // > Dock
 // > SpokeEngine
-// > FlushLogger
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
+    public delegate T EffectBlock<T>(EffectBuilder s);
 
     // ============================== Trigger ============================================================
     public interface ITrigger {
@@ -93,9 +93,10 @@ namespace Spoke {
         void OnAfterNotify(Action action);
     }
     // ============================== State ============================================================
-    public interface ISignal<T> : ITrigger<T> {
+    public interface IRef<T> {
         T Now { get; }
     }
+    public interface ISignal<T> : IRef<T>, ITrigger<T> { }
     public interface IState<T> : ISignal<T> {
         void Set(T value);
         void Update(Func<T, T> setter);
@@ -136,6 +137,8 @@ namespace Spoke {
         public static void UseSubscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Component(new Memo<T>("Memo", selector, triggers));
         public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Component(new Memo<T>(name, selector, triggers));
+        public static ISignal<T> UseComputed<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers) => s.Component(new Computed<T>("Computed", block, triggers));
+        public static ISignal<T> UseComputed<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers) => s.Component(new Computed<T>(name, block, triggers));
         public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(new Effect("Effect", buildLogic, triggers));
         public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(new Effect(name, buildLogic, triggers));
         public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Component(new Reaction("Reaction", block, triggers));
@@ -192,6 +195,32 @@ namespace Spoke {
             OnAttached(_ => Schedule());
         }
     }
+    // ============================== Computed ============================================================
+    public class Computed<T> : BaseEffect, ISignal<T>, IDeferredTrigger {
+        State<T> state = State.Create<T>();
+        public T Now => state.Now;
+        public Computed(string name, EffectBlock<T> block, params ITrigger[] triggers) : base(name, triggers) {
+            this.block = MountValue(block);
+        }
+        public Computed(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) : base(name, triggers) {
+            this.block = MountBoxed(block);
+        }
+        EffectBlock MountValue(EffectBlock<T> block) => s => {
+            if (block != null) state.Set(block.Invoke(s));
+        };
+        EffectBlock MountBoxed(EffectBlock<IRef<T>> block) => s => {
+            if (block == null) return;
+            var result = block.Invoke(s);
+            if (result is ISignal<T> signal) s.UseSubscribe(signal, x => state.Set(x));
+            state.Set(result.Now);
+            // TODO: Copy value after mount is complete
+        };
+        public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
+        public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
+        public void Unsubscribe(Action action) => state.Unsubscribe(action);
+        public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
+        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
+    }
     // ============================== Memo ============================================================
     public class Memo<T> : SpokeEngine.Computation, ISignal<T>, IDeferredTrigger {
         State<T> state = State.Create<T>();
@@ -237,8 +266,6 @@ namespace Spoke {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Identity;
         public FlushMode FlushMode = FlushMode.Immediate;
         FlushLogger flushLogger = FlushLogger.Create();
-        HashSet<Computation> scheduled = new HashSet<Computation>();
-        List<Computation> toRun = new List<Computation>();
         DeferredQueue deferred = DeferredQueue.Create();
         List<string> pendingLogs = new List<string>();
         ISpokeLogger logger;
@@ -263,39 +290,26 @@ namespace Spoke {
             action();
             if (!deferred.IsEmpty) pendingLogs.Add(msg);
         });
-        protected override void Schedule(Node node) {
-            if (node.TryGetIdentity<Computation>(out var comp)) {
-                scheduled.Add(comp);
-                if (FlushMode == FlushMode.Immediate) Flush();
-            } else {
-                Execute(node);
-            }
+        protected override void OnPending() {
+            if (FlushMode == FlushMode.Immediate) Flush();
         }
         public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
-        static readonly Comparison<Computation> EffectComparison = (a, b) => b.CompareTo(a);
         void FlushNow() {
-            if (scheduled.Count == 0) return;
             var maxPasses = 1000; var passes = 0;
             try {
                 flushLogger.OnFlushStart();
-                toRun.Clear();
-                while (scheduled.Count > 0) {
-                    if (++passes > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    foreach (var c in scheduled) toRun.Add(c);
-                    scheduled.Clear();
-                    toRun.Sort(EffectComparison); // Reverse-order, to pop items from end of list
-                    while (toRun.Count > 0) {
-                        var comp = toRun[toRun.Count - 1];
-                        toRun.RemoveAt(toRun.Count - 1);
-                        if (Execute(comp)) flushLogger.OnFlushNode((comp as IFacetFriend).GetNode());
-                        if (scheduled.Count > 0) break;
-                    }
+                Node prev = null;
+                while (HasPending) {
+                    if (passes > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    var exec = ExecuteNext();
+                    flushLogger.OnFlushNode(exec);
+                    if (prev != null && prev.Coords.CompareTo(exec.Coords) > 0) passes++;
+                    prev = exec;
                 }
                 if (pendingLogs.Count > 0 || flushLogger.HasErrors) flushLogger.LogFlush(logger, string.Join(",", pendingLogs));
             } catch (Exception ex) {
                 SpokeError.Log("Internal Flush Error: ", ex);
             } finally {
-                scheduled.Clear();
                 pendingLogs.Clear();
             }
         }
@@ -381,77 +395,6 @@ namespace Spoke {
                     dependencies.Clear();
                 }
             }
-        }
-    }
-    internal struct DeferredQueue {
-        int holdCount; Queue<Action> queue;
-        public bool IsDraining { get; private set; }
-        public bool IsEmpty => queue.Count == 0 && !IsDraining;
-        public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
-        public void Hold() => holdCount++;
-        public void Release() {
-            if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
-            if ((--holdCount) == 0 && !IsDraining) Drain();
-        }
-        public void Enqueue(Action action) {
-            queue.Enqueue(action);
-            if (holdCount == 0 && !IsDraining) Drain();
-        }
-        void Drain() {
-            IsDraining = true;
-            while (queue.Count > 0) queue.Dequeue()();
-            IsDraining = false;
-        }
-    }
-    // ============================== FlushLogger ============================================================
-    public struct FlushLogger {
-        StringBuilder sb;
-        List<Node> runHistory;
-        HashSet<Node> roots;
-        public static FlushLogger Create() => new FlushLogger {
-            sb = new StringBuilder(),
-            runHistory = new List<Node>(),
-            roots = new HashSet<Node>()
-        };
-        public void OnFlushStart() { sb.Clear(); roots.Clear(); runHistory.Clear(); HasErrors = false; }
-        public void OnFlushNode(Node n) { runHistory.Add(n); HasErrors |= n.Fault != null; }
-        public bool HasErrors { get; private set; }
-        public void LogFlush(ISpokeLogger logger, string msg) {
-            sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
-            foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-            foreach (var c in runHistory) roots.Add(c.Root);
-            foreach (var root in roots) PrintRoot(root);
-            if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
-        }
-        void PrintErrors() {
-            foreach (var c in runHistory)
-                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
-        }
-        void PrintRoot(Node root) {
-            var that = this;
-            sb.AppendLine();
-            Traverse(0, root, (depth, x) => {
-                var runIndex = that.runHistory.IndexOf(x);
-                for (int i = 0; i < depth; i++) that.sb.Append("    ");
-                that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
-            });
-        }
-        string NodeLabel(Node node) {
-            var indexes = new List<int>();
-            for (int i = 0; i < runHistory.Count; i++)
-                if (ReferenceEquals(runHistory[i], node)) indexes.Add(i);
-            var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
-            return $"|--{indexStr}{node} ";
-        }
-        string FaultStatus(Node node) {
-            if (node.Fault != null)
-                if (runHistory.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
-                else return "[Faulted]";
-            return "";
-        }
-        void Traverse(int depth, Node node, Action<int, Node> action) {
-            action?.Invoke(depth, node);
-            foreach (var child in node.Children) Traverse(depth + 1, child, action);
         }
     }
 }
