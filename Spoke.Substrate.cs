@@ -208,7 +208,11 @@ namespace Spoke {
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
         SpokeBlock mountBlock;
+        bool isDeferred;
         protected TreeCoords Coords => node.Coords;
+        public Facet(bool isDeferred = true) {
+            this.isDeferred = isDeferred;
+        }
         Node IFacetFriend.GetNode() => node;
         void IFacetFriend.Attach(Node toNode) {
             if (node != null) throw new InvalidOperationException("Tried to attach a facet which was already attached");
@@ -241,7 +245,7 @@ namespace Spoke {
         protected bool TryGetAmbient<T>(out T ambient) where T : Facet => node.TryGetAmbient(out ambient);
         protected T DynamicComponent<T>(object key, T identity) where T : Facet => node.DynamicComponent(key, identity);
         protected void DropComponent(object key) => node.DropComponent(key);
-        protected void Schedule() => node.Schedule();
+        protected void Schedule() { if (isDeferred) node.Schedule(); else (node as IExecutable).Execute(); }
     }
     // ============================== ExecutionEngine ============================================================
     internal interface INodeScheduler { void Schedule(Node node); }
@@ -249,7 +253,7 @@ namespace Spoke {
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
         List<Node> execOrder = new List<Node>();
-        DeferredQueue deferred = DeferredQueue.Create();
+        DeferredQueue deferTakeScheduled = DeferredQueue.Create();
         Action _takeScheduled;
         protected ExecutionEngine Parent { get; private set; }
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
@@ -264,7 +268,8 @@ namespace Spoke {
         void INodeScheduler.Schedule(Node node) {
             if (execSet.Contains(node)) return;
             incoming.Add(node);
-            deferred.Enqueue(_takeScheduled);
+            deferTakeScheduled.Enqueue(_takeScheduled);
+            if (deferTakeScheduled.IsEmpty) OnPending();
         }
         static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
         void TakeScheduled() {
@@ -273,16 +278,15 @@ namespace Spoke {
             foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
-            if (!prevIsPending) OnPending();
         }
         protected Node ExecuteNext() {
             if (execOrder.Count == 0) return null;
-            deferred.Hold();
+            deferTakeScheduled.Hold();
             var exec = Next;
             execSet.Remove(exec);
             execOrder.RemoveAt(execOrder.Count - 1);
             (exec as IExecutable).Execute();
-            deferred.Release();
+            deferTakeScheduled.Release();
             return exec;
         }
         protected abstract void OnPending();

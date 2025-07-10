@@ -137,8 +137,8 @@ namespace Spoke {
         public static void UseSubscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Component(new Memo<T>("Memo", selector, triggers));
         public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Component(new Memo<T>(name, selector, triggers));
-        public static ISignal<T> UseComputed<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers) => s.Component(new Computed<T>("Computed", block, triggers));
-        public static ISignal<T> UseComputed<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers) => s.Component(new Computed<T>(name, block, triggers));
+        public static ISignal<T> UseComputed<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Component(new Computed<T>("Computed", block, triggers));
+        public static ISignal<T> UseComputed<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Component(new Computed<T>(name, block, triggers));
         public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(new Effect("Effect", buildLogic, triggers));
         public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Component(new Effect(name, buildLogic, triggers));
         public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Component(new Reaction("Reaction", block, triggers));
@@ -201,9 +201,11 @@ namespace Spoke {
         public T Now => state.Now;
         public Computed(string name, EffectBlock<T> block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = MountValue(block);
+            OnAttached(_ => Schedule());
         }
         public Computed(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = MountBoxed(block);
+            OnAttached(_ => Schedule());
         }
         EffectBlock MountValue(EffectBlock<T> block) => s => {
             if (block != null) state.Set(block.Invoke(s));
@@ -212,9 +214,9 @@ namespace Spoke {
             if (block == null) return;
             var result = block.Invoke(s);
             if (result is ISignal<T> signal) s.UseSubscribe(signal, x => state.Set(x));
-            state.Set(result.Now);
-            // TODO: Copy value after mount is complete
+            s.Component(new Scope(s => state.Set(result.Now)));
         };
+        class Scope : Facet { public Scope(SpokeBlock block) { OnAttached(_ => Schedule()); OnMounted(block); } }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
