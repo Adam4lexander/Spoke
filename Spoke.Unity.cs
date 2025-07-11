@@ -74,7 +74,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            initEffect = SpokeEngine.UseEffect($"{GetType().Name}:Init", Init);
+            initEffect = SpokeEngine.Effect($"{GetType().Name}:Init", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);

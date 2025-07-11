@@ -271,7 +271,7 @@ namespace Spoke {
             FlushMode = flushMode;
             this.logger = logger ?? new ConsoleSpokeLogger();
         }
-        public SpokeHandle UseEffect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
+        public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
             CallDynamic(currId, new Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
