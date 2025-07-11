@@ -307,13 +307,11 @@ namespace Spoke {
                 pendingLogs.Clear();
             }
         }
-        public abstract class Computation : Epoch, IComparable<Computation> {
+        public abstract class Computation : Epoch {
             protected SpokeEngine engine;
             DependencyTracker tracker;
             string name;
-            public ReadOnlyList<Computation> Dependencies => new ReadOnlyList<Computation>(tracker.dependencies);
             public override string ToString() => name ?? base.ToString();
-            public int CompareTo(Computation other) => Coords.CompareTo(other.Coords);
             public Computation(string name, IEnumerable<ITrigger> triggers) {
                 this.name = name;
                 tracker = DependencyTracker.Create(this);
