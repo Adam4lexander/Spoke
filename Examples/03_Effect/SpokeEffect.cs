@@ -38,24 +38,23 @@ namespace Spoke.Examples {
             innerPhaseSphere.CloneMat(); 
             reactionSphere.CloneMat();
 
-            // UseEffect: Mounts immediately and remounts when any dependency is triggered
-            s.UseEffect(FlashSphere("Effect", effectSphere), flashCommand);
+            // Effect: Mounts immediately and remounts when any dependency is triggered
+            s.Effect(FlashSphere("Effect", effectSphere), flashCommand);
 
-            // UsePhase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency changes.
-            s.UsePhase(mountOuterPhase, s => {
+            // Phase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency changes.
+            s.Phase(mountOuterPhase, s => {
 
                 // This effect is scoped to the outer phase. It mounts when the outer phase is mounted.
-                s.UseEffect(FlashSphere("Phase (Outer)", outerPhaseSphere));
+                s.Effect(FlashSphere("Phase (Outer)", outerPhaseSphere));
 
                 // This inner phase only mounts while `mountInnerPhase` is true, and will remount on trigger
-                s.UsePhase(mountInnerPhase, FlashSphere("Phase (Inner)", innerPhaseSphere), flashCommand);
+                s.Phase(mountInnerPhase, FlashSphere("Phase (Inner)", innerPhaseSphere), flashCommand);
 
             }, flashCommand);
-            s.Log("HELLO");
-            s.UseEffect(s => throw new Exception("NO"));
-            // UseReaction: Does *not* mount until a dependency is triggered.
+
+            // Reaction: Does *not* mount until a dependency is triggered.
             // It runs only when triggered -- perfect for one-shot logic that doesn't need to persist
-            s.UseReaction(FlashSphere("Reaction", reactionSphere), flashCommand);
+            s.Reaction(FlashSphere("Reaction", reactionSphere), flashCommand);
         }
 
         // EffectBlock is a core Spoke abstraction — it's just:

@@ -135,20 +135,20 @@ namespace Spoke {
         void OnCleanup(Action cleanup);
     }
     public static partial class EffectBuilderExtensions {
-        public static void UseSubscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static void UseSubscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static ISignal<T> UseMemo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
-        public static ISignal<T> UseMemo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
-        public static ISignal<T> UseEffect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Computed", block, triggers));
-        public static ISignal<T> UseEffect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
-        public static void UseEffect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
-        public static void UseEffect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect(name, buildLogic, triggers));
-        public static void UseReaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction("Reaction", block, triggers));
-        public static void UseReaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction(name, block, triggers));
-        public static void UsePhase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase("Phase", mountWhen, buildLogic, triggers));
-        public static void UsePhase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase(name, mountWhen, buildLogic, triggers));
-        public static Dock UseDock(this EffectBuilder s) => s.Call(new Dock("Dock"));
-        public static Dock UseDock(this EffectBuilder s, string name) => s.Call(new Dock(name));
+        public static void Subscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
+        public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
+        public static void Effect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect(name, buildLogic, triggers));
+        public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction("Reaction", block, triggers));
+        public static void Reaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction(name, block, triggers));
+        public static void Phase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase("Phase", mountWhen, buildLogic, triggers));
+        public static void Phase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase(name, mountWhen, buildLogic, triggers));
+        public static Dock Dock(this EffectBuilder s) => s.Call(new Dock("Dock"));
+        public static Dock Dock(this EffectBuilder s, string name) => s.Call(new Dock(name));
     }
     public abstract class BaseEffect : SpokeEngine.Computation {
         protected EffectBlock block;
@@ -208,7 +208,7 @@ namespace Spoke {
         EffectBlock Mount(EffectBlock<IRef<T>> block) => s => {
             if (block == null) return;
             var result = block.Invoke(s);
-            if (result is ISignal<T> signal) s.UseSubscribe(signal, x => state.Set(x));
+            if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
             s.Call(s => state.Set(result.Now));
         };
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
@@ -249,9 +249,9 @@ namespace Spoke {
         public Dock(string name) {
             this.name = name;
         }
-        public T Component<T>(object key, T identity) where T : Epoch => CallDynamic(key, identity);
-        public void UseEffect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => UseEffect("Effect", key, buildLogic, triggers);
-        public void UseEffect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Component(key, new Effect(name, buildLogic, triggers));
+        public T Call<T>(object key, T identity) where T : Epoch => CallDynamic(key, identity);
+        public void Effect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", key, buildLogic, triggers);
+        public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, new Effect(name, buildLogic, triggers));
         public void Drop(object key) => DropDynamic(key);
     }
     // ============================== SpokeEngine ============================================================

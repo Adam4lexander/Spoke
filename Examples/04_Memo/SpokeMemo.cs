@@ -20,22 +20,22 @@ namespace Spoke.Examples {
             // Unlike State<T>, you can't Set() it manually — its value is *computed*.
             //
             // Here, `evenOdd` is a derived value that updates whenever `count` changes.
-            var evenOdd = s.UseMemo(s => s.D(count) % 2 == 0 ? "Even" : "Odd");
+            var evenOdd = s.Memo(s => s.D(count) % 2 == 0 ? "Even" : "Odd");
 
             // This memo reacts to both `evenOdd` and `useUpperCase`
             // and computes the final label string with dynamic casing.
-            var labelText = s.UseMemo(s => {
+            var labelText = s.Memo(s => {
                 var raw = s.D(evenOdd);
                 return s.D(useUpperCase) ? raw.ToUpper() : raw.ToLower();
             });
 
             // Display the current count
-            s.UseEffect(s => {
+            s.Effect(s => {
                 countLabel.text = $"Count: {s.D(count)}";
             });
 
             // Display the computed even/odd label
-            s.UseEffect(s => {
+            s.Effect(s => {
                 evenOddLabel.text = s.D(labelText);
             });
         }

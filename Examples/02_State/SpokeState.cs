@@ -17,7 +17,7 @@ namespace Spoke.Examples {
             var sphereMaterial = Sphere.material;
 
             // Reactively update the sphere’s color when `isRed` changes.
-            s.UseEffect(s => {
+            s.Effect(s => {
                 // `s.D(...)` tracks a *dynamic dependency* -- this effect will re-run if `isRed` changes.
                 sphereMaterial.color = s.D(isRed) ? Color.red : Color.blue;
             });
@@ -25,7 +25,7 @@ namespace Spoke.Examples {
             /*
             // This version is equivalent, but uses *explicit* dependency tracking.
             // Slightly more verbose, but clearer in some cases.
-            s.UseEffect(s => {
+            s.Effect(s => {
                 sphereMaterial.color = isRed.Now ? Color.red : Color.blue;
             }, isRed);
             */
