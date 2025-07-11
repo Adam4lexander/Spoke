@@ -1,8 +1,8 @@
-// Spoke.Substrate.cs
+// Spoke.Runtime.cs
 // -----------------------------
 // > TreeCoords
 // > Node
-// > Facet
+// > Epoch
 // > ExecutionEngine
 // > DeferredQueue
 // > SpokeHandle
@@ -16,6 +16,9 @@ using System.Collections.Generic;
 using System.Text;
 
 namespace Spoke {
+
+    public delegate void AttachBlock(Action<Action> cleanup);
+    public delegate void EpochBlock(EpochBuilder s);
 
     // ============================== TreeCoords ============================================================
     public struct TreeCoords : IComparable<TreeCoords> {
@@ -38,47 +41,56 @@ namespace Spoke {
         }
     }
     // ============================== Node ============================================================
-    internal interface ILifecycle { void Cleanup(); }
-    public interface SpokeBuilder {
-        SpokeHandle Use(SpokeHandle handle);
-        T Component<T>(T identity) where T : Facet;
-        void OnCleanup(Action fn);
-    }
-    public class Node<T> : Node where T : Facet {
-        public T Identity { get; private set; }
-        protected override Facet UntypedIdentity => Identity;
-        public Node(T identity) : base() {
-            Identity = identity;
+    /// <summary>
+    /// A runtime container for a mounted Epoch within the lifecycle tree.
+    /// Nodes form the structure of declarative execution, managing position, context, and children.
+    /// Each node controls mounting, scheduling, and cleanup for its Epoch and subtree.
+    /// </summary>
+    public class Node<T> : Node where T : Epoch {
+        public T Epoch { get; private set; }
+        protected override Epoch UntypedEpoch => Epoch;
+        public Node(T epoch) : base() {
+            Epoch = epoch;
         }
     }
+    internal interface ILifecycle { void Cleanup(); }
     internal interface IExecutable { void Execute(); }
+    public interface EpochBuilder {
+        SpokeHandle Use(SpokeHandle handle);
+        T Use<T>(T disposable) where T : IDisposable;
+        T Call<T>(T epoch) where T : Epoch;
+        void Call(EpochBlock block);
+        public bool TryGetLexical<T>(out T context) where T : Epoch;
+        void OnCleanup(Action fn);
+    }
     public abstract class Node : ILifecycle, IExecutable {
-        public static Node<T> CreateRoot<T>(T identity) where T : Facet {
-            var node = new Node<T>(identity);
+        public static Node<T> CreateRoot<T>(T epoch) where T : Epoch {
+            var node = new Node<T>(epoch);
             node.OnAttached();
             (node as IExecutable).Execute();
             return node;
         }
         List<Node> children = new List<Node>();
-        List<SpokeHandle> handles = new List<SpokeHandle>();
         Dictionary<object, Node> dynamicChildren = new Dictionary<object, Node>();
+        List<SpokeHandle> handles = new List<SpokeHandle>();
+        List<IDisposable> disposables = new List<IDisposable>();
         List<Action> mountCleanupFuncs = new List<Action>();
         public TreeCoords Coords { get; private set; }
-        SpokeBuilderImpl builder;
+        EpochBuilderImpl builder;
         long siblingCounter = 0;
         Node Prev, Next;
         ExecutionEngine engine;
         bool isUnmounting, isPending, isSealed = true;
-        protected abstract Facet UntypedIdentity { get; }
+        protected abstract Epoch UntypedEpoch { get; }
         public Node Parent { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
         public Exception Fault { get; private set; }
         protected Node() {
-            builder = new SpokeBuilderImpl(this);
+            builder = new EpochBuilderImpl(this);
         }
-        public bool TryGetIdentity<T>(out T identity) where T : Facet => (identity = (UntypedIdentity as T)) != null;
-        public override string ToString() => UntypedIdentity.ToString();
+        public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
+        public override string ToString() => UntypedEpoch.ToString();
         public void Schedule() {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
             if (isPending) return;
@@ -87,12 +99,12 @@ namespace Spoke {
         }
         void ILifecycle.Cleanup() {
             Unmount();
-            (UntypedIdentity as ILifecycle).Cleanup();
+            (UntypedEpoch as ILifecycle).Cleanup();
             if (Next != null) Next.Prev = Prev;
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
         }
-        void UsedBy(Node parent, Node prev) {
+        void CalledBy(Node parent, Node prev) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
             Parent = parent;
             Prev = prev;
@@ -101,55 +113,55 @@ namespace Spoke {
         }
         void OnAttached() {
             TryGetContext(out engine);
-            (UntypedIdentity as IFacetFriend).Attach(this);
+            (UntypedEpoch as IEpochFriend).Attach(this);
         }
         void IExecutable.Execute() {
             isPending = false; // Set now in case I trigger myself
             Unmount();
             isSealed = false;
-            try { (UntypedIdentity as IFacetFriend).Mount(builder); } catch (Exception e) { Fault = e; }
+            try { (UntypedEpoch as IEpochFriend).Mount(builder); } catch (Exception e) { Fault = e; }
             isSealed = true;
         }
-        public bool TryGetComponent<T>(out T component) where T : Facet {
-            if (TryGetIdentity(out component)) return true;
+        public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
+            if (TryGetEpoch(out epoch)) return true;
             foreach (var n in Children) {
-                if (n.TryGetComponent(out component)) return true;
+                if (n.TryGetSubEpoch(out epoch)) return true;
             }
             return false;
         }
-        public List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet {
+        public List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch {
             storeIn = storeIn ?? new List<T>();
-            if (TryGetIdentity<T>(out var component)) storeIn.Add(component);
+            if (TryGetEpoch<T>(out var epoch)) storeIn.Add(epoch);
             foreach (var n in Children) {
-                n.GetComponents(storeIn);
+                n.GetSubEpochs(storeIn);
             }
             return storeIn;
         }
-        public bool TryGetContext<T>(out T context) where T : Facet {
-            context = default(T);
+        public bool TryGetContext<T>(out T epoch) where T : Epoch {
+            epoch = default(T);
             for (var curr = Parent; curr != null; curr = curr.Parent)
-                if (curr.TryGetIdentity<T>(out var o)) { context = o; return true; }
+                if (curr.TryGetEpoch<T>(out var o)) { epoch = o; return true; }
             return false;
         }
-        public bool TryGetAmbient<T>(out T ambient) where T : Facet {
-            ambient = default(T);
+        public bool TryGetLexical<T>(out T epoch) where T : Epoch {
+            epoch = default(T);
             var start = Prev ?? Parent;
             for (var anc = start; anc != null; anc = anc.Parent)
                 for (var curr = anc; curr != null; curr = curr.Prev)
-                    if (curr.TryGetIdentity<T>(out var o)) { ambient = o; return true; }
+                    if (curr.TryGetEpoch<T>(out var o)) { epoch = o; return true; }
             return false;
         }
-        public T DynamicComponent<T>(object key, T identity) where T : Facet {
-            DropComponent(key);
-            var childNode = new Node<T>(identity);
+        public T CallDynamic<T>(object key, T epoch) where T : Epoch {
+            DropDynamic(key);
+            var childNode = new Node<T>(epoch);
             var prevNode = children.Count > 0 ? children[children.Count - 1] : this;
             if (prevNode != null) prevNode.Next = childNode;
             dynamicChildren.Add(key, childNode);
             children.Add(childNode);
-            childNode.UsedBy(this, prevNode);
-            return childNode.Identity;
+            childNode.CalledBy(this, prevNode);
+            return childNode.Epoch;
         }
-        public void DropComponent(object key) {
+        public void DropDynamic(object key) {
             if (isUnmounting) throw new Exception("Cannot mutate Node while it's unmounting");
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
             var index = children.IndexOf(child);
@@ -161,8 +173,10 @@ namespace Spoke {
             for (int i = mountCleanupFuncs.Count - 1; i >= 0; i--)
                 try { mountCleanupFuncs[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
             mountCleanupFuncs.Clear();
-            foreach (var triggerChild in handles) triggerChild.Dispose();
+            foreach (var handle in handles) handle.Dispose();
             handles.Clear();
+            foreach (var disposable in disposables) disposable.Dispose();
+            disposables.Clear();
             for (int i = children.Count - 1; i >= 0; i--)
                 try { (children[i] as ILifecycle).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
             children.Clear();
@@ -171,59 +185,68 @@ namespace Spoke {
             isSealed = false;
             isUnmounting = false;
         }
-        class SpokeBuilderImpl : SpokeBuilder {
+        class EpochBuilderImpl : EpochBuilder {
             Node node;
-            public SpokeBuilderImpl(Node node) {
+            public EpochBuilderImpl(Node node) {
                 this.node = node;
             }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); node.handles.Add(handle); return handle;
             }
-            public T Component<T>(T identity) where T : Facet {
+            public T Use<T>(T disposable) where T : IDisposable {
+                NoMischief(); node.disposables.Add(disposable); return disposable;
+            }
+            public T Call<T>(T epoch) where T : Epoch {
                 NoMischief();
-                var childNode = new Node<T>(identity);
+                var childNode = new Node<T>(epoch);
                 var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : null;
                 if (prevNode != null) prevNode.Next = childNode;
                 node.children.Add(childNode);
-                childNode.UsedBy(node, prevNode);
-                return childNode.Identity;
+                childNode.CalledBy(node, prevNode);
+                return childNode.Epoch;
             }
+            public void Call(EpochBlock block) => Call(new Scope(block));
+            public bool TryGetLexical<T>(out T context) where T : Epoch => node.TryGetLexical(out context);
             public void OnCleanup(Action fn) { NoMischief(); node.mountCleanupFuncs.Add(fn); }
             void NoMischief() {
                 if (node.isUnmounting) throw new Exception("Cannot mutate Node while it's unmounting");
                 if (node.isSealed) throw new Exception("Cannot mutate Node after it's sealed");
             }
         }
+        class Scope : Epoch { public Scope(EpochBlock block) => OnMounted(block); }
     }
-    // ============================== Facet ============================================================
-    public delegate void AttachBlock(Action<Action> cleanup);
-    public delegate void SpokeBlock(SpokeBuilder s);
-    internal interface IFacetFriend : ILifecycle {
+    // ============================== Epoch ============================================================
+    internal interface IEpochFriend : ILifecycle {
         Node GetNode();
         void Attach(Node nodeAct);
-        void Mount(SpokeBuilder s);
+        void Mount(EpochBuilder s);
     }
-    public abstract class Facet : IFacetFriend {
+    /// <summary>
+    /// A declarative, stateful execution unit that lives in the lifecycle tree.
+    /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
+    /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
+    /// </summary>
+    public abstract class Epoch : IEpochFriend {
         Node node;
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
-        SpokeBlock mountBlock;
+        EpochBlock mountBlock;
         bool isDeferred;
         protected TreeCoords Coords => node.Coords;
-        public Facet(bool isDeferred = true) {
+        public Epoch(bool isDeferred = true) {
             this.isDeferred = isDeferred;
         }
-        Node IFacetFriend.GetNode() => node;
-        void IFacetFriend.Attach(Node toNode) {
-            if (node != null) throw new InvalidOperationException("Tried to attach a facet which was already attached");
+        Node IEpochFriend.GetNode() => node;
+        void IEpochFriend.Attach(Node toNode) {
+            if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
             node = toNode;
             Action<Action> addCleanup = fn => cleanupBlocks.Add(fn);
             foreach (var fn in attachBlocks) fn?.Invoke(addCleanup);
             attachBlocks.Clear();
             if (node.Parent != null) Schedule();
         }
-        void IFacetFriend.Mount(SpokeBuilder s) {
-            // TODO: Keyed components can unmount themselves before this function completes.
+        void IEpochFriend.Mount(EpochBuilder s) {
+            // TODO: Keyed epochs can unmount themselves before this function completes.
             mountBlock?.Invoke(s);
         }
         void ILifecycle.Cleanup() {
@@ -232,25 +255,25 @@ namespace Spoke {
             cleanupBlocks.Clear();
         }
         protected void OnAttached(AttachBlock block) {
-            if (node != null) throw new InvalidOperationException("Facet is already attached");
+            if (node != null) throw new InvalidOperationException("Epoch is already attached");
             attachBlocks.Add(block);
         }
-        protected void OnMounted(SpokeBlock block) {
-            if (node != null) throw new InvalidOperationException("Facet is already attached");
-            if (mountBlock != null) throw new InvalidOperationException("Facet already has a mount block");
+        protected void OnMounted(EpochBlock block) {
+            if (node != null) throw new InvalidOperationException("Epoch is already attached");
+            if (mountBlock != null) throw new InvalidOperationException("Epoch already has a mount block");
             mountBlock = block;
         }
-        protected bool TryGetContext<T>(out T context) where T : Facet => node.TryGetContext(out context);
-        protected bool TryGetComponent<T>(out T component) where T : Facet => node.TryGetComponent(out component);
-        protected List<T> GetComponents<T>(List<T> storeIn = null) where T : Facet => node.GetComponents(storeIn);
-        protected bool TryGetAmbient<T>(out T ambient) where T : Facet => node.TryGetAmbient(out ambient);
-        protected T DynamicComponent<T>(object key, T identity) where T : Facet => node.DynamicComponent(key, identity);
-        protected void DropComponent(object key) => node.DropComponent(key);
+        protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
+        protected bool TryGetSubEpoch<T>(out T epoch) where T : Epoch => node.TryGetSubEpoch(out epoch);
+        protected List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch => node.GetSubEpochs(storeIn);
+        protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
+        protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
+        protected void DropDynamic(object key) => node.DropDynamic(key);
         protected void Schedule() { if (isDeferred) node.Schedule(); else (node as IExecutable).Execute(); }
     }
     // ============================== ExecutionEngine ============================================================
     internal interface INodeScheduler { void Schedule(Node node); }
-    public abstract class ExecutionEngine : Facet, INodeScheduler {
+    public abstract class ExecutionEngine : Epoch, INodeScheduler {
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
         List<Node> execOrder = new List<Node>();
