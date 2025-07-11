@@ -91,11 +91,11 @@ namespace Spoke {
         }
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
-        public void Schedule() {
+        public void Schedule(bool isDeferred) {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
             if (isPending) return;
             isPending = true;
-            (engine as INodeScheduler).Schedule(this);
+            (engine as INodeScheduler).Schedule(this, isDeferred);
         }
         void ILifecycle.Attach(Node parent) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
@@ -256,10 +256,10 @@ namespace Spoke {
         protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
         protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
         protected void DropDynamic(object key) => node.DropDynamic(key);
-        protected void Schedule() { if (isDeferred) node.Schedule(); else (node as IExecutable).Execute(); }
+        protected void Schedule() { node.Schedule(isDeferred); }
     }
     // ============================== ExecutionEngine ============================================================
-    internal interface INodeScheduler { void Schedule(Node node); }
+    internal interface INodeScheduler { void Schedule(Node node, bool isDeferred); }
     public abstract class ExecutionEngine : Epoch, INodeScheduler {
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
@@ -278,7 +278,12 @@ namespace Spoke {
                 cleanup(() => Parent = null);
             });
         }
-        void INodeScheduler.Schedule(Node node) {
+        void INodeScheduler.Schedule(Node node, bool isDeferred) {
+            if (!isDeferred && isFlushing) {
+                (node as IExecutable).Execute();
+                flushLogger.OnFlushNode(node);
+                return;
+            }
             if (execSet.Contains(node)) return;
             incoming.Add(node);
             var prevHasPending = HasPending;
