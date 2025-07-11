@@ -264,13 +264,15 @@ namespace Spoke {
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
         List<Node> execOrder = new List<Node>();
-        DeferredQueue deferTakeScheduled = DeferredQueue.Create();
-        Action _takeScheduled;
+        FlushLogger flushLogger = FlushLogger.Create();
+        List<string> pendingLogs = new List<string>();
+        ISpokeLogger logger;
         protected ExecutionEngine Parent { get; private set; }
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         protected bool HasPending => Next != null;
-        public ExecutionEngine() {
-            _takeScheduled = TakeScheduled;
+        bool isFlushing;
+        public ExecutionEngine(ISpokeLogger logger = null) {
+            this.logger = logger ?? new ConsoleSpokeLogger();
             OnAttached(cleanup => {
                 if (TryGetContext<ExecutionEngine>(out var parent)) Parent = parent;
                 cleanup(() => Parent = null);
@@ -279,8 +281,11 @@ namespace Spoke {
         void INodeScheduler.Schedule(Node node) {
             if (execSet.Contains(node)) return;
             incoming.Add(node);
-            deferTakeScheduled.Enqueue(_takeScheduled);
-            if (deferTakeScheduled.IsEmpty) OnPending();
+            var prevHasPending = HasPending;
+            if (!isFlushing) {
+                TakeScheduled();
+                if (!prevHasPending) OnPending();
+            }
         }
         static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
         void TakeScheduled() {
@@ -290,17 +295,39 @@ namespace Spoke {
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
         }
-        protected Node ExecuteNext() {
-            if (execOrder.Count == 0) return null;
-            deferTakeScheduled.Hold();
-            var exec = Next;
-            execSet.Remove(exec);
-            execOrder.RemoveAt(execOrder.Count - 1);
-            (exec as IExecutable).Execute();
-            deferTakeScheduled.Release();
-            return exec;
+        protected void BeginFlush() {
+            if (isFlushing) return;
+            isFlushing = true;
+            try {
+                for (long pass = 0; Next != null; pass++) {
+                    Node prev = null;
+                    flushLogger.OnFlushStart();
+                    while (Next != null) {
+                        if (prev != null && prev.Coords.CompareTo(Next.Coords) > 0) break; // new pass
+                        if (!ContinueFlush(pass)) break;
+                        var exec = Next;
+                        execSet.Remove(exec);
+                        execOrder.RemoveAt(execOrder.Count - 1);
+                        (exec as IExecutable).Execute();
+                        flushLogger.OnFlushNode(exec);
+                        TakeScheduled();
+                    }
+                    if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
+                        pendingLogs.Add($"Flush Pass: {pass}");
+                        flushLogger.LogFlush(logger, string.Join(",", pendingLogs));
+                    }
+                    pendingLogs.Clear();
+                }
+            } catch (Exception ex) {
+                SpokeError.Log("Internal Flush Error: ", ex);
+            } finally {
+                isFlushing = false;
+                pendingLogs.Clear();
+            }
         }
+        protected void LogNextFlush(string msg) => pendingLogs.Add(msg);
         protected abstract void OnPending();
+        protected abstract bool ContinueFlush(long nPasses);
     }
     // ============================== DeferredQueue ============================================================
     internal struct DeferredQueue {

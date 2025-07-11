@@ -259,17 +259,13 @@ namespace Spoke {
     public class SpokeEngine : ExecutionEngine {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
-        FlushLogger flushLogger = FlushLogger.Create();
         DeferredQueue deferred = DeferredQueue.Create();
-        List<string> pendingLogs = new List<string>();
-        ISpokeLogger logger;
         Action _flush; Action<long> _releaseEffect;
         long currId;
-        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) {
-            _flush = FlushNow;
+        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
+            _flush = BeginFlush;
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
-            this.logger = logger ?? new ConsoleSpokeLogger();
         }
         public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
             CallDynamic(currId, new Effect(name, buildLogic, triggers));
@@ -282,30 +278,16 @@ namespace Spoke {
         }
         public void LogBatch(string msg, Action action) => Batch(() => {
             action();
-            if (!deferred.IsEmpty) pendingLogs.Add(msg);
+            if (!deferred.IsEmpty) LogNextFlush(msg);
         });
         protected override void OnPending() {
             if (FlushMode == FlushMode.Immediate) Flush();
         }
         public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
-        void FlushNow() {
-            var maxPasses = 1000; var passes = 0;
-            try {
-                flushLogger.OnFlushStart();
-                Node prev = null;
-                while (HasPending) {
-                    if (passes > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    var exec = ExecuteNext();
-                    flushLogger.OnFlushNode(exec);
-                    if (prev != null && prev.Coords.CompareTo(exec.Coords) > 0) passes++;
-                    prev = exec;
-                }
-                if (pendingLogs.Count > 0 || flushLogger.HasErrors) flushLogger.LogFlush(logger, string.Join(",", pendingLogs));
-            } catch (Exception ex) {
-                SpokeError.Log("Internal Flush Error: ", ex);
-            } finally {
-                pendingLogs.Clear();
-            }
+        protected override bool ContinueFlush(long nPasses) {
+            const long maxPasses = 1000;
+            if (nPasses > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+            return true;
         }
         public abstract class Computation : Epoch {
             protected SpokeEngine engine;
@@ -329,7 +311,7 @@ namespace Spoke {
             protected abstract void OnRun(EpochBuilder s);
             protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
             protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-            protected void LogFlush(string msg) => engine.pendingLogs.Add(msg);
+            protected void LogFlush(string msg) => engine.LogNextFlush(msg);
             Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
                 if (index >= tracker.depIndex) return;
                 engine.deferred.Hold();
