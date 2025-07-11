@@ -1,4 +1,4 @@
-// Spoke.cs
+// Spoke.Reactive.cs
 // -----------------------------
 // > Trigger
 // > State
