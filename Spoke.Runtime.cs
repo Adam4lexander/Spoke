@@ -53,7 +53,7 @@ namespace Spoke {
             Epoch = epoch;
         }
     }
-    internal interface ILifecycle { void Cleanup(); }
+    internal interface ILifecycle { void Attach(Node parent); void Cleanup(); }
     internal interface IExecutable { void Execute(); }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
@@ -66,7 +66,7 @@ namespace Spoke {
     public abstract class Node : ILifecycle, IExecutable {
         public static Node<T> CreateRoot<T>(T epoch) where T : Epoch {
             var node = new Node<T>(epoch);
-            node.OnAttached();
+            (node as ILifecycle).Attach(null);
             (node as IExecutable).Execute();
             return node;
         }
@@ -97,23 +97,23 @@ namespace Spoke {
             isPending = true;
             (engine as INodeScheduler).Schedule(this);
         }
+        void ILifecycle.Attach(Node parent) {
+            if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
+            Parent = parent;
+            if (parent != null) {
+                Prev = parent.children.Count > 1 ? parent.children[parent.children.Count - 2] : null;
+                if (Prev != null) Prev.Next = this;
+                Coords = parent.Coords.Extend(parent.siblingCounter++);
+            }
+            TryGetContext(out engine);
+            (UntypedEpoch as ILifecycle).Attach(this);
+        }
         void ILifecycle.Cleanup() {
             Unmount();
             (UntypedEpoch as ILifecycle).Cleanup();
             if (Next != null) Next.Prev = Prev;
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
-        }
-        void CalledBy(Node parent, Node prev) {
-            if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
-            Parent = parent;
-            Prev = prev;
-            Coords = parent.Coords.Extend(parent.siblingCounter++);
-            OnAttached();
-        }
-        void OnAttached() {
-            TryGetContext(out engine);
-            (UntypedEpoch as IEpochFriend).Attach(this);
         }
         void IExecutable.Execute() {
             isPending = false; // Set now in case I trigger myself
@@ -124,27 +124,23 @@ namespace Spoke {
         }
         public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
             if (TryGetEpoch(out epoch)) return true;
-            foreach (var n in Children) {
-                if (n.TryGetSubEpoch(out epoch)) return true;
-            }
+            foreach (var n in Children) if (n.TryGetSubEpoch(out epoch)) return true;
             return false;
         }
         public List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch {
             storeIn = storeIn ?? new List<T>();
             if (TryGetEpoch<T>(out var epoch)) storeIn.Add(epoch);
-            foreach (var n in Children) {
-                n.GetSubEpochs(storeIn);
-            }
+            foreach (var n in Children) n.GetSubEpochs(storeIn);
             return storeIn;
         }
         public bool TryGetContext<T>(out T epoch) where T : Epoch {
-            epoch = default(T);
+            epoch = default;
             for (var curr = Parent; curr != null; curr = curr.Parent)
                 if (curr.TryGetEpoch<T>(out var o)) { epoch = o; return true; }
             return false;
         }
         public bool TryGetLexical<T>(out T epoch) where T : Epoch {
-            epoch = default(T);
+            epoch = default;
             var start = Prev ?? Parent;
             for (var anc = start; anc != null; anc = anc.Parent)
                 for (var curr = anc; curr != null; curr = curr.Prev)
@@ -154,11 +150,9 @@ namespace Spoke {
         public T CallDynamic<T>(object key, T epoch) where T : Epoch {
             DropDynamic(key);
             var childNode = new Node<T>(epoch);
-            var prevNode = children.Count > 0 ? children[children.Count - 1] : this;
-            if (prevNode != null) prevNode.Next = childNode;
             dynamicChildren.Add(key, childNode);
             children.Add(childNode);
-            childNode.CalledBy(this, prevNode);
+            (childNode as ILifecycle).Attach(this);
             return childNode.Epoch;
         }
         public void DropDynamic(object key) {
@@ -199,14 +193,12 @@ namespace Spoke {
             public T Call<T>(T epoch) where T : Epoch {
                 NoMischief();
                 var childNode = new Node<T>(epoch);
-                var prevNode = node.children.Count > 0 ? node.children[node.children.Count - 1] : null;
-                if (prevNode != null) prevNode.Next = childNode;
                 node.children.Add(childNode);
-                childNode.CalledBy(node, prevNode);
+                (childNode as ILifecycle).Attach(node);
                 return childNode.Epoch;
             }
             public void Call(EpochBlock block) => Call(new Scope(block));
-            public bool TryGetLexical<T>(out T context) where T : Epoch => node.TryGetLexical(out context);
+            public bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
             public void OnCleanup(Action fn) { NoMischief(); node.mountCleanupFuncs.Add(fn); }
             void NoMischief() {
                 if (node.isUnmounting) throw new Exception("Cannot mutate Node while it's unmounting");
@@ -216,17 +208,13 @@ namespace Spoke {
         class Scope : Epoch { public Scope(EpochBlock block) => OnMounted(block); }
     }
     // ============================== Epoch ============================================================
-    internal interface IEpochFriend : ILifecycle {
-        Node GetNode();
-        void Attach(Node nodeAct);
-        void Mount(EpochBuilder s);
-    }
+    internal interface IEpochFriend { void Mount(EpochBuilder s); }
     /// <summary>
     /// A declarative, stateful execution unit that lives in the lifecycle tree.
     /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
-    public abstract class Epoch : IEpochFriend {
+    public abstract class Epoch : IEpochFriend, ILifecycle {
         Node node;
         List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
@@ -236,23 +224,22 @@ namespace Spoke {
         public Epoch(bool isDeferred = true) {
             this.isDeferred = isDeferred;
         }
-        Node IEpochFriend.GetNode() => node;
-        void IEpochFriend.Attach(Node toNode) {
+        void ILifecycle.Attach(Node parent) {
             if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
-            node = toNode;
+            node = parent;
             Action<Action> addCleanup = fn => cleanupBlocks.Add(fn);
             foreach (var fn in attachBlocks) fn?.Invoke(addCleanup);
             attachBlocks.Clear();
             if (node.Parent != null) Schedule();
         }
-        void IEpochFriend.Mount(EpochBuilder s) {
-            // TODO: Keyed epochs can unmount themselves before this function completes.
-            mountBlock?.Invoke(s);
-        }
         void ILifecycle.Cleanup() {
             foreach (var fn in cleanupBlocks) fn?.Invoke();
             mountBlock = null;
             cleanupBlocks.Clear();
+        }
+        void IEpochFriend.Mount(EpochBuilder s) {
+            // TODO: Keyed epochs can unmount themselves before this function completes.
+            mountBlock?.Invoke(s);
         }
         protected void OnAttached(AttachBlock block) {
             if (node != null) throw new InvalidOperationException("Epoch is already attached");
