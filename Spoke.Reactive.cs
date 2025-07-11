@@ -10,6 +10,7 @@
 // > Memo
 // > Dock
 // > SpokeEngine
+// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -370,5 +371,26 @@ namespace Spoke {
                 }
             }
         }
+    }
+}
+// ============================== DeferredQueue ============================================================
+internal struct DeferredQueue {
+    int holdCount; Queue<Action> queue;
+    public bool IsDraining { get; private set; }
+    public bool IsEmpty => queue.Count == 0 && !IsDraining;
+    public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
+    public void Hold() => holdCount++;
+    public void Release() {
+        if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
+        if ((--holdCount) == 0 && !IsDraining) Drain();
+    }
+    public void Enqueue(Action action) {
+        queue.Enqueue(action);
+        if (holdCount == 0 && !IsDraining) Drain();
+    }
+    void Drain() {
+        IsDraining = true;
+        while (queue.Count > 0) queue.Dequeue()();
+        IsDraining = false;
     }
 }
