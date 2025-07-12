@@ -268,12 +268,12 @@ namespace Spoke {
         List<Node> execOrder = new List<Node>();
         FlushLogger flushLogger = FlushLogger.Create();
         List<string> pendingLogs = new List<string>();
-        DeferredQueue deferred = DeferredQueue.Create();
+        DeferredQueue deferred = new DeferredQueue();
         ISpokeLogger logger;
         protected ExecutionEngine Parent { get; private set; }
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         protected bool HasPending => Next != null;
-        bool isFlushing;
+        public bool IsFlushing { get; private set; }
         Action _flush;
         public ExecutionEngine(FlushMode flushMode, ISpokeLogger logger = null) {
             _flush = Flush;
@@ -283,17 +283,16 @@ namespace Spoke {
                 cleanup(() => Parent = null);
             });
         }
-        public void Hold() => deferred.Hold();
-        public void Release() => deferred.Release();
+        public SpokeHandle Hold() => deferred.Hold();
         void INodeScheduler.Schedule(Node node, bool isDeferred) {
-            if (!isDeferred && isFlushing) {
+            if (!isDeferred && IsFlushing) {
                 (node as IExecutable).Execute();
                 flushLogger.OnFlushNode(node);
                 return;
             }
             if (execSet.Contains(node)) return;
             incoming.Add(node);
-            if (!isFlushing) {
+            if (!IsFlushing) {
                 TakeScheduled();
                 if (HasPending && FlushMode == FlushMode.Immediate) BeginFlush();
             }
@@ -308,8 +307,8 @@ namespace Spoke {
         }
         protected void BeginFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
         void Flush() {
-            if (isFlushing) return;
-            isFlushing = true;
+            if (IsFlushing) return;
+            IsFlushing = true;
             try {
                 for (long pass = 0; Next != null; pass++) {
                     Node prev = null;
@@ -333,7 +332,7 @@ namespace Spoke {
             } catch (Exception ex) {
                 SpokeError.Log("Internal Flush Error: ", ex);
             } finally {
-                isFlushing = false;
+                IsFlushing = false;
                 pendingLogs.Clear();
             }
         }
@@ -435,19 +434,31 @@ namespace Spoke {
     }
     // ============================== DeferredQueue ============================================================
     internal class DeferredQueue {
-        int holdCount; Queue<Action> queue;
+        long holdIdx;
+        HashSet<long> holdKeys = new HashSet<long>();
+        Queue<Action> queue = new Queue<Action>();
+        Queue<SpokeHandle> handleQueue = new Queue<SpokeHandle>();
+        Action<long> _release; 
+        Action _popHandle;
         public bool IsDraining { get; private set; }
         public bool IsEmpty => queue.Count == 0 && !IsDraining;
-        public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
-        public void Hold() => holdCount++;
-        public void Release() {
-            if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
-            if ((--holdCount) == 0 && !IsDraining) Drain();
+        public DeferredQueue() { _release = Release; _popHandle = PopHandle; }
+        public SpokeHandle Hold() {
+            holdKeys.Add(holdIdx);
+            return SpokeHandle.Of(holdIdx++, _release);
+        }
+        void Release(long key) {
+            if (holdKeys.Remove(key)) if (holdKeys.Count == 0 && !IsDraining) Drain();
         }
         public void Enqueue(Action action) {
             queue.Enqueue(action);
-            if (holdCount == 0 && !IsDraining) Drain();
+            if (holdKeys.Count == 0 && !IsDraining) Drain();
         }
+        public void Enqueue(SpokeHandle handle) {
+            handleQueue.Enqueue(handle);
+            Enqueue(_popHandle);
+        }
+        void PopHandle() => handleQueue.Dequeue().Dispose();
         void Drain() {
             IsDraining = true;
             while (queue.Count > 0) queue.Dequeue()();

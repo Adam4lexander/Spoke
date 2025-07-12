@@ -43,7 +43,7 @@ namespace Spoke {
         SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
-        DeferredQueue deferred = DeferredQueue.Create();
+        DeferredQueue deferred = new DeferredQueue();
         Action<long> _Unsub; Action _Flush;
         long idCount = 0;
         public Trigger() { _Unsub = Unsub; _Flush = Flush; }
@@ -64,7 +64,7 @@ namespace Spoke {
                 subListPool.Return(subList);
             }
         }
-        void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
+        void IDeferredTrigger.OnAfterNotify(SpokeHandle handle) => deferred.Enqueue(handle);
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
             foreach (var sub in subs) if (sub.Key == action) idList.Add(sub.Id);
@@ -91,7 +91,7 @@ namespace Spoke {
         }
     }
     internal interface IDeferredTrigger {
-        void OnAfterNotify(Action action);
+        void OnAfterNotify(SpokeHandle handle);
     }
     // ============================== State ============================================================
     public interface IRef<T> {
@@ -115,7 +115,7 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => trigger.Subscribe(action);
         public void Unsubscribe(Action action) => trigger.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => trigger.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (trigger as IDeferredTrigger).OnAfterNotify(action);
+        void IDeferredTrigger.OnAfterNotify(SpokeHandle handle) => (trigger as IDeferredTrigger).OnAfterNotify(handle);
         public void Set(T value) {
             if (EqualityComparer<T>.Default.Equals(value, this.value)) return;
             this.value = value;
@@ -216,7 +216,7 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
+        void IDeferredTrigger.OnAfterNotify(SpokeHandle handle) => (state as IDeferredTrigger).OnAfterNotify(handle);
     }
     // ============================== Memo ============================================================
     public class Memo<T> : Computation, ISignal<T>, IDeferredTrigger {
@@ -233,7 +233,7 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
+        void IDeferredTrigger.OnAfterNotify(SpokeHandle handle) => (state as IDeferredTrigger).OnAfterNotify(handle);
     }
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
@@ -270,8 +270,8 @@ namespace Spoke {
         }
         void ReleaseEffect(long id) => DropDynamic(id);
         public void Batch(Action action) {
-            Hold();
-            try { action(); } finally { Release(); }
+            var handle = Hold();
+            try { action(); } finally { handle.Dispose(); }
         }
         public void LogBatch(string msg, Action action) => Batch(() => {
             action();
@@ -310,9 +310,9 @@ namespace Spoke {
         protected void LogFlush(string msg) => engine.LogNextFlush(msg);
         Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
             if (index >= tracker.depIndex) return;
-            engine.Hold();
+            var handle = engine.Hold();
             Schedule();
-            (trigger as IDeferredTrigger).OnAfterNotify(() => engine.Release());
+            (trigger as IDeferredTrigger).OnAfterNotify(handle);
         };
         struct DependencyTracker : IDisposable {
             Computation owner;
