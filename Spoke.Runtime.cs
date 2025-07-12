@@ -9,6 +9,7 @@
 // > FlushLogger
 // > SpokePool
 // > ReadOnlyList
+// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -258,25 +259,32 @@ namespace Spoke {
         protected void Schedule() { node.Schedule(isDeferred); }
     }
     // ============================== ExecutionEngine ============================================================
+    public enum FlushMode { Immediate, Manual }
     internal interface INodeScheduler { void Schedule(Node node, bool isDeferred); }
     public abstract class ExecutionEngine : Epoch, INodeScheduler {
+        public FlushMode FlushMode = FlushMode.Immediate;
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
         List<Node> execOrder = new List<Node>();
         FlushLogger flushLogger = FlushLogger.Create();
         List<string> pendingLogs = new List<string>();
+        DeferredQueue deferred = DeferredQueue.Create();
         ISpokeLogger logger;
         protected ExecutionEngine Parent { get; private set; }
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         protected bool HasPending => Next != null;
         bool isFlushing;
-        public ExecutionEngine(ISpokeLogger logger = null) {
+        Action _flush;
+        public ExecutionEngine(FlushMode flushMode, ISpokeLogger logger = null) {
+            _flush = Flush;
             this.logger = logger ?? new ConsoleSpokeLogger();
             OnAttached(cleanup => {
                 if (TryGetContext<ExecutionEngine>(out var parent)) Parent = parent;
                 cleanup(() => Parent = null);
             });
         }
+        public void Hold() => deferred.Hold();
+        public void Release() => deferred.Release();
         void INodeScheduler.Schedule(Node node, bool isDeferred) {
             if (!isDeferred && isFlushing) {
                 (node as IExecutable).Execute();
@@ -285,10 +293,9 @@ namespace Spoke {
             }
             if (execSet.Contains(node)) return;
             incoming.Add(node);
-            var prevHasPending = HasPending;
             if (!isFlushing) {
                 TakeScheduled();
-                if (!prevHasPending) OnPending();
+                if (HasPending && FlushMode == FlushMode.Immediate) BeginFlush();
             }
         }
         static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
@@ -299,7 +306,8 @@ namespace Spoke {
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
         }
-        protected void BeginFlush() {
+        protected void BeginFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
+        void Flush() {
             if (isFlushing) return;
             isFlushing = true;
             try {
@@ -329,8 +337,7 @@ namespace Spoke {
                 pendingLogs.Clear();
             }
         }
-        protected void LogNextFlush(string msg) => pendingLogs.Add(msg);
-        protected abstract void OnPending();
+        public void LogNextFlush(string msg) => pendingLogs.Add(msg);
         protected abstract bool ContinueFlush(long nPasses);
     }
     // ============================== SpokeHandle ============================================================
@@ -425,5 +432,26 @@ namespace Spoke {
         public List<T>.Enumerator GetEnumerator() => list.GetEnumerator();
         public int Count => list?.Count ?? 0;
         public T this[int index] => list[index];
+    }
+    // ============================== DeferredQueue ============================================================
+    internal class DeferredQueue {
+        int holdCount; Queue<Action> queue;
+        public bool IsDraining { get; private set; }
+        public bool IsEmpty => queue.Count == 0 && !IsDraining;
+        public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
+        public void Hold() => holdCount++;
+        public void Release() {
+            if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
+            if ((--holdCount) == 0 && !IsDraining) Drain();
+        }
+        public void Enqueue(Action action) {
+            queue.Enqueue(action);
+            if (holdCount == 0 && !IsDraining) Drain();
+        }
+        void Drain() {
+            IsDraining = true;
+            while (queue.Count > 0) queue.Dequeue()();
+            IsDraining = false;
+        }
     }
 }

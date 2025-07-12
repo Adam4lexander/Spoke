@@ -10,7 +10,7 @@
 // > Memo
 // > Dock
 // > SpokeEngine
-// > DeferredQueue
+// > Computation
 
 using System;
 using System.Collections.Generic;
@@ -151,7 +151,7 @@ namespace Spoke {
         public static Dock Dock(this EffectBuilder s) => s.Call(new Dock("Dock"));
         public static Dock Dock(this EffectBuilder s, string name) => s.Call(new Dock(name));
     }
-    public abstract class BaseEffect : SpokeEngine.Computation {
+    public abstract class BaseEffect : Computation {
         protected EffectBlock block;
         EffectBuilderImpl builder;
         public BaseEffect(string name, IEnumerable<ITrigger> triggers) : base(name, triggers) {
@@ -219,7 +219,7 @@ namespace Spoke {
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
     }
     // ============================== Memo ============================================================
-    public class Memo<T> : SpokeEngine.Computation, ISignal<T>, IDeferredTrigger {
+    public class Memo<T> : Computation, ISignal<T>, IDeferredTrigger {
         State<T> state = State.Create<T>();
         public T Now => state.Now;
         Action<MemoBuilder> block;
@@ -256,15 +256,11 @@ namespace Spoke {
         public void Drop(object key) => DropDynamic(key);
     }
     // ============================== SpokeEngine ============================================================
-    public enum FlushMode { Immediate, Manual }
     public class SpokeEngine : ExecutionEngine {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Epoch;
-        public FlushMode FlushMode = FlushMode.Immediate;
-        DeferredQueue deferred = DeferredQueue.Create();
-        Action _flush; Action<long> _releaseEffect;
+        Action<long> _releaseEffect;
         long currId;
-        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
-            _flush = BeginFlush;
+        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(flushMode, logger) {
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
         }
@@ -274,123 +270,100 @@ namespace Spoke {
         }
         void ReleaseEffect(long id) => DropDynamic(id);
         public void Batch(Action action) {
-            deferred.Hold();
-            try { action(); } finally { deferred.Release(); }
+            Hold();
+            try { action(); } finally { Release(); }
         }
         public void LogBatch(string msg, Action action) => Batch(() => {
             action();
-            if (!deferred.IsEmpty) LogNextFlush(msg);
+            if (HasPending) LogNextFlush(msg);
         });
-        protected override void OnPending() {
-            if (FlushMode == FlushMode.Immediate) Flush();
-        }
-        public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
+        public void Flush() => BeginFlush();
         protected override bool ContinueFlush(long nPasses) {
             const long maxPasses = 1000;
             if (nPasses > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
             return true;
         }
-        public abstract class Computation : Epoch {
-            protected SpokeEngine engine;
-            DependencyTracker tracker;
-            string name;
-            public override string ToString() => name ?? base.ToString();
-            public Computation(string name, IEnumerable<ITrigger> triggers) {
-                this.name = name;
-                tracker = DependencyTracker.Create(this);
-                foreach (var trigger in triggers) tracker.AddStatic(trigger);
-                tracker.SyncDependencies();
-                OnAttached(cleanup => {
-                    TryGetContext(out engine);
-                    cleanup(() => tracker.Dispose());
-                });
-                OnMounted(s => {
-                    tracker.BeginDynamic();
-                    try { OnRun(s); } finally { tracker.EndDynamic(); }
-                });
-            }
-            protected abstract void OnRun(EpochBuilder s);
-            protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
-            protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-            protected void LogFlush(string msg) => engine.LogNextFlush(msg);
-            Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
-                if (index >= tracker.depIndex) return;
-                engine.deferred.Hold();
-                Schedule();
-                (trigger as IDeferredTrigger).OnAfterNotify(() => engine.deferred.Release());
+    }
+    // ============================== Computation ============================================================
+    public abstract class Computation : Epoch {
+        protected SpokeEngine engine;
+        DependencyTracker tracker;
+        string name;
+        public override string ToString() => name ?? base.ToString();
+        public Computation(string name, IEnumerable<ITrigger> triggers) {
+            this.name = name;
+            tracker = DependencyTracker.Create(this);
+            foreach (var trigger in triggers) tracker.AddStatic(trigger);
+            tracker.SyncDependencies();
+            OnAttached(cleanup => {
+                TryGetContext(out engine);
+                cleanup(() => tracker.Dispose());
+            });
+            OnMounted(s => {
+                tracker.BeginDynamic();
+                try { OnRun(s); } finally { tracker.EndDynamic(); }
+            });
+        }
+        protected abstract void OnRun(EpochBuilder s);
+        protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
+        protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
+        protected void LogFlush(string msg) => engine.LogNextFlush(msg);
+        Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
+            if (index >= tracker.depIndex) return;
+            engine.Hold();
+            Schedule();
+            (trigger as IDeferredTrigger).OnAfterNotify(() => engine.Release());
+        };
+        struct DependencyTracker : IDisposable {
+            Computation owner;
+            HashSet<ITrigger> seen;
+            List<(ITrigger t, SpokeHandle h)> staticHandles, dynamicHandles;
+            public List<Computation> dependencies;
+            public int depIndex;
+            public static DependencyTracker Create(Computation owner) => new DependencyTracker {
+                owner = owner,
+                seen = new HashSet<ITrigger>(),
+                staticHandles = new List<(ITrigger t, SpokeHandle h)>(),
+                dynamicHandles = new List<(ITrigger t, SpokeHandle h)>(),
+                dependencies = new List<Computation>()
             };
-            struct DependencyTracker : IDisposable {
-                Computation owner;
-                HashSet<ITrigger> seen;
-                List<(ITrigger t, SpokeHandle h)> staticHandles, dynamicHandles;
-                public List<Computation> dependencies;
-                public int depIndex;
-                public static DependencyTracker Create(Computation owner) => new DependencyTracker {
-                    owner = owner,
-                    seen = new HashSet<ITrigger>(),
-                    staticHandles = new List<(ITrigger t, SpokeHandle h)>(),
-                    dynamicHandles = new List<(ITrigger t, SpokeHandle h)>(),
-                    dependencies = new List<Computation>()
-                };
-                public void AddStatic(ITrigger trigger) {
-                    if (trigger == owner || !seen.Add(trigger)) return;
-                    staticHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, -1))));
+            public void AddStatic(ITrigger trigger) {
+                if (trigger == owner || !seen.Add(trigger)) return;
+                staticHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, -1))));
+            }
+            public void BeginDynamic() {
+                depIndex = 0;
+                seen.Clear();
+                foreach (var dep in staticHandles) seen.Add(dep.t);
+            }
+            public void AddDynamic(ITrigger trigger) {
+                if (trigger == owner || !seen.Add(trigger)) return;
+                if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex))));
+                else if (dynamicHandles[depIndex].t != trigger) {
+                    dynamicHandles[depIndex].h.Dispose();
+                    dynamicHandles[depIndex] = (trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex)));
                 }
-                public void BeginDynamic() {
-                    depIndex = 0;
-                    seen.Clear();
-                    foreach (var dep in staticHandles) seen.Add(dep.t);
+                depIndex++;
+            }
+            public void EndDynamic() {
+                while (dynamicHandles.Count > depIndex) {
+                    dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
+                    dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
                 }
-                public void AddDynamic(ITrigger trigger) {
-                    if (trigger == owner || !seen.Add(trigger)) return;
-                    if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex))));
-                    else if (dynamicHandles[depIndex].t != trigger) {
-                        dynamicHandles[depIndex].h.Dispose();
-                        dynamicHandles[depIndex] = (trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex)));
-                    }
-                    depIndex++;
-                }
-                public void EndDynamic() {
-                    while (dynamicHandles.Count > depIndex) {
-                        dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
-                        dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
-                    }
-                    SyncDependencies();
-                }
-                public void SyncDependencies() {
-                    dependencies.Clear();
-                    foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-                    foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-                }
-                public void Dispose() {
-                    seen.Clear();
-                    foreach (var handle in staticHandles) handle.h.Dispose();
-                    foreach (var handle in dynamicHandles) handle.h.Dispose();
-                    staticHandles.Clear(); dynamicHandles.Clear();
-                    dependencies.Clear();
-                }
+                SyncDependencies();
+            }
+            public void SyncDependencies() {
+                dependencies.Clear();
+                foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
+                foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
+            }
+            public void Dispose() {
+                seen.Clear();
+                foreach (var handle in staticHandles) handle.h.Dispose();
+                foreach (var handle in dynamicHandles) handle.h.Dispose();
+                staticHandles.Clear(); dynamicHandles.Clear();
+                dependencies.Clear();
             }
         }
-    }
-}
-// ============================== DeferredQueue ============================================================
-internal struct DeferredQueue {
-    int holdCount; Queue<Action> queue;
-    public bool IsDraining { get; private set; }
-    public bool IsEmpty => queue.Count == 0 && !IsDraining;
-    public static DeferredQueue Create() => new DeferredQueue { queue = new Queue<Action>() };
-    public void Hold() => holdCount++;
-    public void Release() {
-        if (holdCount <= 0) throw new InvalidOperationException("Mismatched Release() without Hold()");
-        if ((--holdCount) == 0 && !IsDraining) Drain();
-    }
-    public void Enqueue(Action action) {
-        queue.Enqueue(action);
-        if (holdCount == 0 && !IsDraining) Drain();
-    }
-    void Drain() {
-        IsDraining = true;
-        while (queue.Count > 0) queue.Dequeue()();
-        IsDraining = false;
     }
 }
