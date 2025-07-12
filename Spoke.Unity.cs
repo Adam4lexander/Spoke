@@ -166,7 +166,7 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) { EnsureInitialized(); return trigger.Subscribe(action); }
         public void Unsubscribe(Action action) { EnsureInitialized(); trigger.Unsubscribe(action); }
         public void Unsubscribe(Action<T> action) { EnsureInitialized(); trigger.Unsubscribe(action); }
-        void IDeferredTrigger.OnAfterNotify(SpokeHandle handle) => (trigger as IDeferredTrigger).OnAfterNotify(handle);
+        void IDeferredTrigger.OnAfterNotify(Action action) => (trigger as IDeferredTrigger).OnAfterNotify(action);
         public void Set(T value) {
             setCount++;
             EnsureInitialized();

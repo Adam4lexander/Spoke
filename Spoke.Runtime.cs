@@ -437,12 +437,10 @@ namespace Spoke {
         long holdIdx;
         HashSet<long> holdKeys = new HashSet<long>();
         Queue<Action> queue = new Queue<Action>();
-        Queue<SpokeHandle> handleQueue = new Queue<SpokeHandle>();
         Action<long> _release; 
-        Action _popHandle;
         public bool IsDraining { get; private set; }
         public bool IsEmpty => queue.Count == 0 && !IsDraining;
-        public DeferredQueue() { _release = Release; _popHandle = PopHandle; }
+        public DeferredQueue() { _release = Release; }
         public SpokeHandle Hold() {
             holdKeys.Add(holdIdx);
             return SpokeHandle.Of(holdIdx++, _release);
@@ -454,11 +452,6 @@ namespace Spoke {
             queue.Enqueue(action);
             if (holdKeys.Count == 0 && !IsDraining) Drain();
         }
-        public void Enqueue(SpokeHandle handle) {
-            handleQueue.Enqueue(handle);
-            Enqueue(_popHandle);
-        }
-        void PopHandle() => handleQueue.Dequeue().Dispose();
         void Drain() {
             IsDraining = true;
             while (queue.Count > 0) queue.Dequeue()();
