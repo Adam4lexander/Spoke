@@ -166,6 +166,8 @@ namespace Spoke {
             (childNode as ILifecycle).Attach(this);
             return childNode.Epoch;
         }
+        public T CallDynamic<T>(object key, ScopeBlock<T> block) => CallDynamic(key, new Scope<T>(block)).Value;
+        public void CallDynamic(object key, ScopeBlock block) => CallDynamic(key, new Scope(block));
         public void DropDynamic(object key) {
             if (isUnmounting) throw new Exception("Cannot mutate Node while it's unmounting");
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
@@ -308,6 +310,8 @@ namespace Spoke {
         protected List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch => node.GetSubEpochs(storeIn);
         protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
         protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
+        protected T CallDynamic<T>(object key, ScopeBlock<T> block) => node.CallDynamic(key, block);
+        protected void CallDynamic(object key, ScopeBlock block) => node.CallDynamic(key, block);
         protected void DropDynamic(object key) => node.DropDynamic(key);
         protected void Schedule() { node.Schedule(isDeferred); }
     }

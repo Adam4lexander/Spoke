@@ -185,7 +185,6 @@ namespace Spoke {
             var tracker = new DependencyTracker(engine, s.Schedule);
             s.OnDetach(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
-            tracker.SyncDependencies();
             return tracker;
         };
         class EffectBuilderImpl : EffectBuilder {
@@ -239,75 +238,10 @@ namespace Spoke {
         public static Dock Dock(this EffectBuilder s) => s.Call(new Dock("Dock"));
         public static Dock Dock(this EffectBuilder s, string name) => s.Call(new Dock(name));
     }
-    public abstract class BaseEffect : Computation {
-        protected EffectBlock block;
-        EffectBuilderImpl builder;
-        public BaseEffect(string name, IEnumerable<ITrigger> triggers) : base(name, triggers) {
-            builder = new EffectBuilderImpl(this);
-        }
-        protected override void OnRun(EpochBuilder s) => builder.Mount(s, block);
-        class EffectBuilderImpl : EffectBuilder {
-            BaseEffect effect;
-            EpochBuilder s;
-            public EffectBuilderImpl(BaseEffect owner) {
-                this.effect = owner;
-            }
-            public void Mount(EpochBuilder s, EffectBlock block) {
-                this.s = s;
-                block?.Invoke(this);
-            }
-            public void Log(string msg) => effect.LogFlush(msg);
-            public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) => s.Use(trigger);
-            public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-            public T Call<T>(T identity) where T : Epoch => s.Call(identity);
-            public void Call(ScopeBlock block) => s.Call(block);
-            public T Call<T>(ScopeBlock<T> block) => s.Call(block);
-            public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
-            public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        }
-    }
     // ============================== Effect ============================================================
-    public class Effect : BaseEffect {
-        public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            this.block = block;
-        }
-    }
     // ============================== Reaction ============================================================
-    public class Reaction : BaseEffect {
-        public Reaction(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            var isFirst = true;
-            this.block = s => { if (!isFirst) block?.Invoke(s); else isFirst = false; };
-        }
-    }
     // ============================== Phase ============================================================
-    public class Phase : BaseEffect {
-        public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            OnAttached(cleanup => {
-                AddStaticTrigger(mountWhen);
-            });
-            this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
-        }
-    }
     // ============================== Effect<T> ============================================================
-    public class Effect<T> : BaseEffect, ISignal<T>, IDeferredTrigger {
-        State<T> state = State.Create<T>();
-        public T Now => state.Now;
-        public Effect(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) : base(name, triggers) {
-            this.block = Mount(block);
-        }
-        EffectBlock Mount(EffectBlock<IRef<T>> block) => s => {
-            if (block == null) return;
-            var result = block.Invoke(s);
-            if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
-            s.Call(s => state.Set(result.Now));
-        };
-        public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
-        public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
-        public void Unsubscribe(Action action) => state.Unsubscribe(action);
-        public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
-    }
     // ============================== Memo ============================================================
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
@@ -324,9 +258,9 @@ namespace Spoke {
         public Dock(string name) {
             this.name = name;
         }
-        public T Call<T>(object key, T identity) where T : Epoch => CallDynamic(key, identity);
+        public void Call(object key, ScopeBlock block) => CallDynamic(key, block);
         public void Effect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", key, buildLogic, triggers);
-        public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, new Effect(name, buildLogic, triggers));
+        public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, SpokeBlocks.Effect(name, buildLogic, triggers));
         public void Drop(object key) => DropDynamic(key);
     }
     // ============================== SpokeEngine ============================================================
@@ -343,7 +277,7 @@ namespace Spoke {
             FlushMode = flushMode;
         }
         public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            CallDynamic(currId, new Effect(name, buildLogic, triggers));
+            CallDynamic(currId, SpokeBlocks.Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
         void ReleaseEffect(long id) => DropDynamic(id);
@@ -363,36 +297,12 @@ namespace Spoke {
         }
     }
     // ============================== Computation ============================================================
-    public abstract class Computation : Epoch {
-        DependencyTracker tracker;
-        string name;
-        public override string ToString() => name ?? base.ToString();
-        public Computation(string name, IEnumerable<ITrigger> triggers) {
-            this.name = name;
-            OnAttached(cleanup => {
-                TryGetContext<SpokeEngine>(out var engine);
-                tracker = new DependencyTracker(engine, Schedule);
-                cleanup(() => tracker.Dispose());
-                foreach (var trigger in triggers) tracker.AddStatic(trigger);
-                tracker.SyncDependencies();
-            });
-            OnMounted(s => {
-                tracker.BeginDynamic();
-                try { OnRun(s); } finally { tracker.EndDynamic(); }
-            });
-        }
-        protected abstract void OnRun(EpochBuilder s);
-        protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
-        protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-        protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.LogNextFlush(msg); }
-    }
     internal class DependencyTracker : IDisposable {
         SpokeEngine engine;
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
-        public List<Computation> dependencies = new List<Computation>();
         public int depIndex;
         public DependencyTracker(SpokeEngine engine, Action schedule) {
             this.engine = engine;
@@ -421,19 +331,12 @@ namespace Spoke {
                 dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
                 dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
             }
-            SyncDependencies();
-        }
-        public void SyncDependencies() {
-            dependencies.Clear();
-            foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-            foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
         }
         public void Dispose() {
             seen.Clear();
             foreach (var handle in staticHandles) handle.h.Dispose();
             foreach (var handle in dynamicHandles) handle.h.Dispose();
             staticHandles.Clear(); dynamicHandles.Clear();
-            dependencies.Clear();
         }
         Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
             if (index >= depIndex) return;
