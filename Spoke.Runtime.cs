@@ -20,6 +20,9 @@ namespace Spoke {
     public delegate void AttachBlock(Action<Action> cleanup);
     public delegate void EpochBlock(EpochBuilder s);
 
+    public delegate void ScopeBlock(EpochScope s);
+    public delegate T ScopeBlock<T>(EpochScope s);
+
     // ============================== TreeCoords ============================================================
     public struct TreeCoords : IComparable<TreeCoords> {
         List<long> coords;
@@ -55,11 +58,17 @@ namespace Spoke {
     }
     internal interface ILifecycle { void Attach(Node parent); void Cleanup(); }
     internal interface IExecutable { void Execute(); }
+    public interface EpochScope {
+        void SetName(string name);
+        void OnDetach(Action fn);
+        void OnMount(Action<EpochBuilder> fn);
+    }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
         T Call<T>(T epoch) where T : Epoch;
-        void Call(EpochBlock block);
+        void Call(ScopeBlock block);
+        T Call<T>(ScopeBlock<T> block);
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action fn);
     }
@@ -197,7 +206,8 @@ namespace Spoke {
                 (childNode as ILifecycle).Attach(node);
                 return childNode.Epoch;
             }
-            public void Call(EpochBlock block) => Call(new Scope(block));
+            public void Call(ScopeBlock block) => Call(new Scope(block));
+            public T Call<T>(ScopeBlock<T> block) => Call(new Scope<T>(block)).Value;
             public bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
             public void OnCleanup(Action fn) { NoMischief(); node.mountCleanupFuncs.Add(fn); }
             void NoMischief() {
@@ -205,7 +215,46 @@ namespace Spoke {
                 if (node.isSealed) throw new Exception("Cannot mutate Node after it's sealed");
             }
         }
-        class Scope : Epoch { public Scope(EpochBlock block) => OnMounted(block); }
+        class BaseScope : Epoch, EpochScope {
+            string name;
+            List<Action> detachFns = new List<Action>();
+            List<Action<EpochBuilder>> mountFns = new List<Action<EpochBuilder>>();
+            bool isMounting;
+            public override string ToString() => name ?? base.ToString();
+            public void OnDetach(Action fn) {
+                if (isMounting) throw new Exception("Cant call OnDetach from a mount block");
+                detachFns.Add(fn); 
+            }
+            public void OnMount(Action<EpochBuilder> fn) => mountFns.Add(fn);
+            public void SetName(string name) => this.name = name;
+            protected void Init() {
+                OnAttached(cleanup => {
+                    foreach (var fn in detachFns) cleanup(fn);
+                });
+                OnMounted(s => {
+                    isMounting = true;
+                    foreach (var fn in mountFns) fn.Invoke(s);
+                    isMounting = false;
+                });
+            }
+        }
+        class Scope : BaseScope { 
+            public Scope(ScopeBlock block) {
+                OnAttached(cleanup => {
+                    block.Invoke(this);
+                });
+                Init();
+            }
+        }
+        class Scope<T> : BaseScope {
+            public T Value { get; private set; }
+            public Scope(ScopeBlock<T> block) {
+                OnAttached(cleanup => {
+                    Value = block.Invoke(this);
+                });
+                Init();
+            }
+        }
     }
     // ============================== Epoch ============================================================
     internal interface IEpochFriend { void Mount(EpochBuilder s); }

@@ -130,7 +130,7 @@ namespace Spoke {
         void Use(SpokeHandle trigger);
         T Use<T>(T disposable) where T : IDisposable;
         T Call<T>(T identity) where T : Epoch;
-        void Call(EpochBlock block);
+        void Call(ScopeBlock block);
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action cleanup);
     }
@@ -172,7 +172,7 @@ namespace Spoke {
             public void Use(SpokeHandle trigger) => s.Use(trigger);
             public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
             public T Call<T>(T identity) where T : Epoch => s.Call(identity);
-            public void Call(EpochBlock block) => s.Call(block);
+            public void Call(ScopeBlock block) => s.Call(block);
             public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
             public void OnCleanup(Action fn) => s.OnCleanup(fn);
         }
