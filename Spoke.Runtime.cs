@@ -91,11 +91,11 @@ namespace Spoke {
         }
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
-        public void Schedule(bool isDeferred) {
+        public void Schedule(bool isEager) {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
             if (isPending) return;
             isPending = true;
-            (engine as INodeScheduler).Schedule(this, isDeferred);
+            (engine as INodeScheduler).Schedule(this, isEager);
         }
         void ILifecycle.Attach(Node parent) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
@@ -205,7 +205,11 @@ namespace Spoke {
                 if (node.isSealed) throw new Exception("Cannot mutate Node after it's sealed");
             }
         }
-        class Scope : Epoch { public Scope(EpochBlock block) => OnMounted(block); }
+        class Scope : Epoch { 
+            EpochBlock block; 
+            public Scope(EpochBlock block) => this.block = block;
+            protected override void OnMounted(EpochBuilder s) => block(s);
+        }
     }
     // ============================== Epoch ============================================================
     internal interface IEpochFriend { void Mount(EpochBuilder s); }
@@ -216,51 +220,39 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : IEpochFriend, ILifecycle {
         Node node;
-        List<AttachBlock> attachBlocks = new List<AttachBlock>();
         List<Action> cleanupBlocks = new List<Action>();
-        EpochBlock mountBlock;
-        bool isDeferred;
+        protected bool IsEager = true;
+        protected string Name = null;
         protected TreeCoords Coords => node.Coords;
-        public Epoch(bool isDeferred = true) {
-            this.isDeferred = isDeferred;
-        }
+        public override string ToString() => Name ?? base.ToString();
         void ILifecycle.Attach(Node parent) {
             if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
             node = parent;
-            Action<Action> addCleanup = fn => cleanupBlocks.Add(fn);
-            foreach (var fn in attachBlocks) fn?.Invoke(addCleanup);
-            attachBlocks.Clear();
+            Action<Action> onDetached = fn => cleanupBlocks.Add(fn);
+            OnAttached(onDetached);
             if (node.Parent != null) Schedule();
         }
         void ILifecycle.Cleanup() {
             foreach (var fn in cleanupBlocks) fn?.Invoke();
-            mountBlock = null;
             cleanupBlocks.Clear();
         }
         void IEpochFriend.Mount(EpochBuilder s) {
             // TODO: Keyed epochs can unmount themselves before this function completes.
-            mountBlock?.Invoke(s);
+            OnMounted(s);
         }
-        protected void OnAttached(AttachBlock block) {
-            if (node != null) throw new InvalidOperationException("Epoch is already attached");
-            attachBlocks.Add(block);
-        }
-        protected void OnMounted(EpochBlock block) {
-            if (node != null) throw new InvalidOperationException("Epoch is already attached");
-            if (mountBlock != null) throw new InvalidOperationException("Epoch already has a mount block");
-            mountBlock = block;
-        }
+        protected virtual void OnAttached(Action<Action> onDetach) { }
+        protected virtual void OnMounted(EpochBuilder s) { }
         protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
         protected bool TryGetSubEpoch<T>(out T epoch) where T : Epoch => node.TryGetSubEpoch(out epoch);
         protected List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch => node.GetSubEpochs(storeIn);
         protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
         protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
         protected void DropDynamic(object key) => node.DropDynamic(key);
-        protected void Schedule() { node.Schedule(isDeferred); }
+        protected void Schedule() { node.Schedule(IsEager); }
     }
     // ============================== ExecutionEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    internal interface INodeScheduler { void Schedule(Node node, bool isDeferred); }
+    internal interface INodeScheduler { void Schedule(Node node, bool isEager); }
     public abstract class ExecutionEngine : Epoch, INodeScheduler {
         public FlushMode FlushMode = FlushMode.Immediate;
         List<Node> incoming = new List<Node>();
@@ -270,7 +262,6 @@ namespace Spoke {
         List<string> pendingLogs = new List<string>();
         DeferredQueue deferred = new DeferredQueue();
         ISpokeLogger logger;
-        protected ExecutionEngine Parent { get; private set; }
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         protected bool HasPending => Next != null;
         public bool IsFlushing { get; private set; }
@@ -278,14 +269,10 @@ namespace Spoke {
         public ExecutionEngine(FlushMode flushMode, ISpokeLogger logger = null) {
             _flush = Flush;
             this.logger = logger ?? new ConsoleSpokeLogger();
-            OnAttached(cleanup => {
-                if (TryGetContext<ExecutionEngine>(out var parent)) Parent = parent;
-                cleanup(() => Parent = null);
-            });
         }
         public SpokeHandle Hold() => deferred.Hold();
-        void INodeScheduler.Schedule(Node node, bool isDeferred) {
-            if (!isDeferred && IsFlushing) {
+        void INodeScheduler.Schedule(Node node, bool isEager) {
+            if (isEager && IsFlushing) {
                 (node as IExecutable).Execute();
                 flushLogger.OnFlushNode(node);
                 return;
@@ -300,7 +287,6 @@ namespace Spoke {
         static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
         void TakeScheduled() {
             if (incoming.Count == 0) return;
-            var prevIsPending = HasPending;
             foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list

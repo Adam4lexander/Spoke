@@ -11,6 +11,7 @@
 // > Dock
 // > SpokeEngine
 // > Computation
+// > DependencyTracker
 
 using System;
 using System.Collections.Generic;
@@ -192,11 +193,14 @@ namespace Spoke {
     }
     // ============================== Phase ============================================================
     public class Phase : BaseEffect {
+        ISignal<bool> mountWhen;
         public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            OnAttached(cleanup => {
-                AddStaticTrigger(mountWhen);
-            });
+            this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
+        }
+        protected override void OnAttached(Action<Action> onDetach) {
+            base.OnAttached(onDetach);
+            AddStaticTrigger(mountWhen);
         }
     }
     // ============================== Effect<T> ============================================================
@@ -245,12 +249,11 @@ namespace Spoke {
     }
     // ============================== Dock ============================================================
     public class Dock : Epoch {
-        string name;
-        public override string ToString() => name ?? base.ToString();
         public Dock(string name) {
-            this.name = name;
+            IsEager = true;
+            Name = name;
         }
-        public T Call<T>(object key, T identity) where T : Epoch => CallDynamic(key, identity);
+        public T Call<T>(object key, T epoch) where T : Epoch => CallDynamic(key, epoch);
         public void Effect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", key, buildLogic, triggers);
         public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, new Effect(name, buildLogic, triggers));
         public void Drop(object key) => DropDynamic(key);
@@ -290,35 +293,36 @@ namespace Spoke {
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
+        IEnumerable<ITrigger> triggers;
         DependencyTracker tracker;
-        string name;
-        public override string ToString() => name ?? base.ToString();
         public Computation(string name, IEnumerable<ITrigger> triggers) {
-            this.name = name;
-            OnAttached(cleanup => {
-                TryGetContext<SpokeEngine>(out var engine);
-                tracker = new DependencyTracker(engine, Schedule);
-                cleanup(() => tracker.Dispose());
-                foreach (var trigger in triggers) tracker.AddStatic(trigger);
-                tracker.SyncDependencies();
-            });
-            OnMounted(s => {
-                tracker.BeginDynamic();
-                try { OnRun(s); } finally { tracker.EndDynamic(); }
-            });
+            Name = name;
+            this.triggers = triggers;
+        }
+        protected override void OnAttached(Action<Action> onDetach) {
+            base.OnAttached(onDetach);
+            TryGetContext<SpokeEngine>(out var engine);
+            tracker = new DependencyTracker(engine, Schedule);
+            onDetach(() => tracker.Dispose());
+            foreach (var trigger in triggers) tracker.AddStatic(trigger);
+        }
+        protected override void OnMounted(EpochBuilder s) {
+            base.OnMounted(s);
+            tracker.BeginDynamic();
+            try { OnRun(s); } finally { tracker.EndDynamic(); }
         }
         protected abstract void OnRun(EpochBuilder s);
-        protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
+        protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); }
         protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
         protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.LogNextFlush(msg); }
     }
+    // ============================== DependencyTracker ============================================================
     internal class DependencyTracker : IDisposable {
         SpokeEngine engine;
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
-        public List<Computation> dependencies = new List<Computation>();
         public int depIndex;
         public DependencyTracker(SpokeEngine engine, Action schedule) {
             this.engine = engine;
@@ -347,19 +351,12 @@ namespace Spoke {
                 dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
                 dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
             }
-            SyncDependencies();
-        }
-        public void SyncDependencies() {
-            dependencies.Clear();
-            foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-            foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
         }
         public void Dispose() {
             seen.Clear();
             foreach (var handle in staticHandles) handle.h.Dispose();
             foreach (var handle in dynamicHandles) handle.h.Dispose();
             staticHandles.Clear(); dynamicHandles.Clear();
-            dependencies.Clear();
         }
         Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
             if (index >= depIndex) return;
