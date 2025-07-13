@@ -126,37 +126,50 @@ namespace Spoke {
     // ============================== SpokeBlocks ============================================================
     internal static class SpokeBlocks {
         public static ScopeBlock Effect(string name, EffectBlock block, params ITrigger[] triggers) => s => {
-            var onRunCommand = Trigger.Create<EpochBuilder>();
-            var addDynamicTrigger = Computation(name, s => onRunCommand.Invoke(s), triggers)(s);
+            var tracker = TrackDependencies(name, triggers)(s);
             s.TryGetContext<SpokeEngine>(out var engine);
-            var builder = new EffectBuilderImpl(engine.LogNextFlush, addDynamicTrigger);
-            Action<EpochBuilder> runBlock = s => builder.Mount(s, block);
-            var handle = onRunCommand.Subscribe(runBlock);
-            s.OnDetach(() => handle.Dispose());
+            var builder = new EffectBuilderImpl(engine.LogNextFlush, tracker.AddDynamic);
+            s.OnMount(s => {
+                tracker.BeginDynamic();
+                try { builder.Mount(s, block); } finally { tracker.EndDynamic(); }
+            });
+        };
+        public static ScopeBlock Reaction(string name, EffectBlock block, params ITrigger[] triggers) {
+            var isFirst = true;
+            return Effect(name, s => {
+                if (!isFirst) block?.Invoke(s); else isFirst = false;
+            }, triggers);
+        }
+        public static ScopeBlock Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) => s => {
+            var tracker = TrackDependencies(name, triggers)(s);
+            tracker.AddStatic(mountWhen);
+            s.TryGetContext<SpokeEngine>(out var engine);
+            var builder = new EffectBuilderImpl(engine.LogNextFlush, tracker.AddDynamic);
+            s.OnMount(s => {
+                tracker.BeginDynamic();
+                try { builder.Mount(s, block); } finally { tracker.EndDynamic(); }
+            });
         };
         public static ScopeBlock<ISignal<T>> Memo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s => {
             var state = State.Create<T>();
-            var onRunCommand = Trigger.Create();
-            var addDynamicTrigger = Computation(name, _ => onRunCommand.Invoke(), triggers)(s);
-            var builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = addDynamicTrigger });
+            var tracker = TrackDependencies(name, triggers)(s);
+            var builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = tracker.AddDynamic });
             Action<MemoBuilder> memoBlock = s => { if (selector != null) state.Set(selector(s)); };
             Action runMemoBlock = () => memoBlock(builder);
-            var handle = onRunCommand.Subscribe(() => memoBlock(builder));
-            s.OnDetach(() => handle.Dispose());
+            s.OnMount(s => {
+                tracker.BeginDynamic();
+                try { runMemoBlock(); } finally { tracker.EndDynamic(); }
+            });
             return state;
         };
-        static ScopeBlock<Action<ITrigger>> Computation(string name, EpochBlock onRun, params ITrigger[] triggers) => s => {
+        static ScopeBlock<DependencyTracker> TrackDependencies(string name, params ITrigger[] triggers) => s => {
             s.SetName(name);
             s.TryGetContext<SpokeEngine>(out var engine);
             var tracker = new DependencyTracker(engine, s.Schedule);
             s.OnDetach(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             tracker.SyncDependencies();
-            s.OnMount(s => {
-                tracker.BeginDynamic();
-                try { onRun(s); } finally { tracker.EndDynamic(); }
-            });
-            return trigger => tracker.AddDynamic(trigger);
+            return tracker;
         };
         class EffectBuilderImpl : EffectBuilder {
             Action<string> logFlush;
@@ -202,10 +215,10 @@ namespace Spoke {
         public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
         public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect("Effect", buildLogic, triggers));
         public static void Effect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect(name, buildLogic, triggers));
-        public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction("Reaction", block, triggers));
-        public static void Reaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction(name, block, triggers));
-        public static void Phase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase("Phase", mountWhen, buildLogic, triggers));
-        public static void Phase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase(name, mountWhen, buildLogic, triggers));
+        public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(SpokeBlocks.Reaction("Reaction", block, triggers));
+        public static void Reaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Call(SpokeBlocks.Reaction(name, block, triggers));
+        public static void Phase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Phase("Phase", mountWhen, buildLogic, triggers));
+        public static void Phase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Phase(name, mountWhen, buildLogic, triggers));
         public static Dock Dock(this EffectBuilder s) => s.Call(new Dock("Dock"));
         public static Dock Dock(this EffectBuilder s, string name) => s.Call(new Dock(name));
     }
