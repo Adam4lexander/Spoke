@@ -54,7 +54,7 @@ namespace Spoke {
         }
     }
     internal interface ILifecycle { void Attach(Node parent); void Cleanup(); }
-    internal interface IExecutable { void Execute(); }
+    internal interface IExecutable { void Execute(bool isEager); }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
@@ -67,7 +67,7 @@ namespace Spoke {
         public static Node<T> CreateRoot<T>(T epoch) where T : Epoch {
             var node = new Node<T>(epoch);
             (node as ILifecycle).Attach(null);
-            (node as IExecutable).Execute();
+            (node as IExecutable).Execute(true);
             return node;
         }
         List<Node> children = new List<Node>();
@@ -93,7 +93,7 @@ namespace Spoke {
         public override string ToString() => UntypedEpoch.ToString();
         public void Schedule(bool isEager) {
             if (engine == null) throw new Exception("Cannot find Execution Engine");
-            if (isPending) return;
+            if (isPending || Fault != null) return;
             isPending = true;
             (engine as INodeScheduler).Schedule(this, isEager);
         }
@@ -115,11 +115,16 @@ namespace Spoke {
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
         }
-        void IExecutable.Execute() {
+        void IExecutable.Execute(bool isEager) {
             isPending = false; // Set now in case I trigger myself
             Unmount();
             isSealed = false;
-            try { (UntypedEpoch as IEpochFriend).Mount(builder); } catch (Exception e) { Fault = e; }
+            try { (UntypedEpoch as IEpochFriend).Mount(builder); } catch (Exception e) {
+                Fault = e;
+                // TODO: Figure out a way to propagate errors up when needed. Rethrowing
+                // if eager is a quick hack for procgen use case
+                if (isEager) throw;
+            }
             isSealed = true;
         }
         public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
@@ -205,8 +210,8 @@ namespace Spoke {
                 if (node.isSealed) throw new Exception("Cannot mutate Node after it's sealed");
             }
         }
-        class Scope : Epoch { 
-            EpochBlock block; 
+        class Scope : Epoch {
+            EpochBlock block;
             public Scope(EpochBlock block) => this.block = block;
             protected override void OnMounted(EpochBuilder s) => block(s);
         }
@@ -221,7 +226,7 @@ namespace Spoke {
     public abstract class Epoch : IEpochFriend, ILifecycle {
         Node node;
         List<Action> cleanupBlocks = new List<Action>();
-        protected bool IsEager = true;
+        protected bool IsEager = false;
         protected string Name = null;
         protected TreeCoords Coords => node.Coords;
         public override string ToString() => Name ?? base.ToString();
@@ -272,8 +277,9 @@ namespace Spoke {
         }
         public SpokeHandle Hold() => deferred.Hold();
         void INodeScheduler.Schedule(Node node, bool isEager) {
+            if (node.Fault != null) return;
             if (isEager && IsFlushing) {
-                (node as IExecutable).Execute();
+                (node as IExecutable).Execute(true);
                 flushLogger.OnFlushNode(node);
                 return;
             }
@@ -305,7 +311,7 @@ namespace Spoke {
                         var exec = Next;
                         execSet.Remove(exec);
                         execOrder.RemoveAt(execOrder.Count - 1);
-                        (exec as IExecutable).Execute();
+                        (exec as IExecutable).Execute(false);
                         flushLogger.OnFlushNode(exec);
                         TakeScheduled();
                     }
@@ -423,7 +429,7 @@ namespace Spoke {
         long holdIdx;
         HashSet<long> holdKeys = new HashSet<long>();
         Queue<Action> queue = new Queue<Action>();
-        Action<long> _release; 
+        Action<long> _release;
         public bool IsDraining { get; private set; }
         public bool IsEmpty => queue.Count == 0 && !IsDraining;
         public DeferredQueue() { _release = Release; }
