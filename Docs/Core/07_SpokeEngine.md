@@ -33,7 +33,7 @@ var engine = new SpokeEngine(FlushMode.Immediate);
 
 var effect = new Effect("MyEffect", engine, s => {
 
-    s.UseEffect(s => {
+    s.Effect(s => {
 
         var isSameEngine = s.Engine == engine; // True
     });
@@ -116,7 +116,7 @@ public class MyBehaviour : SpokeBehaviour {
         var className = State.Create("Warrior");
         var level = State.Create(1);
 
-        s.UseEffect(s => {
+        s.Effect(s => {
 
             Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
         });

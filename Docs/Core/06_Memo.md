@@ -36,7 +36,7 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        var memo = s.UseMemo(s => s.D(signalA) + s.D(signalB));
+        var memo = s.Memo(s => s.D(signalA) + s.D(signalB));
     }
 }
 ```
@@ -75,15 +75,15 @@ You use `Memo` to transform multiple input signals into a single output signal.
 var myCash = State.Create(100);
 var partnersCash = State.Create(110);
 
-var totalCash = s.UseMemo(s => s.D(myCash) + s.D(partnersCash));
+var totalCash = s.Memo(s => s.D(myCash) + s.D(partnersCash));
 
-var canBuyHouse = s.UseMemo(s => {
+var canBuyHouse = s.Memo(s => {
 
     if (s.D(totalCash) > 1000000) return "No!";
     else return "Double No!";
 });
 
-s.UseEffect(s => Debug.Log($"Can we buy a house? -- {s.D(canBuyHouse)}"));
+s.Effect(s => Debug.Log($"Can we buy a house? -- {s.D(canBuyHouse)}"));
 ```
 
 Changing either `myCash` or `partnersCash` will trigger a cascade of changes across the Memos. A Memo will only trigger if its selector function produces a value that was different from the previous one.
@@ -103,10 +103,10 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        var isAlive = s.UseMemo(s => s.D(hitpoints) > 0f);
-        var isAnimating = s.UseMemo(s => s.D(isAlive) && !s.D(isParalyzed) && !s.D(isFrozen));
+        var isAlive = s.Memo(s => s.D(hitpoints) > 0f);
+        var isAnimating = s.Memo(s => s.D(isAlive) && !s.D(isParalyzed) && !s.D(isFrozen));
 
-        s.UseEffect(s => {
+        s.Effect(s => {
 
             if (!s.D(isAnimating)) return; // exit if Effect remounts with isAnimating.Now=false
 
@@ -127,10 +127,10 @@ The number one rule when using Memos is to make them pure functions without side
 
 ```csharp
 // This is fine!
-s.UseMemo(s => s.D(num1) + s.D(num2));
+s.Memo(s => s.D(num1) + s.D(num2));
 
 // Don't do this
-s.UseMemo(s => {
+s.Memo(s => {
 
     if (s.D(isHit)) PlaySound(); // <-- Bad: side effect!
     return s.D(health) - 10;
@@ -146,10 +146,10 @@ For complex graphs of Memos, Spoke makes no guarantee what order the Memos are r
 ```csharp
 var num = State.Create(100);
 
-var half = s.UseMemo(s => s.D(num) / 2);
-var quarter = s.UseMemo(s => s.D(num) / 4);
+var half = s.Memo(s => s.D(num) / 2);
+var quarter = s.Memo(s => s.D(num) / 4);
 
-var sum = s.UseMemo(s => s.D(half) + s.D(quarter));
+var sum = s.Memo(s => s.D(half) + s.D(quarter));
 ```
 
 When `num` is changed, what order will the memos run, and how many times will `sum` run?
@@ -172,23 +172,23 @@ var num = State.Create(100);
 var halfState = State.Create(num.Now / 2);
 var quarterState = State.Create(num.Now / 4);
 
-s.UseEffect(s => {
+s.Effect(s => {
 
-    var half = s.UseMemo(s => s.D(num) / 2);
+    var half = s.Memo(s => s.D(num) / 2);
 
-    s.UseSubscribe(half, halfState.Set);
+    s.Subscribe(half, halfState.Set);
 
 }, someTrigger);
 
-s.UseEffect(s => {
+s.Effect(s => {
 
-    var quarter = s.UseMemo(s => s.D(num) / 4);
+    var quarter = s.Memo(s => s.D(num) / 4);
 
-    s.UseSubscribe(quarter, quarterState.Set);
+    s.Subscribe(quarter, quarterState.Set);
 
 }, someOtherTrigger);
 
-var sum = s.UseMemo(s => s.D(halfState) + s.D(quarterState));
+var sum = s.Memo(s => s.D(halfState) + s.D(quarterState));
 ```
 
 This is what makes the issue tricky to explain:

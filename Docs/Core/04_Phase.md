@@ -19,9 +19,9 @@ Under the hood, a `Phase` is just syntactic sugar for an `Effect` that disposes 
 You create a phase inside an `EffectBlock` by calling `UsePhase` on the `EffectBuilder`.
 
 ```csharp
-s.UsePhase(IsEnabled, s => {
+s.Phase(IsEnabled, s => {
     // Runs only while IsEnabled.Now == true
-    s.UseSubscribe(SomeTrigger, DoThing);
+    s.Subscribe(SomeTrigger, DoThing);
 });
 ```
 
@@ -30,7 +30,7 @@ This is equivalent to:
 ```csharp
 s.Use(new Phase("Phase", s.SpokeEngine, IsEnabled, s => {
 
-    s.UseSubscribe(SomeTrigger, DoThing);
+    s.Subscribe(SomeTrigger, DoThing);
 }));
 ```
 
@@ -43,9 +43,9 @@ The inner block is another `EffectBlock`, and just like a regular `Effect`, you 
 A `Phase` can mount/unmount based on any reactive boolean:
 
 ```csharp
-var isAlive = s.UseMemo(s => s.D(Health) > 0);
+var isAlive = s.Memo(s => s.D(Health) > 0);
 
-s.UsePhase(isAlive, s => {
+s.Phase(isAlive, s => {
     // Runs only while Health > 0
 });
 ```
@@ -53,7 +53,7 @@ s.UsePhase(isAlive, s => {
 You can also create more complex logic inline:
 
 ```csharp
-s.UsePhase(s.UseMemo(s => s.D(IsVisible) && s.D(CanScan)), s => {
+s.Phase(s.Memo(s => s.D(IsVisible) && s.D(CanScan)), s => {
     // Runs only while visible AND able to scan
 });
 ```

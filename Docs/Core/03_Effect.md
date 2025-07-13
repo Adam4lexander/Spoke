@@ -11,7 +11,7 @@ In Spoke an `Effect` can be understood as follows:
 - Those children might also be `Effect`s.
 - When an `Effect` is disposed, all its descendants will be disposed too.
 
-There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist to make your intent clearer, your code shorter, and your mental model sharper.
+There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist convenience and improved clarity in your code.
 
 ---
 
@@ -59,18 +59,13 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
         // Init is an EffectBlock
 
-        var effect = new Effect("innerEffect", s.Engine, s => {
+        s.Effect(s => {
             // This lambda is an EffectBlock
         });
-        s.Use(effect); // so effect is auto-cleaned
 
-        s.UseEffect(s => {
-            // This lambda is also an EffectBlock
-        });
-
-        s.UseEffect(MyFirstEffect);
-        s.UseEffect(MySecondEffect);
-        s.UseEffect(MyEffectWithParam("Hello"));
+        s.Effect(MyFirstEffect);
+        s.Effect(MySecondEffect);
+        s.Effect(MyEffectWithParam("Hello"));
     }
 
     void MyFirstEffect(EffectBuilder s) {
@@ -108,23 +103,23 @@ public interface EffectBuilder {
     void Use(SpokeHandle trigger);
     T Use<T>(T disposable) where T : IDisposable;
 
-    void UseSubscribe(ITrigger trigger, Action action);
-    void UseSubscribe<T>(ITrigger<T> trigger, Action<T> action);
+    void Subscribe(ITrigger trigger, Action action);
+    void Subscribe<T>(ITrigger<T> trigger, Action<T> action);
 
-    ISignal<T> UseMemo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers);
-    ISignal<T> UseMemo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers);
+    ISignal<T> Memo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers);
+    ISignal<T> Memo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers);
 
-    void UseEffect(EffectBlock func, params ITrigger[] triggers);
-    void UseEffect(string name, EffectBlock func, params ITrigger[] triggers);
+    void Effect(EffectBlock func, params ITrigger[] triggers);
+    void Effect(string name, EffectBlock func, params ITrigger[] triggers);
 
-    void UseReaction(EffectBlock action, params ITrigger[] triggers);
-    void UseReaction(string name, EffectBlock action, params ITrigger[] triggers);
+    void Reaction(EffectBlock action, params ITrigger[] triggers);
+    void Reaction(string name, EffectBlock action, params ITrigger[] triggers);
 
-    void UsePhase(ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
-    void UsePhase(string name, ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
+    void Phase(ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
+    void Phase(string name, ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
 
-    IDock UseDock();
-    IDock UseDock(string name);
+    IDock Dock();
+    IDock Dock(string name);
 
     void OnCleanup(Action cleanup);
 }
@@ -275,15 +270,13 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        s.UseEffect(s => {
-
-            s.UseEffect(s => {
-
-                s.UsePhase(IsEnabled, s => { });
+        s.Effect(s => {
+            s.Effect(s => {
+                s.Phase(IsEnabled, s => { });
             });
         });
 
-        var num = s.UseMemo(s => {
+        var num = s.Memo(s => {
             // I use it here too, which isn't even an EffectBuilder! It's a MemoBuilder!
             return 0;
         });
@@ -298,11 +291,10 @@ There's a practical reason too. It prevents accidental leakage of `EffectBuilder
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
 
-    protected override void Init(EffectBuilder initBuilder) {
+    protected override void Init(EffectBuilder outerBuilder) {
 
-        initBuilder.UseEffect(innerBuilder => {
-
-            initBuilder.UseEffect(/*...*/) // Oops wrong builder!
+        outerBuilder.Effect(innerBuilder => {
+            outerBuilder.Effect(/*...*/) // Oops wrong builder!
         });
     }
 }

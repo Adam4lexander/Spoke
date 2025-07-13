@@ -14,16 +14,16 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        s.UseSubscribe(someTrigger, () => {
+        s.Subscribe(someTrigger, () => {
 
-            s.UseEffect(s => { /* ... */ }); // Error! Builder is sealed
+            s.Effect(s => { /* ... */ }); // Error! Builder is sealed
         });
 
-        var dock = s.UseDock();
+        var dock = s.Dock();
 
-        s.UseSubscribe(someTrigger, () => {
+        s.Subscribe(someTrigger, () => {
 
-            dock.UseEffect("key", s => { /* ... */ }); // This works!
+            dock.Effect("key", s => { /* ... */ }); // This works!
         });
     }
 }
@@ -50,16 +50,16 @@ public class OverheadUISystem : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         // Create a Dock that will hold one UI Effect per actor
-        var dock = s.UseDock();
+        var dock = s.Dock();
 
         // Mount a UI when an actor comes into range
-        s.UseSubscribe(onActorInRange, actor => {
+        s.Subscribe(onActorInRange, actor => {
 
-            dock.UseEffect(actor, OverheadUI(actor));
+            dock.Effect(actor, OverheadUI(actor));
         });
 
         // Unmount the UI when they go out of range
-        s.UseSubscribe(onActorOutRange, actor => {
+        s.Subscribe(onActorOutRange, actor => {
 
             dock.Drop(actor);
         });

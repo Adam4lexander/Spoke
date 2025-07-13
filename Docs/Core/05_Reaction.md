@@ -19,7 +19,7 @@ This makes it perfect for logic that:
 You create a reaction inside an `EffectBlock` using `UseReaction`.
 
 ```csharp
-s.UseReaction(s => {
+s.Reaction(s => {
 
     Debug.Log("I took damage!");
 
@@ -53,7 +53,7 @@ Think of a `Reaction` as a **stateless fire-once effect**, ideal for handling pu
 - Responding to sensor pings:
 
 ```csharp
-s.UseReaction(s => {
+s.Reaction(s => {
 
     FlashLight();
 
@@ -63,7 +63,7 @@ s.UseReaction(s => {
 - Reacting to damage events:
 
 ```csharp
-s.UseReaction(s => {
+s.Reaction(s => {
 
     PlayHitAnimation();
 
