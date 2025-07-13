@@ -125,7 +125,6 @@ namespace Spoke {
     }
     // ============================== BaseEffect ============================================================
     public interface EffectBuilder {
-        SpokeEngine Engine { get; }
         void Log(string msg);
         T D<T>(ISignal<T> signal);
         void Use(SpokeHandle trigger);
@@ -168,7 +167,6 @@ namespace Spoke {
                 this.s = s;
                 block?.Invoke(this);
             }
-            public SpokeEngine Engine => effect.engine;
             public void Log(string msg) => effect.LogFlush(msg);
             public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
             public void Use(SpokeHandle trigger) => s.Use(trigger);
@@ -195,7 +193,9 @@ namespace Spoke {
     // ============================== Phase ============================================================
     public class Phase : BaseEffect {
         public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            AddStaticTrigger(mountWhen);
+            OnAttached(cleanup => {
+                AddStaticTrigger(mountWhen);
+            });
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
     }
@@ -290,18 +290,17 @@ namespace Spoke {
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
-        protected SpokeEngine engine;
         DependencyTracker tracker;
         string name;
         public override string ToString() => name ?? base.ToString();
         public Computation(string name, IEnumerable<ITrigger> triggers) {
             this.name = name;
-            tracker = DependencyTracker.Create(this);
-            foreach (var trigger in triggers) tracker.AddStatic(trigger);
-            tracker.SyncDependencies();
             OnAttached(cleanup => {
-                TryGetContext(out engine);
+                TryGetContext<SpokeEngine>(out var engine);
+                tracker = new DependencyTracker(engine, Schedule);
                 cleanup(() => tracker.Dispose());
+                foreach (var trigger in triggers) tracker.AddStatic(trigger);
+                tracker.SyncDependencies();
             });
             OnMounted(s => {
                 tracker.BeginDynamic();
@@ -311,63 +310,62 @@ namespace Spoke {
         protected abstract void OnRun(EpochBuilder s);
         protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); tracker.SyncDependencies(); }
         protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-        protected void LogFlush(string msg) => engine.LogNextFlush(msg);
+        protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.LogNextFlush(msg); }
+    }
+    internal class DependencyTracker : IDisposable {
+        SpokeEngine engine;
+        Action schedule;
+        HashSet<ITrigger> seen = new HashSet<ITrigger>();
+        List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
+        List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
+        public List<Computation> dependencies = new List<Computation>();
+        public int depIndex;
+        public DependencyTracker(SpokeEngine engine, Action schedule) {
+            this.engine = engine;
+            this.schedule = schedule;
+        }
+        public void AddStatic(ITrigger trigger) {
+            if (!seen.Add(trigger)) return;
+            staticHandles.Add((trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, -1))));
+        }
+        public void BeginDynamic() {
+            depIndex = 0;
+            seen.Clear();
+            foreach (var dep in staticHandles) seen.Add(dep.t);
+        }
+        public void AddDynamic(ITrigger trigger) {
+            if (!seen.Add(trigger)) return;
+            if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, depIndex))));
+            else if (dynamicHandles[depIndex].t != trigger) {
+                dynamicHandles[depIndex].h.Dispose();
+                dynamicHandles[depIndex] = (trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, depIndex)));
+            }
+            depIndex++;
+        }
+        public void EndDynamic() {
+            while (dynamicHandles.Count > depIndex) {
+                dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
+                dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
+            }
+            SyncDependencies();
+        }
+        public void SyncDependencies() {
+            dependencies.Clear();
+            foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
+            foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
+        }
+        public void Dispose() {
+            seen.Clear();
+            foreach (var handle in staticHandles) handle.h.Dispose();
+            foreach (var handle in dynamicHandles) handle.h.Dispose();
+            staticHandles.Clear(); dynamicHandles.Clear();
+            dependencies.Clear();
+        }
         Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
-            if (index >= tracker.depIndex) return;
+            if (index >= depIndex) return;
             engine.FastHold();
-            Schedule();
+            schedule();
             (trigger as IDeferredTrigger).OnAfterNotify(() => engine.FastRelease());
         };
-        struct DependencyTracker : IDisposable {
-            Computation owner;
-            HashSet<ITrigger> seen;
-            List<(ITrigger t, SpokeHandle h)> staticHandles, dynamicHandles;
-            public List<Computation> dependencies;
-            public int depIndex;
-            public static DependencyTracker Create(Computation owner) => new DependencyTracker {
-                owner = owner,
-                seen = new HashSet<ITrigger>(),
-                staticHandles = new List<(ITrigger t, SpokeHandle h)>(),
-                dynamicHandles = new List<(ITrigger t, SpokeHandle h)>(),
-                dependencies = new List<Computation>()
-            };
-            public void AddStatic(ITrigger trigger) {
-                if (trigger == owner || !seen.Add(trigger)) return;
-                staticHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, -1))));
-            }
-            public void BeginDynamic() {
-                depIndex = 0;
-                seen.Clear();
-                foreach (var dep in staticHandles) seen.Add(dep.t);
-            }
-            public void AddDynamic(ITrigger trigger) {
-                if (trigger == owner || !seen.Add(trigger)) return;
-                if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex))));
-                else if (dynamicHandles[depIndex].t != trigger) {
-                    dynamicHandles[depIndex].h.Dispose();
-                    dynamicHandles[depIndex] = (trigger, trigger.Subscribe(owner.ScheduleFromTrigger(trigger, depIndex)));
-                }
-                depIndex++;
-            }
-            public void EndDynamic() {
-                while (dynamicHandles.Count > depIndex) {
-                    dynamicHandles[dynamicHandles.Count - 1].h.Dispose();
-                    dynamicHandles.RemoveAt(dynamicHandles.Count - 1);
-                }
-                SyncDependencies();
-            }
-            public void SyncDependencies() {
-                dependencies.Clear();
-                foreach (var trig in staticHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-                foreach (var trig in dynamicHandles) if (trig.t is Computation comp) dependencies.Add(comp);
-            }
-            public void Dispose() {
-                seen.Clear();
-                foreach (var handle in staticHandles) handle.h.Dispose();
-                foreach (var handle in dynamicHandles) handle.h.Dispose();
-                staticHandles.Clear(); dynamicHandles.Clear();
-                dependencies.Clear();
-            }
-        }
     }
 }
