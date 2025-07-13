@@ -15,12 +15,12 @@ public class FlushLoopStressTest : SpokeBehaviour {
 
         const int nIterations = 100;
 
-        var splitLeft = s.UseMemo(s => Mathf.FloorToInt(s.D(counter) / 2f));
-        var splitRight = s.UseMemo(s => Mathf.CeilToInt(s.D(counter) / 2f));
-        var recombine = s.UseMemo(s => s.D(splitLeft) + s.D(splitRight));
-        var isDone = s.UseMemo(s => s.D(recombine) >= nIterations);
+        var splitLeft = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
+        var splitRight = s.Memo(s => Mathf.CeilToInt(s.D(counter) / 2f));
+        var recombine = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
+        var isDone = s.Memo(s => s.D(recombine) >= nIterations);
 
-        s.UseEffect(s => {
+        s.Effect(s => {
             if (s.D(isDone)) return;
             counter.Update(x => x + 1);
         }, counter);
@@ -70,12 +70,12 @@ public class DynamicScopeMounting : SpokeBehaviour {
     EffectBlock RunTest(int nIterations) => s => {
         var counter = State.Create(0);
 
-        var splitLeft = s.UseMemo(s => Mathf.FloorToInt(s.D(counter) / 2f));
-        var splitRight = s.UseMemo(s => Mathf.CeilToInt(s.D(counter) / 2f));
-        var recombine = s.UseMemo(s => s.D(splitLeft) + s.D(splitRight));
-        var isDone = s.UseMemo(s => s.D(recombine) >= nIterations);
+        var splitLeft = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
+        var splitRight = s.Memo(s => Mathf.CeilToInt(s.D(counter) / 2f));
+        var recombine = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
+        var isDone = s.Memo(s => s.D(recombine) >= nIterations);
 
-        s.UseEffect(s => {
+        s.Effect(s => {
             if (s.D(isDone)) return;
             counter.Update(x => x + 1);
         }, counter);
@@ -105,7 +105,7 @@ This is where you pay the price: **allocations occur when you call functions lik
 This is a subtle source of GC worth mentioning — and one that’s easy to miss.
 
 ```csharp
-s.UseEffect(s => {
+s.Effect(s => {
     if (s.D(cond1)) return;
     if (s.D(cond2)) return;
     DoSomething();
@@ -127,7 +127,7 @@ If the same dependencies are accessed in the same order across runs, Spoke reuse
 
 Spoke allocates when you:
 
-- Call `State.Create`, `UseMemo`, `UseEffect`, or similar functions.
+- Call `State.Create`, `s.Memo`, `s.Effect`, or similar functions.
 - Change dynamic dependencies on remount.
 
 It does **not** allocate:

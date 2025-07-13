@@ -14,15 +14,12 @@ The `EffectBuilder` has a method `Log(msg)` that can be used anywhere within an 
 public class FlushLoggerTest : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
-
         s.Log("Init ran");
 
-        s.UsePhase(IsStarted, s => {
-
+        s.Phase(IsStarted, s => {
             s.Log("IsStarted Phase ran");
 
-            s.UseEffect(s => {
-
+            s.Effect(s => {
                 s.Log("Effect-A ran");
             });
         });
@@ -94,13 +91,11 @@ public class ExceptionLoggingTest : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        s.UseEffect("SafeEffect", s => {
-
+        s.Effect("SafeEffect", s => {
             // Safe Logic
         });
 
-        s.UseEffect("DangerEffect", s => {
-
+        s.Effect("DangerEffect", s => {
             throw new System.Exception("Something bad happened!");
         });
     }
@@ -128,8 +123,8 @@ System.Exception: Something bad happened!
 
 ## Labeled Effects and Memos
 
-Methods like `UseEffect` and `UseMemo` have overloads that take a string label as the first parameter.
+Methods like `Effect` and `Memo` have overloads that take a string label as the first parameter.
 
-This label determines how the node appears in the flush logger hierarchy — as shown in the previous example.
+This label determines how the node appears in the flush logger hierarchy, as shown in the previous example.
 
-Labels are optional, but make the flush logs much easier to read — especially in large graphs.
+Labels are optional, but make the flush logs much easier to read, especially in large graphs.
