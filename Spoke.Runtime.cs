@@ -62,6 +62,8 @@ namespace Spoke {
         void SetName(string name);
         void OnDetach(Action fn);
         void OnMount(Action<EpochBuilder> fn);
+        public bool TryGetContext<T>(out T context) where T : Epoch;
+        void Schedule();
     }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
@@ -227,6 +229,8 @@ namespace Spoke {
             }
             public void OnMount(Action<EpochBuilder> fn) => mountFns.Add(fn);
             public void SetName(string name) => this.name = name;
+            public new bool TryGetContext<T>(out T context) where T : Epoch => base.TryGetContext<T>(out context);
+            public new void Schedule() => base.Schedule();
             protected void Init() {
                 OnAttached(cleanup => {
                     foreach (var fn in detachFns) cleanup(fn);

@@ -123,6 +123,33 @@ namespace Spoke {
         }
         public void Update(Func<T, T> setter) { if (setter != null) Set(setter(Now)); }
     }
+    // ============================== SpokeBlocks ============================================================
+    internal static class SpokeBlocks {
+        public static ScopeBlock<ISignal<T>> Memo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s => {
+            var state = State.Create<T>();
+            var onRunCommand = Trigger.Create();
+            var addDynamicTrigger = Computation(name, () => onRunCommand.Invoke(), triggers)(s);
+            var builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = addDynamicTrigger });
+            Action<MemoBuilder> memoBlock = s => { if (selector != null) state.Set(selector(s)); };
+            Action runMemoBlock = () => memoBlock(builder);
+            var handle = onRunCommand.Subscribe(() => memoBlock(builder));
+            s.OnDetach(() => handle.Dispose());
+            return state;
+        };
+        static ScopeBlock<Action<ITrigger>> Computation(string name, Action onRun, params ITrigger[] triggers) => s => {
+            s.SetName(name);
+            s.TryGetContext<SpokeEngine>(out var engine);
+            var tracker = new DependencyTracker(engine, s.Schedule);
+            s.OnDetach(() => tracker.Dispose());
+            foreach (var trigger in triggers) tracker.AddStatic(trigger);
+            tracker.SyncDependencies();
+            s.OnMount(s => {
+                tracker.BeginDynamic();
+                try { onRun(); } finally { tracker.EndDynamic(); }
+            });
+            return trigger => tracker.AddDynamic(trigger);
+        };
+    }
     // ============================== BaseEffect ============================================================
     public interface EffectBuilder {
         void Log(string msg);
@@ -131,14 +158,15 @@ namespace Spoke {
         T Use<T>(T disposable) where T : IDisposable;
         T Call<T>(T identity) where T : Epoch;
         void Call(ScopeBlock block);
+        T Call<T>(ScopeBlock<T> block);
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action cleanup);
     }
     public static partial class EffectBuilderExtensions {
         public static void Subscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
-        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(SpokeBlocks.Memo<T>("Memo", selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(SpokeBlocks.Memo<T>(name, selector, triggers));
         public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
         public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
         public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
@@ -173,6 +201,7 @@ namespace Spoke {
             public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
             public T Call<T>(T identity) where T : Epoch => s.Call(identity);
             public void Call(ScopeBlock block) => s.Call(block);
+            public T Call<T>(ScopeBlock<T> block) => s.Call(block);
             public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
             public void OnCleanup(Action fn) => s.OnCleanup(fn);
         }
@@ -219,22 +248,6 @@ namespace Spoke {
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
     }
     // ============================== Memo ============================================================
-    public class Memo<T> : Computation, ISignal<T>, IDeferredTrigger {
-        State<T> state = State.Create<T>();
-        public T Now => state.Now;
-        Action<MemoBuilder> block;
-        MemoBuilder builder;
-        public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, triggers) {
-            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger });
-            block = s => { if (selector != null) state.Set(selector(s)); };
-        }
-        protected override void OnRun(EpochBuilder s) => block(builder);
-        public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
-        public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
-        public void Unsubscribe(Action action) => state.Unsubscribe(action);
-        public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
-    }
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
             public Action<ITrigger> AddDynamicTrigger;
