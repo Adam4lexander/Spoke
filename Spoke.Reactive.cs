@@ -150,6 +150,23 @@ namespace Spoke {
                 try { builder.Mount(s, block); } finally { tracker.EndDynamic(); }
             });
         };
+        public static ScopeBlock<ISignal<T>> Effect<T>(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s => {
+            var state = State.Create<T>();
+            var tracker = TrackDependencies(name, triggers)(s);
+            s.TryGetContext<SpokeEngine>(out var engine);
+            var builder = new EffectBuilderImpl(engine.LogNextFlush, tracker.AddDynamic);
+            EffectBlock mountBlock = s => {
+                if (block == null) return;
+                var result = block.Invoke(s);
+                if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
+                s.Call(s => state.Set(result.Now));
+            };
+            s.OnMount(s => {
+                tracker.BeginDynamic();
+                try { builder.Mount(s, mountBlock); } finally { tracker.EndDynamic(); }
+            });
+            return state;
+        };
         public static ScopeBlock<ISignal<T>> Memo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s => {
             var state = State.Create<T>();
             var tracker = TrackDependencies(name, triggers)(s);
@@ -211,8 +228,8 @@ namespace Spoke {
         public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(SpokeBlocks.Memo<T>("Memo", selector, triggers));
         public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(SpokeBlocks.Memo<T>(name, selector, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect<T>("Effect", block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect<T>(name, block, triggers));
         public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect("Effect", buildLogic, triggers));
         public static void Effect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(SpokeBlocks.Effect(name, buildLogic, triggers));
         public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(SpokeBlocks.Reaction("Reaction", block, triggers));
