@@ -1,30 +1,64 @@
 # SpokeEngine
 
-The `SpokeEngine` is the core runtime that powers reactive computation in Spoke. You'll rarely need to interact with the `SpokeEngine` directly — but it's the **most foundational part** of Spoke's behaviour.
+The `SpokeEngine` is an implementation of `ExecutionEngine`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `SpokeEngine` specific behaviour that's not part of the base `ExecutionEngine`.
 
-Understanding it will complete your mental model of Spoke and make writing code more predictable.
+When epochs are attached to a call-tree, they schedule themselves on the nearest `ExecutionEngine`. Unless you're hacking deep in Spoke, this will be a `SpokeEngine`, and it will be hosted by the root node of the tree.
 
-The responsibilities of the `SpokeEngine` fall into three parts:
-
-- **Scheduling**: Effects and Memos (both are computations) schedule themselves on the engine to be re-run.
-- **Batching**: The engine defers flushes until the right moment, allowing it to batch multiple updates together efficiently.
-- **Flushing**: It runs all scheduled computations in order, draining the queue until nothing remains.
+When the engine begins a flush, it will synchronously execute all scheduled epochs until nothing remains to be done. The engine can be configured to flush immediately when an epoch is scheduled, or it can be controlled manually.
 
 ---
 
-## Scheduling
+## Usage with SpokeBehaviour
 
-Effects and Memos are bound to a `SpokeEngine` when created, and schedules itself there whenever it re-runs.
+Each `SpokeBehaviour` creates it's own personal `SpokeEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immedaite`.
 
-Whenever an `Effect` or `Memo` is **created** — or when one of its dependencies **triggers** — it schedules itself onto its engine.
-This means it's added to the `SpokeEngine`'s internal queue of scheduled computations, which will be flushed as part of the next update pass.
+You can override the engine used by overriding one of the methods on `SpokeBehaviour`:
 
-The one exception is `Reaction`: it doesn’t schedule itself when created.
-Instead, it only schedules when one of its **explicit triggers** fires — which is exactly what makes it ideal for push-based, one-shot logic.
+```cs
+public class MyBehaviour : SpokeBehaviour {
 
-> The word schedule might sound misleading — it suggests the computation will run later, or on another thread.
-> In Spoke, scheduling just means “putting it in a queue to run **soon**, usually within the same **call stack**.”
-> We’ll clarify exactly how this works when we cover _Batching_ and _Flushing_.
+    public override SpokeEngine OverrideEngine() {
+        return SpokeEngine.Create(FlushMode.Manual, new UnitySpokeLogger(this));
+    }
+
+    protected override void Init(EffectBuilder s) { }
+
+    // Manually flush the engine once every 1 second
+    float timer;
+    void Update() {
+        timer += Time.deltaTime;
+        if (timer > 1) {
+            timer = 0;
+            SpokeEngine.Flush();
+        }
+    }
+}
+```
+
+You could also use one global `SpokeEngine` shared by all behaviours, and inject it here if you wanted to.
+
+---
+
+## Manual Creation
+
+You can create your own instances of `SpokeEngine` outside of a `SpokeBehaviour` too:
+
+```cs
+var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+
+// And then attach an effect
+var handle = engine.Effect(s => { /*...*/ });
+
+// Later detach the effect
+handle.Dispose();
+
+// Just don't instantiate the SpokeEngine directly, it won't work
+engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger());
+engine.Effect(s => { /* ... */ }); // Will throw an error, because the engine isn't hosted by a Node
+
+// This would work though:
+engine = Node.CreateRoot(new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger())).Epoch;
+```
 
 ---
 
@@ -82,7 +116,7 @@ In the next section, I'll explain why I emphasize **non-reactive code**.
 
 ### Internal Deferral
 
-Let's look at that same logic — but inside a reactive scope:
+Let's look at that same logic, but inside a reactive scope:
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
@@ -114,29 +148,5 @@ Every `EffectBlock` is effectively inside its own `SpokeEngine.Batch()`.
 
 That's why **manual batching only matters outside Spoke** — in external logic, like button handlers or coroutine steps.
 Once a reactive trigger causes the engine to flush, **control will not return** until every computation in the queue has been drained.
-
----
-
-## Flushing
-
-Once batching ends the `SpokeEngine` flushes all scheduled computations.
-
-Flushing is what actually **executes** the work.
-All the scheduling and batching before this point simply ensures that the work is done **once**, at the **right time**, in the **right order**.
-
----
-
-### What gets flushed?
-
-Anything that called `Schedule()` on the engine.
-
-They're all added to the `SpokeEngine`'s **scheduled set**, and flushed together as a batch.
-
----
-
-### What does `Flush()` actually do?
-
-Calling `Flush()` directly is only needed in **Manual** flush mode.
-If you're using `FlushMode.Immediate` (the default), flushes happen automatically when the batch ends.
 
 ---
