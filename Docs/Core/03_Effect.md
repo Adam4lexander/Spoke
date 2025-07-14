@@ -36,7 +36,7 @@ public class MyBehaviour : SpokeBehaviour {
 
 > `s.D()` reads and tracks a dynamic signal dependency, which I'll explain in a later section.
 
-When you run the code above, it will first print: `number is: 0`.
+When you run the code, it will first print: `number is: 0`.
 
 Each time you change the number in the Unity inspector, it will trigger the Effect to rerun, and print the updated value.
 
@@ -275,6 +275,40 @@ public class MyBehaviour : SpokeBehaviour {
 Spoke would catch that mistake and throw an error — but it’s better to avoid it altogether. Besides, trying to think of a good parameter name for an `Effect` three levels deep gets hard.
 
 The little-_s_ in comparison is unobtrusive yet immediately recognisable, and lets you focus on what matters.
+
+---
+
+## Phase
+
+The `Phase` is an Effect that takes an additional boolean signal to control when it mounts.
+
+### Example
+
+```cs
+public class MyBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder s) {
+        // IsEnabled is an ISignal<bool> exposed by SpokeBehaviour
+        s.Phase(IsEnabled, s => {
+            // Run code when enabled
+            s.OnCleanup(() => {
+                // Run code when disabled
+            });
+        });
+
+        // Is roughly equivalent to this form using a regular Effect
+        s.Effect(s => {
+            if (s.D(IsEnabled)) return;
+            // Run code when enabled
+            s.OnCleanup(() => {
+                // Run code when disabled
+            });
+        });
+    }
+}
+```
+
+`Phase` is a simple syntactic wrapper that targets an extremely common use-case in Spoke. It was made a discrete object type for improving overall code clarity.
 
 ---
 
