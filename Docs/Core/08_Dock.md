@@ -15,14 +15,12 @@ public class MyBehaviour : SpokeBehaviour {
     protected override void Init(EffectBuilder s) {
 
         s.Subscribe(someTrigger, () => {
-
             s.Effect(s => { /* ... */ }); // Error! Builder is sealed
         });
 
         var dock = s.Dock();
 
         s.Subscribe(someTrigger, () => {
-
             dock.Effect("key", s => { /* ... */ }); // This works!
         });
     }
@@ -54,20 +52,17 @@ public class OverheadUISystem : SpokeBehaviour {
 
         // Mount a UI when an actor comes into range
         s.Subscribe(onActorInRange, actor => {
-
             dock.Effect(actor, OverheadUI(actor));
         });
 
         // Unmount the UI when they go out of range
         s.Subscribe(onActorOutRange, actor => {
-
             dock.Drop(actor);
         });
     }
 
     // Creates a UI Effect for an actor, and cleans it up when unmounted
     EffectBlock OverheadUI(Actor actor) => s => {
-
         CreateOverheadUI(actor);
         s.OnCleanup(() => RemoveOverheadUI(actor));
     };

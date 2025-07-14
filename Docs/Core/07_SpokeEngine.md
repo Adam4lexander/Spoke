@@ -14,31 +14,7 @@ The responsibilities of the `SpokeEngine` fall into three parts:
 
 ## Scheduling
 
-Remember how Effects and Memos each took a `SpokeEngine` as a parameter?
-
-```csharp
-var engine = new SpokeEngine(FlushMode.Immediate);
-
-var effect = new Effect("MyEffect", engine, s => { /* ... */ });
-
-var memo = new Memo("MyMemo", engine, s => { /* ... */ } );
-```
-
-Each computation is bound to a `SpokeEngine` when created, and schedules itself there whenever it re-runs.
-
-When you create Effects via `UseEffect()`, `UsePhase()`, or `UseReaction()` — or Memos via `UseMemo()` — they automatically inherit the `SpokeEngine` from the parent context.
-
-```csharp
-var engine = new SpokeEngine(FlushMode.Immediate);
-
-var effect = new Effect("MyEffect", engine, s => {
-
-    s.Effect(s => {
-
-        var isSameEngine = s.Engine == engine; // True
-    });
-});
-```
+Effects and Memos are bound to a `SpokeEngine` when created, and schedules itself there whenever it re-runs.
 
 Whenever an `Effect` or `Memo` is **created** — or when one of its dependencies **triggers** — it schedules itself onto its engine.
 This means it's added to the `SpokeEngine`'s internal queue of scheduled computations, which will be flushed as part of the next update pass.
@@ -74,11 +50,12 @@ Let's break them down.
 First let's see the problem it's trying to solve:
 
 ```csharp
+var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+
 var className = State.Create("Warrior");
 var level = State.Create(1);
 
-var effect = new Effect("MyEffect", engine, s => {
-
+engine.Effect(s => {
     Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
 });                       // Prints: class: Warrior, lvl: 1
 
@@ -93,7 +70,6 @@ Now let’s say you want to update both values together, and flush only once:
 
 ```csharp
 engine.Batch(() => {
-
     className.Set("Paladin");
     level.Set(2);
 });                       // Prints: class: Paladin, lvl: 2
@@ -117,7 +93,6 @@ public class MyBehaviour : SpokeBehaviour {
         var level = State.Create(1);
 
         s.Effect(s => {
-
             Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
         });
 
@@ -153,34 +128,9 @@ All the scheduling and batching before this point simply ensures that the work i
 
 ### What gets flushed?
 
-Anything that called `Schedule()` on the engine:
+Anything that called `Schedule()` on the engine.
 
-- `Effect`s that remounted
-- `Memo`s that were invalidated
-- `Reaction`s that were triggered
-
-Each of these gets added to the `SpokeEngine`'s **scheduled set**, and flushed together as a batch.
-
----
-
-### Flush Order: Memos First, Then Effects
-
-Flushes are **divided into two phases:**
-
-1. **Memos flush first**
-   - Sorted topologically (by dependency order)
-   - Designed for efficient recomputation, **not** deterministic order
-   - May flush multiple times in the same pass if dependencies cycle through updates
-2. **Effects flush second**
-   - Sorted by mount order (older effects flush before newer ones)
-   - This gives effects a flush order that **resembles imperative code execution**
-   - Think of it like running `Init()` methods top-down — parents flush before children, computations earlier in the block flush before siblings below.
-
-This separation is crucial.
-
-**Memos are allowed to be "noisy"** — re-running as needed until their values stabilize.
-**Effects are "stable"** — they flush once per update pass and always in the same order.
-This is why Spoke guarantees that **effects will never run with stale dependency values** — but **memos may re-run multiple times**, depending on the graph.
+They're all added to the `SpokeEngine`'s **scheduled set**, and flushed together as a batch.
 
 ---
 
@@ -189,28 +139,4 @@ This is why Spoke guarantees that **effects will never run with stale dependency
 Calling `Flush()` directly is only needed in **Manual** flush mode.
 If you're using `FlushMode.Immediate` (the default), flushes happen automatically when the batch ends.
 
-Here’s a high-level sketch of what the flush logic looks like:
-
-- Grab everything in the `scheduled` set
-- Divide into `Memo` and `Effect` buckets
-- For Memos:
-  - Topologically sort by dependencies
-  - Run each `Memo`
-  - If new Memos are scheduled, repeat
-- For Effects:
-  - Sort by mount order
-  - Run each `Effect`
-  - If new Memos are scheduled, return to Memos
-
 ---
-
-### Why it works this way
-
-This two-phase model is what makes Spoke predictable:
-
-- **Memos are allowed to "settle"**
-- **Effects see final values**
-- **Flushes are atomic** — the queue is drained completely before any new flush can begin
-
-It’s this flush behavior that lets you write deeply reactive logic without thinking about intermediate states.
-You’ll never see half-updated values in your `Effect`s — only clean, consistent snapshots of the world.
