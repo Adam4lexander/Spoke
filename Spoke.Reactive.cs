@@ -271,6 +271,7 @@ namespace Spoke {
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
         }
+        public SpokeHandle Effect(EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", buildLogic, triggers);
         public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
             CallDynamic(currId, new Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);

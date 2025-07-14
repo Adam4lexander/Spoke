@@ -1,57 +1,161 @@
 # Effect
 
-Now we get to the good stuff. The `Effect` is where you will write almost all of your reactive game logic.
+In Spoke, the `Effect` is the most important primitive for expressing logic. Put simply it's a block of code, subscribed to a set of triggers. If one or more of the these triggers fire, the Effect is scheduled for remount.
 
-In reactive programming, an _effect_ refers to any logic that reacts to state changes and might cause side effects — like updating a component, spawning an entity, or applying damage. It’s the boundary between declarative reactivity and imperative action.
+Effects are a derivative of `Epoch` described in [00_MentalModel](./00_MentalModel.md).
 
-In Spoke an `Effect` can be understood as follows:
+Effects are functional blocks that combine _setup_ and _cleanup_ logic into one cohesive package. When the Effect is mounted, its code block is executed, which may register one or more cleanup functions. When the Effect is unmounted, these cleanup functions are executed in reverse order.
 
-- It's an object which can be _mounted_ and _disposed_.
-- It's a container for child objects which implement `IDisposable`.
-- Those children might also be `Effect`s.
-- When an `Effect` is disposed, all its descendants will be disposed too.
+Effect blocks can create its own sub-effects or sub-epochs to form a lifecycle tree. The lifetimes of these children are bound to the parent effect. If the parent effect is to be unmounted, these children will be unmounted first.
 
-There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist convenience and improved clarity in your code.
+There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist for convenience and improved clarity in your code.
 
 ---
 
 ## Creating an Effect
 
-If you're using `SpokeBehaviour`, you may never need to create an `Effect` manually. But here’s how it's done:
+If you're using `SpokeBehaviour`, the `Init()` method is already mounted to an Effect. Creating additional sub-effects is easy:
 
 ```csharp
-// We'll get to SpokeEngine later
-var engine = new SpokeEngine(FlushMode.Immediate);
+public class MyBehaviour : SpokeBehaviour {
 
-var effect = new Effect("MyEffect", engine, s => {
-    // EffectBuilder logic
-});
+    [SerializeField] UState<int> number = UState.Create(0);
 
-// ...
+    protected override void Init(EffectBuilder s) {
+        // This function 'Init', already runs inside an Effect defined in SpokeBehaviour
 
-effect.Dispose();
+        // Create a child Effect, bound to the lifetime of 'Init'
+        s.Effect(s => {
+            // Read 'number' and bind it as a dependency. So this function re-runs when 'number' changes
+            var numberNow = s.D(number);
+            Debug.Log($"number is: {numberNow}");
+        });
+    }
+}
 ```
 
-The constructor for `Effect` is:
+> `s.D()` reads and tracks a dynamic signal dependency, which I'll explain in a later section.
 
-`public Effect(string name, SpokeEngine engine, EffectBlock block, params ITrigger[] triggers)`
+When you run the code above, it will first print: `number is: 0`.
 
-Let's break that down:
+Each time you change the number in the Unity inspector, it will trigger the Effect to rerun, and print the updated value.
 
-- `name`: Appears in debugging views.
-- `engine`: We'll come back to this when we cover SpokeEngine.
-- `block`: A function that takes a builder object and creates the `Effect`.
-- `triggers`: Are explicit dependencies that remount the `Effect` when they trigger.
+---
+
+### Manual Creation
+
+You can create effects yourself without having to use `SpokeBehaviour`:
+
+```cs
+// First create a SpokeEngine instance. Make sure you give it a UnitySpokeLogger, to show any errors in the Unity console
+var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+
+// A reactive state we can test with
+var number = State.Create(0);
+
+// Create an Effect belonging to the engine. It will run immediately because we chose 'FlushMode.Immediate'
+engine.Effect(s => {
+    Debug.Log($"number is: {s.D(number)}");
+});
+```
+
+This pretty much replicates what `SpokeBehaviour` is doing before it calls `Init`.
+
+---
+
+## Dependencies
+
+There are two ways that dependencies on an `Effect` can be defined:
+
+- **Explicit**: passing them explicitly in the constructor.
+- **Dynamic**: auto-binding to `ISignal`'s accessed in the `EffectBlock`.
+
+There are pros and cons to each. You can choose one or the other, or both, depending on your needs.
+
+---
+
+### Explicit Dependencies
+
+```csharp
+var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+
+var myTrigger = Trigger.Create();
+var myState = State.Create(0);
+
+engine.Effect(s => {
+    Debug.Log($"myState is {myState.Now}");
+}, myTrigger, myState); // any number of dependencies in final args
+
+// Instantiating effect Prints: myState is 0
+
+myTrigger.Invoke(); // Prints: myState is 0
+myState.Set(1);     // Prints: myState is 1
+```
+
+Any number of `ITrigger` can be given explicitly to the `Effect` constructor.
+
+- **Advantages**: Works with `ITrigger`, can give more control and clarity
+- **Disadvantages**: More verbose, requires more discipline, easy to forget a dependency
+
+---
+
+### Dynamic Dependencies
+
+Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
+
+`T D<T>(ISignal<T> signal);`
+
+```csharp
+var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+
+var name = State.Create("Spokey");
+var age = State.Create(0);
+
+engine.Effect(s => {
+    Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
+});
+
+// Instantiating effect Prints: name: Spokey, age: 0
+
+name.Set("Reacts"); // Prints: name: Reacts, age: 0
+age.Set(1);         // Prints: name: Reacts, age 1
+```
+
+`D()` is a method that wraps a `ISignal`. It makes that `ISignal` a dynamic dependency and then returns `ISignal.Now`.
+
+If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
+
+```csharp
+engine.Effect(s => {
+    // Totally fine
+    if (s.D(condition)) {
+        DoSomething(s.D(foo));
+    } else {
+        SomethingElse(s.D(bar));
+    }
+});
+```
+
+- **Advantages**: Better ergonomics, more flexible, more powerful.
+- **Disadvantages**: Only supports `ISignal`, easier to misuse.
+
+I personally prefer dynamic dependencies. They feel better. They're more fun. And they handle complex logic more elegantly, like poking into nested signals.
+
+That said, there are times where explicit dependencies are needed. Like if you need to remount an `Effect` from a pure event. Dynamic dependencies won’t catch pure events — only explicit dependencies will work in this case.
+
+You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
 
 ---
 
 ## `EffectBlock`
 
+The function passed into the Effects constructor is the type `EffectBlock`. It's a delegate function type shown below.
+
 ```csharp
 public delegate void EffectBlock(EffectBuilder s);
 ```
 
-An `EffectBlock` is a function that takes an `EffectBuilder` as parameter.
+An `EffectBlock` is a function that takes an `EffectBuilder` as parameter. It's the block of code that's mounted by an Effect. It can take several different forms:
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
@@ -73,191 +177,59 @@ public class MyBehaviour : SpokeBehaviour {
     }
 
     EffectBlock MySecondEffect => s => {
-        // This is an EffectBlock too
+        // This is an EffectBlock too. It's roughly equivalent in form to 'MyFirstEffect'
+        // I prefer this form, even though the double lambda syntax might looks weird
+        // It stands out next to regular non-Spoke methods.
     };
 
     EffectBlock MyEffectWithParam(string msg) => s => {
-        // And this too is an EffectBlock
+        // This EffectBlock demonstrates an advantage of using double-lambdas.
+        // The pattern lets you parameterise the EffectBlock.
+        // The parameters are stored in a closure. And the EffectBlock returned is bound to that closure.
+        // I use this pattern a lot.
     };
 }
 ```
 
-That's a lot of patterns, and I'm hinting at what `EffectBuilder` is too. The takeaway is: `EffectBlock` shows up _everywhere_ in Spoke. Whether it's written inline, passed around as a lambda, or stored as a function — you're always working with one.
-
-Let’s take a look at what the `EffectBuilder` actually is.
+Each form has one thing in common. It's a function that takes an `EffectBuilder` as a parameter. Next, let's take a look at what the `EffectBuilder` is.
 
 ## `EffectBuilder`
 
-When an `Effect` 'mounts' it runs its `EffectBlock` and passes in an `EffectBuilder`. This is the `Effect`'s **only** chance to build itself, once the `EffectBlock` returns, the `Effect` is sealed. After that, it cannot be changed unless it's disposed and mounted again.
+The `EffectBuilder` is an object with a DSL-style interface for nesting reactive logic. When an Effect is created, it internally creates an `EffectBuilder` that's bound to it. When the Effect mounts, it calls the `EffectBlock` function and passes it's internal `EffectBuilder` into it.
 
-Let's have a look at the `EffectBuilder` interface.
+During the scope of the `EffectBlock` function, the Effect unseals itself for modification. This is the **only** chance to modify the Effect, in this mount cycle, before the Effect seals itself again. When the `EffectBlock` returns, the `EffectBuilder` becomes ineffective. Trying to use it will throw an exception.
+
+Here is a simplified view what the `EffectBuilder` interface exposes:
 
 ```csharp
 public interface EffectBuilder {
 
-    SpokeEngine Engine { get; }
+    // Engage the FlushLogger to log the current flush to console
     void Log(string msg);
 
+    // Track a dynamic dependency and return its value
     T D<T>(ISignal<T> signal);
 
-    void Use(SpokeHandle trigger);
+    // Take ownership of IDisposable objects, and dispose them when I unmount
     T Use<T>(T disposable) where T : IDisposable;
+    // A SpokeHandle is a disposable struct with zero GC
+    void Use(SpokeHandle trigger);
 
+    // Subscribe to an ITrigger, unsubscribe when I unmount
     void Subscribe(ITrigger trigger, Action action);
     void Subscribe<T>(ITrigger<T> trigger, Action<T> action);
 
+    // Create nested Epochs
     ISignal<T> Memo<T>(Func<MemoBuilder, T> selector, params ITrigger[] triggers);
-    ISignal<T> Memo<T>(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers);
-
     void Effect(EffectBlock func, params ITrigger[] triggers);
-    void Effect(string name, EffectBlock func, params ITrigger[] triggers);
-
     void Reaction(EffectBlock action, params ITrigger[] triggers);
-    void Reaction(string name, EffectBlock action, params ITrigger[] triggers);
-
     void Phase(ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
-    void Phase(string name, ISignal<bool> mountWhen, EffectBlock func, params ITrigger[] triggers);
-
     IDock Dock();
-    IDock Dock(string name);
 
+    // Register functions to run when I unmount
     void OnCleanup(Action cleanup);
 }
 ```
-
-Let's walk through the most important builder methods, starting with ownership.
-
----
-
-### `Use`
-
-Most builder methods in Spoke are prefixed with `Use`. This isn't just naming convention — it reflects the system’s **ownership model**.
-
-The most fundamental of these is:
-
-`T Use<T>(T disposable) where T : IDisposable;`
-
-When you `Use(...)` something, you're saying:
-_“This effect now owns this resource. Dispose it when I unmount.”_
-
-```csharp
-public class MyBehaviour : SpokeBehaviour {
-
-    protected override void Init(EffectBuilder s) {
-
-        s.UseEffect("MyEffect", s => { /* ... */ });
-
-        // Equivalent manual version:
-        s.Use(new Effect("MyEffect", s.Engine, s => { /* ... */ }));
-    }
-}
-```
-
----
-
-### `OnCleanup`
-
-An `EffectBuilder` can register any number of cleanup actions. When the `Effect` is disposed it will first run each of these actions.
-
-```csharp
-var effect = new Effect("MyEffect", MyEngine, s => {
-
-    s.OnCleanup(() => Debug.Log("Effect cleaned up!"));
-});
-
-// ...
-
-effect.Dispose(); // Prints: Effect cleaned up!
-```
-
----
-
-## Dependencies
-
-Remember the final parameter to the `Effect` constructor: `params ITrigger[] triggers`? Let's go back to that.
-
-In Spoke there are several objects (including `Effect`) that extend `SpokeEngine.Computation`. These have dependencies over a set of `ITrigger` which cause them to be disposed and then remounted when any of them trigger.
-
-For an `Effect` this means it will be disposed, including descendants, and then its `EffectBlock` is run again fresh.
-
-There are two ways that dependencies on an `Effect` can be defined:
-
-- **Explicit**: passing them explicitly in the constructor.
-- **Dynamic**: auto-binding to `ISignal`'s accessed in the `EffectBlock`.
-
-There are pros and cons to each. You can choose one or the other, or both, depending on your needs.
-
----
-
-### Explicit Dependencies
-
-```csharp
-var myTrigger = Trigger.Create();
-var myState = State.Create(0);
-
-var effect = new Effect("MyEffect", myEngine, s => {
-
-    Debug.Log($"myState is {myState.Now}");
-
-}, myTrigger, myState); // any number of dependencies in final args
-
-// Instantiating effect Prints: myState is 0
-
-myTrigger.Invoke(); // Prints: myState is 0
-myState.Set(1);     // Prints: myState is 1
-```
-
-Any number of `ITrigger` can be given explicitly to the `Effect` constructor. The same is true for `UseEffect()`.
-
-- **Advantages**: Works with `ITrigger`, can give more control and clarity
-- **Disadvantages**: More verbose, requires more discipline, easy to forget a dependency
-
----
-
-### Dynamic Dependencies
-
-Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
-
-`T D<T>(ISignal<T> signal);`
-
-```csharp
-var name = State.Create("Spokey");
-var age = State.Create(0);
-
-var effect = new Effect("MyEffect", myEngine, s => {
-
-    Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
-});
-
-// Instantiating effect Prints: name: Spokey, age: 0
-
-name.Set("Reacts"); // Prints: name: Reacts, age: 0
-age.Set(1);         // Prints: name: Reacts, age 1
-```
-
-`D()` is a method that wraps a `ISignal`. It makes that `ISignal` a dynamic dependency and then returns `ISignal.Now`.
-
-If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
-
-```csharp
-var effect = new Effect("MyEffect", myEngine, s => {
-    // Totally fine
-    if (s.D(condition)) {
-        DoSomething(s.D(foo));
-    } else {
-        SomethingElse(s.D(bar));
-    }
-});
-```
-
-- **Advantages**: Better ergonomics, more flexible, more powerful.
-- **Disadvantages**: Only supports `ISignal`, easier to misuse.
-
-I personally prefer dynamic dependencies. They feel better. They're more fun. And they handle complex logic more elegantly, like poking into nested signals.
-
-That said, there are times where explicit dependencies are needed. Like if you need to remount an `Effect` from a pure event. Dynamic dependencies won’t catch pure events — only explicit dependencies will work in this case.
-
-You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
 
 ---
 

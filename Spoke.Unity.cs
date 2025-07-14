@@ -265,7 +265,7 @@ namespace Spoke {
     // ============================== UnitySpokeLogger ============================================================
     public class UnitySpokeLogger : ISpokeLogger {
         public UnityEngine.Object context;
-        public UnitySpokeLogger(UnityEngine.Object context) { this.context = context; }
+        public UnitySpokeLogger(UnityEngine.Object context = null) { this.context = context; }
         public void Log(string msg) => WithoutUnityStackTrace(LogType.Log, () => Debug.Log(msg, context));
         public void Error(string msg) => WithoutUnityStackTrace(LogType.Error, () => Debug.LogError(msg, context));
         void WithoutUnityStackTrace(LogType logType, Action action) {
