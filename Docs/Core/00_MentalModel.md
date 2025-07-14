@@ -33,6 +33,20 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 
 ---
 
+## Runtime classes
+
+`Spoke.Runtime.cs` defines a handful of base classes that implement the tree execution model:
+
+- `Node`: Is a runtime container for a mounted `Epoch` that forms the structure of the lifecycle tree. They're managed automatically by Spoke so you would rarely interact with them directly. Nodes form the fabric of the tree.
+
+- `Epoch`: Is the foundational base class in Spoke. Epochs are invoked declaratively, mounted into nodes, and persist as active objects. They maintain state, respond to context, expose behaviour, and may spawn child epochs.
+
+- `ExecutionEngine`: Is a type of `Epoch`, and an abstract class for controlling the tempo of execution of its subtree. When Epochs are attached to the tree, they schedule themselves on their contextual engine to be mounted.
+
+This engine is the foundation that all the `Spoke.Reactive` behaviour is built on.
+
+---
+
 ## Tree-based execution
 
 Let's look at a simple Spoke program:
