@@ -37,7 +37,8 @@ Thumbs.db
 */bin/
 */obj/
 
-/Spoke.cs.meta
+/Spoke.Runtime.cs.meta
+/Spoke.Reactive.cs.meta
 /Spoke.Unity.cs.meta
 /LICENSE.meta
 /README.md.meta

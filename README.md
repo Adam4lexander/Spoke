@@ -7,7 +7,7 @@ It lets you write gameplay logic that reacts to state automatically: no flag-che
 Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
 
 - ✨ **Control complexity** — simplifies eventful, state-driven logic
-- 📦 **Drop-in simple** — two files, no setup, no dependencies
+- 📦 **Drop-in simple** — three files, no setup, no dependencies
 - 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
 
 ---
@@ -63,7 +63,7 @@ void OnNearestEnemyChangedHandler(GameObject toEnemy) {
 
 ```csharp
 void Init(EffectBuilder s) {
-    s.UsePhase(IsEnabled, s => {
+    s.Phase(IsEnabled, s => {
         if (s.D(NearestEnemy) == null) return;
         FaceEnemy(NearestEnemy.Now);
         s.OnCleanup(() => FaceForwards());
@@ -83,7 +83,7 @@ It's not just shorter. It's **closer to how you actually think.**
 
 ## 🔰 Getting Started
 
-Copy **Spoke.cs** and **Spoke.Unity.cs** into your project.
+Copy **Spoke.Runtime.cs**, **Spoke.Reactive.cs** and **Spoke.Unity.cs** into your project.
 
 Then create a new script and subclass `SpokeBehaviour` instead of `MonoBehaviour`:
 
@@ -101,18 +101,18 @@ public class MyBehaviour : SpokeBehaviour {
             // Run OnDestroy logic here
         });
 
-        s.UsePhase(IsAwake, s => {
+        s.Phase(IsAwake, s => {
             // Runs at the end of Awake (useful for dependency timing)
         });
 
-        s.UsePhase(IsEnabled, s => {
+        s.Phase(IsEnabled, s => {
             // OnEnable logic here
             s.OnCleanup(() => {
                 // OnDisable logic here
             });
         });
 
-        s.UsePhase(IsStarted, s => {
+        s.Phase(IsStarted, s => {
             // Start logic here
         });
     }
@@ -131,15 +131,14 @@ using Spoke;
 public class MyBehaviour : MonoBehaviour {
 
     State<bool> isEnabled = State.Create(false);
-    Effect effect;
+    SpokeHandle effectHandle;
 
     void Awake() {
-
+        // A SpokeEngine is the execution scheduler for the reactive objects it contains
         var engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
 
-        effect = new Effect("MyEffect", engine, s => {
-
-            s.UsePhase(isEnabled, s => {
+        effectHandle = engine.Effect("MyEffect", engine, s => {
+            s.Phase(isEnabled, s => {
                 // OnEnable logic
                 s.OnCleanup(() => {
                     // OnDisable logic
@@ -148,7 +147,7 @@ public class MyBehaviour : MonoBehaviour {
         });
     }
 
-    void OnDestroy() => effect.Dispose();
+    void OnDestroy() => effectHandle.Dispose();
 
     void OnEnable() => isEnabled.Set(true);
     void OnDisable() => isEnabled.Set(false);
@@ -185,13 +184,13 @@ If you have experience with reactive frameworks, Spoke will feel natural. If not
 
 Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and runtime composability:
 
-- **Mechs** are containers for **Servos**
+- **Mechs** are containers for **Servos**, which are containers for **Modules**
 - **Servos** are containers for **Modules**
 - **Reactors** provide power to other **Modules**
 - **Sensors** detect blips and feed a shared, live targeting system
 - **Deflectors** increase armour across **Servos**, but draw power from **Reactors**
 - **Modules** are damaged, destroyed, repaired, disabled and reconfigured on the fly
-- Cockpit displays reflect functionality — based on which **Modules** are mounted, powered, and still operational
+- Cockpit displays reflect functionality based on which **Modules** are mounted, powered, and still operational
 
 This game has brutal requirements for dynamic, eventful logic. For 6 years I tried to build an architecture that brought sanity to this chaos.
 

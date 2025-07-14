@@ -50,12 +50,11 @@ namespace Spoke {
         SpokeEngine engine;
         protected SpokeEngine SpokeEngine {
             get {
-                engine = engine ?? OverrideEngine() ?? new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
+                engine = engine ?? OverrideEngine() ?? SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger(this));
                 return engine;
             }
         }
-        Effect initScope;
-        SpokeHandle sceneTeardown, appTeardown;
+        SpokeHandle sceneTeardown, appTeardown, initEffect;
         protected virtual SpokeEngine OverrideEngine() => null;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -65,9 +64,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (initScope == null) {
-                DoInit(); // Domain reload may not run Awake
-            }
+            if (initEffect == default) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -77,7 +74,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            initScope = new Effect($"{GetType().Name}:Init", SpokeEngine, Init);
+            initEffect = SpokeEngine.Effect($"{GetType().Name}:Init", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -86,7 +83,7 @@ namespace Spoke {
             sceneTeardown.Dispose();
             appTeardown.Dispose();
             enabled = false;
-            initScope?.Dispose();
+            initEffect.Dispose();
             isAwake.Set(false);
         }
     }
@@ -268,7 +265,7 @@ namespace Spoke {
     // ============================== UnitySpokeLogger ============================================================
     public class UnitySpokeLogger : ISpokeLogger {
         public UnityEngine.Object context;
-        public UnitySpokeLogger(UnityEngine.Object context) { this.context = context; }
+        public UnitySpokeLogger(UnityEngine.Object context = null) { this.context = context; }
         public void Log(string msg) => WithoutUnityStackTrace(LogType.Log, () => Debug.Log(msg, context));
         public void Error(string msg) => WithoutUnityStackTrace(LogType.Error, () => Debug.LogError(msg, context));
         void WithoutUnityStackTrace(LogType logType, Action action) {

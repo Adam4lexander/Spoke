@@ -45,8 +45,7 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        s.UsePhase(IsEnabled, s => {
-
+        s.Phase(IsEnabled, s => {
             myRenderer.sharedMaterial.color = Color.green;
 
             s.OnCleanup(() => {

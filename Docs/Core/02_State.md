@@ -24,10 +24,8 @@ An `ISignal<T>` extends `ITrigger<T>` and adds a current value, accessed via `No
 public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
-
         Debug.Log($"Signal started as {mySignal.Now}");
-
-        s.UseSubscribe(mySignal, v => Debug.Log($"Signal changed to {v}"));
+        s.Subscribe(mySignal, v => Debug.Log($"Signal changed to {v}"));
     }
 }
 ```
@@ -68,10 +66,13 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
 
-        s.UseSubscribe(boolState, b => Debug.Log($"boolState is {b}"));
-        s.UseSubscribe(goState, go => {
-            if (go) Debug.Log($"goState is {go.name}");
-            else Debug.Log($"goState is null");
+        s.Subscribe(boolState, b => Debug.Log($"boolState is {b}"));
+        s.Subscribe(goState, go => {
+            if (go != null) {
+                Debug.Log($"goState is {go.name}");
+            } else {
+                Debug.Log($"goState is null");
+            }
         });
 
         boolState.Set(true);        // Prints: boolState is true
@@ -96,10 +97,11 @@ public class MyBehaviour : SpokeBehaviour {
 
     [SerializeField] UState<string> myName = UState.Create("Spokey");
 
-    public ISignal<string> MyName => myName; // Only exposes Now and subscribe
+    public ISignal<string> MyName => myName; // Only exposes Now and Subscribe, so changing name is a private capability
 
-    void SetRandomName() {
-        myName.Set(NameList.Sample());
+    protected override void Init(EffectBuilder s) {
+        s.SubScribe(myName, n => Debug.Log($"myName is {myName}"));
+        myName.Set("Bob");      // Prints: myName is Bob
     }
 }
 ```
