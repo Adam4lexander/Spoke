@@ -312,6 +312,42 @@ public class MyBehaviour : SpokeBehaviour {
 
 ---
 
+## Reaction
+
+The `Reaction` is a type of Effect that doesn't mount on initial attachment. It waits for one of its triggers to fire, before mounting for the first time.
+
+## Example
+
+```cs
+public class MyBehaviour : SpokeBehaviour {
+
+    public Trigger OnDamaged = Trigger.Create();
+
+    protected override void Init(EffectBuilder s) {
+
+        s.Reaction(s => {
+            // Play damage effect
+        }, onDamaged);
+
+        // Is roughly equivalent to this form:
+        var isFirst = true;
+        s.Effect(s => {
+            if (isFirst) {
+                isFirst = false;
+                return;
+            }
+            // Play damage effect
+        }, onDamaged);
+    }
+}
+```
+
+Due to `Reaction` skipping the first mount, it's typically used with explicit dependencies only. Dynamic dependencies would all be skipped initially, only an explicit dependency could trigger it for the first time.
+
+Use cases for Reaction are less common, but it comes in handy for one-shot logic like: playing an effect on damage, or triggering an announcer phrase in response to a game event.
+
+---
+
 ## Advanced Notes
 
 - **Deferred Execution**: Nested Effects are scheduled and deferred, then executed in order.
