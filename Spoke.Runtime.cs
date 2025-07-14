@@ -64,7 +64,7 @@ namespace Spoke {
         void OnCleanup(Action fn);
     }
     public abstract class Node : ILifecycle, IExecutable {
-        public static Node<T> CreateRoot<T>(T epoch) where T : Epoch {
+        public static Node<T> CreateRoot<T>(T epoch) where T : ExecutionEngine {
             var node = new Node<T>(epoch);
             (node as ILifecycle).Attach(null);
             (node as IExecutable).Execute(true);
@@ -169,6 +169,11 @@ namespace Spoke {
         }
         void Unmount() {
             isUnmounting = true;
+            for (int i = children.Count - 1; i >= 0; i--)
+                try { (children[i] as ILifecycle).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
+            children.Clear();
+            siblingCounter = 0;
+            dynamicChildren.Clear();
             for (int i = mountCleanupFuncs.Count - 1; i >= 0; i--)
                 try { mountCleanupFuncs[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
             mountCleanupFuncs.Clear();
@@ -176,11 +181,6 @@ namespace Spoke {
             handles.Clear();
             foreach (var disposable in disposables) disposable.Dispose();
             disposables.Clear();
-            for (int i = children.Count - 1; i >= 0; i--)
-                try { (children[i] as ILifecycle).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
-            children.Clear();
-            siblingCounter = 0;
-            dynamicChildren.Clear();
             isSealed = false;
             isUnmounting = false;
         }
