@@ -43,7 +43,75 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 
 - `ExecutionEngine`: Is a type of `Epoch`, and an abstract class for controlling the tempo of execution of its subtree. When Epochs are attached to the tree, they schedule themselves on their contextual engine to be mounted.
 
-This engine is the foundation that all the `Spoke.Reactive` behaviour is built on.
+This engine is the foundation that all the `Spoke.Reactive` behaviour is built on. Many of the reactive objects including `Effect`, `Reaction`, `Phase`, `Memo` and `Dock` are each derived from `Epoch`.
+
+---
+
+### Custom Epochs
+
+You can define your own Epochs by subclassing `Epoch`:
+
+```cs
+public class MyCustomEpoch : Epoch {
+
+    public bool IsAttached { get; private set; }
+    public bool IsMounted { get; private set; }
+
+    public MyCustomEpoch() {
+        Name = "My Epoch"; // Optionally set the name, which will show in debugging views
+    }
+
+    protected override void OnAttached(Action<Action> onDetach) {
+        // For logic that outside the Mount/Unmount phase
+        IsAttached = true;
+        onDetach(() => IsAttached = false);
+    }
+
+    protected override void OnMounted(EpochBuilder s) {
+        // For declaring child epochs or declaring setup/cleanup of lifecycle-bound resources
+        IsMounted = true;
+        s.OnCleanup(() => IsMounted = false);
+    }
+}
+```
+
+And then you can bring the epoch into the call-tree by 'calling' it from a parent epoch:
+
+```cs
+var engine = SpokeEngine.Create(FlushMode.Immediate);
+
+engine.Effect("root", s => {
+    var myEpoch = s.Call(new MyCustomeEpoch()); // Attaches to the tree and returns the epoch instance
+    Debug.Log(myEpoch.IsAttached);              // Prints: true
+});
+```
+
+This would result in the following tree structure:
+
+```
+Node[SpokeEngine]
+│
+Node[Effect(name = "root")]
+│
+Node[MyCustomEpoch(name = "My Epoch")]
+```
+
+Note the `s.Call()` expression. This is the fundamental way for epochs to be 'called' into the lifecycle tree. In `Spoke.Reactive` calls like `s.Effect()` and `s.Memo()` are convenience sugar over `s.Call()`:
+
+```cs
+s.Effect("myEffect", s => {});
+
+// Is equivalent to
+
+s.Call(new Effect("myEffect", s => {}));
+```
+
+Defining custom Epochs is generally not needed outside of some advanced use cases. The `Spoke.Reactive` epochs already implement a functional composition style via `EffectBuilder`. There are two main reasons to define new epochs:
+
+1. To define a custom DSL in a new problem domain. For example, something like `EffectBuilder`, but designed for procedural generation.
+2. To define a lifecycle-controlled manager that facades a sub-tree and gives context to lexically scoped epochs.
+
+I'll expand on these use cases elsewhere. For now it's enough to know that everything in Spoke's call-tree is a kind of `Epoch`, and they are all bound to the same tree-based execution behaviour.
 
 ---
 
@@ -74,7 +142,7 @@ engine.Effect("root", s => {
 });
 ```
 
-Which will result in the following tree being constructed:
+Which constructs the tree structure:
 
 ```
 (Tree Structure)            (Execution Order)
