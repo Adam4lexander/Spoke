@@ -135,7 +135,7 @@ public class MyBehaviour : MonoBehaviour {
 
     void Awake() {
         // A SpokeEngine is the execution scheduler for the reactive objects it contains
-        var engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger(this));
+        var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger(this));
 
         effectHandle = engine.Effect("MyEffect", engine, s => {
             s.Phase(isEnabled, s => {
