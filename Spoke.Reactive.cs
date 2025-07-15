@@ -250,7 +250,6 @@ namespace Spoke {
     // ============================== Dock ============================================================
     public class Dock : Epoch {
         public Dock(string name) {
-            IsEager = true;
             Name = name;
         }
         public T Call<T>(object key, T epoch) where T : Epoch => CallDynamic(key, epoch);
@@ -303,7 +302,7 @@ namespace Spoke {
         protected override void OnAttached(Action<Action> onDetach) {
             base.OnAttached(onDetach);
             TryGetContext<SpokeEngine>(out var engine);
-            tracker = new DependencyTracker(engine, Schedule);
+            tracker = new DependencyTracker(engine, ScheduleMount);
             onDetach(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
         }
