@@ -49,9 +49,16 @@ namespace Spoke {
     public class Node<T> : Node where T : Epoch {
         public T Epoch { get; private set; }
         public override Epoch UntypedEpoch => Epoch;
-        public Node(T epoch) : base() {
-            Epoch = epoch;
-        }
+        internal Node(T epoch) : base() { Epoch = epoch; }
+    }
+    public class SpokeRoot<T> : SpokeRoot where T : Epoch {
+        public T Epoch { get; private set; }
+        public override Epoch UntypedEpoch => Epoch;
+        public SpokeRoot(T epoch) : base() { Epoch = epoch; (this as Friend).Attach(null); }
+    }
+    public abstract class SpokeRoot : Node, IDisposable {
+        public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch);
+        public void Dispose() => (this as Friend).Cleanup();
     }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
@@ -62,13 +69,8 @@ namespace Spoke {
         void OnCleanup(Action fn);
     }
     public abstract class Node : Node.Friend {
-        internal interface Friend { void Remount(); }
+        internal interface Friend { void Remount(); void Attach(Node parent); void Cleanup(); }
         enum MountStatus { Sealed, Open, Unmounting }
-        public static Node<T> CreateRoot<T>(T epoch) where T : ExecutionEngine {
-            var node = new Node<T>(epoch);
-            node.Attach(null);
-            return node;
-        }
         List<Node> children = new List<Node>();
         Dictionary<object, Node> dynamicChildren = new Dictionary<object, Node>();
         List<Node> dynamicChildrenList = new List<Node>();
@@ -80,10 +82,10 @@ namespace Spoke {
         long siblingCounter = 0;
         Node Prev, Next;
         MountStatus mountStatus = MountStatus.Sealed;
-        bool isDetaching;
+        bool isDetaching, isDetached;
         public abstract Epoch UntypedEpoch { get; }
         public Node Parent { get; private set; }
-        public Node Root => Parent != null ? Parent.Root : this;
+        public SpokeRoot Root => (this is SpokeRoot root) ? root : Parent.Root;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
         public ReadOnlyList<Node> DynamicChildren => new ReadOnlyList<Node>(dynamicChildrenList);
         public Exception Fault { get; private set; }
@@ -92,7 +94,7 @@ namespace Spoke {
         }
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
-        void Attach(Node parent) {
+        void Friend.Attach(Node parent) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
             Parent = parent;
             if (parent != null) {
@@ -108,17 +110,19 @@ namespace Spoke {
             Coords = parent.Coords.Extend(parent.siblingCounter++);
             (UntypedEpoch as Epoch.Friend).Attach(this);
         }
-        void Cleanup() {
+        void Friend.Cleanup() {
+            if (isDetached) return;
             isDetaching = true;
             Unmount();
             (UntypedEpoch as Epoch.Friend).Cleanup();
             for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
-                try { dynamicChildrenList[i].Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
+                try { (dynamicChildrenList[i] as Friend).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
             dynamicChildrenList.Clear();
             dynamicChildren.Clear();
             if (Next != null) Next.Prev = Prev;
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
+            isDetached = true;
         }
         void Friend.Remount() {
             Unmount();
@@ -163,13 +167,13 @@ namespace Spoke {
         public void DropDynamic(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
             var index = dynamicChildrenList.IndexOf(child);
-            if (index >= 0) { child.Cleanup(); dynamicChildrenList.RemoveAt(index); }
+            if (index >= 0) { (child as Friend).Cleanup(); dynamicChildrenList.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
         void Unmount() {
             mountStatus = MountStatus.Unmounting;
             for (int i = children.Count - 1; i >= 0; i--)
-                try { children[i].Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
+                try { (children[i] as Friend).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
             children.Clear();
             if (dynamicChildren.Count == 0) siblingCounter = 0;
             for (int i = mountCleanupFuncs.Count - 1; i >= 0; i--)
@@ -196,7 +200,7 @@ namespace Spoke {
                 NoMischief();
                 var childNode = new Node<T>(epoch);
                 node.children.Add(childNode);
-                childNode.Attach(node);
+                (childNode as Friend).Attach(node);
                 return childNode.Epoch;
             }
             public void Call(EpochBlock block) => Call(new Scope(block));

@@ -259,7 +259,7 @@ namespace Spoke {
     }
     // ============================== SpokeEngine ============================================================
     public class SpokeEngine : ExecutionEngine {
-        public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => Node.CreateRoot(new SpokeEngine(flushMode, logger)).Epoch;
+        public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => SpokeRoot.Create(new SpokeEngine(flushMode, logger)).Epoch;
         Action<long> _releaseEffect;
         long currId;
         long holdCount;
