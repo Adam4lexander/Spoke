@@ -17,7 +17,6 @@ using System.Text;
 
 namespace Spoke {
 
-    public delegate void AttachBlock(Action<Action> cleanup);
     public delegate void EpochBlock(EpochBuilder s);
 
     // ============================== TreeCoords ============================================================
