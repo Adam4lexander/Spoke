@@ -1,9 +1,11 @@
 // Spoke.Runtime.cs
 // -----------------------------
-// > TreeCoords
+// > SpokeRoot
 // > Node
 // > Epoch
 // > ExecutionEngine
+// > TreeCoords
+// > PackedTreeCoords128
 // > SpokeHandle
 // > SpokeLogger
 // > FlushLogger
@@ -19,25 +21,18 @@ namespace Spoke {
 
     public delegate void EpochBlock(EpochBuilder s);
 
-    // ============================== TreeCoords ============================================================
-    public struct TreeCoords : IComparable<TreeCoords> {
-        List<long> coords;
-        public TreeCoords Extend(long idx) {
-            var next = new TreeCoords { coords = new List<long>() };
-            if (coords != null) next.coords.AddRange(coords);
-            next.coords.Add(idx);
-            return next;
-        }
-        public int CompareTo(TreeCoords other) {
-            var myDepth = coords?.Count ?? 0;
-            var otherDepth = other.coords?.Count ?? 0;
-            var minDepth = Math.Min(myDepth, otherDepth);
-            for (int i = 0; i < minDepth; i++) {
-                int cmp = coords[i].CompareTo(other.coords[i]);
-                if (cmp != 0) return cmp;
-            }
-            return myDepth.CompareTo(otherDepth);
-        }
+    // ============================== SpokeRoot ============================================================
+    /// <summary>
+    /// The root node of the call-tree must host an ExecutionEngine epoch.
+    /// </summary>
+    public class SpokeRoot<T> : SpokeRoot where T : ExecutionEngine {
+        public T Epoch { get; private set; }
+        public override Epoch UntypedEpoch => Epoch;
+        public SpokeRoot(T epoch) : base() { Epoch = epoch; (this as Friend).Attach(null); }
+    }
+    public abstract class SpokeRoot : Node, IDisposable {
+        public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch);
+        public void Dispose() => (this as Friend).Cleanup();
     }
     // ============================== Node ============================================================
     /// <summary>
@@ -50,15 +45,6 @@ namespace Spoke {
         public override Epoch UntypedEpoch => Epoch;
         internal Node(T epoch) : base() { Epoch = epoch; }
     }
-    public class SpokeRoot<T> : SpokeRoot where T : Epoch {
-        public T Epoch { get; private set; }
-        public override Epoch UntypedEpoch => Epoch;
-        public SpokeRoot(T epoch) : base() { Epoch = epoch; (this as Friend).Attach(null); }
-    }
-    public abstract class SpokeRoot : Node, IDisposable {
-        public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch);
-        public void Dispose() => (this as Friend).Cleanup();
-    }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
@@ -67,7 +53,7 @@ namespace Spoke {
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action fn);
     }
-    public abstract class Node : Node.Friend {
+    public abstract class Node : Node.Friend, IComparable<Node> {
         internal interface Friend { void Remount(); void Attach(Node parent); void Cleanup(); }
         enum MountStatus { Sealed, Open, Unmounting }
         List<Node> children = new List<Node>();
@@ -77,6 +63,8 @@ namespace Spoke {
         List<IDisposable> disposables = new List<IDisposable>();
         List<Action> mountCleanupFuncs = new List<Action>();
         public TreeCoords Coords { get; private set; }
+        public PackedTreeCoords128 Coords128 { get; private set; }
+        public bool IsPacked { get; private set; }
         EpochBuilderImpl builder;
         long siblingCounter = 0;
         Node Prev, Next;
@@ -91,6 +79,7 @@ namespace Spoke {
         protected Node() {
             builder = new EpochBuilderImpl(this);
         }
+        public int CompareTo(Node other) => (IsPacked && other.IsPacked) ? Coords128.CompareTo(other.Coords128) : Coords.CompareTo(other.Coords);
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
         void Friend.Attach(Node parent) {
@@ -100,6 +89,7 @@ namespace Spoke {
                 Prev = parent.children.Count > 1 ? parent.children[parent.children.Count - 2] : null;
                 if (Prev != null) Prev.Next = this;
                 Coords = parent.Coords.Extend(parent.siblingCounter++);
+                IsPacked = Coords.TryPack(out var packedCoords); Coords128 = packedCoords;
             }
             (UntypedEpoch as Epoch.Friend).Attach(this);
         }
@@ -124,6 +114,7 @@ namespace Spoke {
             isDetached = true;
         }
         void Friend.Remount() {
+            if (isDetached || isDetaching) return;
             Unmount();
             mountStatus = MountStatus.Open;
             try { (UntypedEpoch as Epoch.Friend).Mount(builder); } catch (Exception e) { Fault = e; }
@@ -295,7 +286,7 @@ namespace Spoke {
                 if (HasPending && FlushMode == FlushMode.Immediate) ScheduleTick();
             }
         }
-        static readonly Comparison<Node> NodeComparison = (a, b) => b.Coords.CompareTo(a.Coords);
+        static readonly Comparison<Node> NodeComparison = (a, b) => b.CompareTo(a);
         void TakeScheduled() {
             if (incoming.Count == 0) return;
             foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
@@ -316,9 +307,9 @@ namespace Spoke {
                     Node prev = null;
                     flushLogger.OnFlushStart();
                     while (Next != null) {
-                        if (prev != null && prev.Coords.CompareTo(Next.Coords) > 0) break; // new pass
+                        if (prev != null && prev.CompareTo(Next) > 0) break; // new pass
                         if (!ContinueFlush(pass)) break;
-                        var exec = Next;
+                        var exec = prev = Next;
                         execSet.Remove(exec);
                         execOrder.RemoveAt(execOrder.Count - 1);
 
@@ -346,6 +337,61 @@ namespace Spoke {
         public void LogNextFlush(string msg) => pendingLogs.Add(msg);
         protected abstract bool ContinueFlush(long nPasses);
         protected virtual void OnFaulted(Node node) { }
+    }
+    // ============================== TreeCoords ============================================================
+    /// <summary>
+    /// Determines the imperative ordering for a node in the call-tree. It's used to sort nodes by imperative
+    /// execution order. This struct is the slow but robust fallback in case it doesn't fit into PackedTree128
+    /// </summary>
+    public struct TreeCoords : IComparable<TreeCoords> {
+        List<long> coords;
+        public TreeCoords Extend(long idx) {
+            var next = new TreeCoords { coords = new List<long>() };
+            if (coords != null) next.coords.AddRange(coords);
+            next.coords.Add(idx);
+            return next;
+        }
+        public int CompareTo(TreeCoords other) {
+            var myDepth = coords?.Count ?? 0;
+            var otherDepth = other.coords?.Count ?? 0;
+            var minDepth = Math.Min(myDepth, otherDepth);
+            for (int i = 0; i < minDepth; i++) {
+                int cmp = coords[i].CompareTo(other.coords[i]);
+                if (cmp != 0) return cmp;
+            }
+            return myDepth.CompareTo(otherDepth);
+        }
+        public bool TryPack(out PackedTreeCoords128 packed) => PackedTreeCoords128.TryPack(coords, out packed);
+    }
+    // ============================== PackedTreeCoords128 ============================================================
+    /// <summary>
+    /// Efficiently encodes up to 16 tree layers, with 256 nodes per layer. For Fast array sorting.
+    /// </summary>
+    public readonly struct PackedTreeCoords128 : IComparable<PackedTreeCoords128> {
+        readonly ulong hi; // top 8 levels
+        readonly ulong lo; // bottom 8 levels
+        readonly byte depth;
+        public PackedTreeCoords128(ulong hi, ulong lo, byte depth) { this.hi = hi; this.lo = lo; this.depth = depth; }
+        public static bool TryPack(List<long> coords, out PackedTreeCoords128 packed) {
+            packed = default;
+            if (coords == null || coords.Count > 16) return false;
+            ulong hi = 0, lo = 0;
+            for (int i = 0; i < coords.Count; i++) {
+                long val = coords[i];
+                if (val < 0 || val > 255) return false;
+                if (i < 8) hi |= ((ulong)val << ((7 - i) * 8));
+                else lo |= ((ulong)val << ((15 - i) * 8));
+            }
+            packed = new PackedTreeCoords128(hi, lo, (byte)coords.Count);
+            return true;
+        }
+        public int CompareTo(PackedTreeCoords128 other) {
+            int cmp = hi.CompareTo(other.hi);
+            if (cmp != 0) return cmp;
+            cmp = lo.CompareTo(other.lo);
+            if (cmp != 0) return cmp;
+            return depth.CompareTo(other.depth);
+        }
     }
     // ============================== SpokeHandle ============================================================
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
