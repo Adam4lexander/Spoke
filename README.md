@@ -184,7 +184,7 @@ If you have experience with reactive frameworks, Spoke will feel natural. If not
 
 Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and runtime composability:
 
-- **Mechs** are containers for **Servos**, which are containers for **Modules**
+- **Mechs** are containers for **Servos**
 - **Servos** are containers for **Modules**
 - **Reactors** provide power to other **Modules**
 - **Sensors** detect blips and feed a shared, live targeting system
