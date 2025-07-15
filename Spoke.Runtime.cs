@@ -220,7 +220,7 @@ namespace Spoke {
         ExecutionEngine mountEngine;
         protected string Name = null;
         protected TreeCoords Coords => node.Coords;
-        public override string ToString() => Name ?? base.ToString();
+        public override string ToString() => Name ?? GetType().Name;
         void Friend.Attach(Node hostNode) {
             if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
             node = hostNode;
@@ -323,7 +323,7 @@ namespace Spoke {
                     }
                     if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
                         pendingLogs.Add($"Flush Pass: {pass}");
-                        flushLogger.LogFlush(logger, string.Join(",", pendingLogs));
+                        flushLogger.LogFlush(logger, node, string.Join(",", pendingLogs));
                     }
                     pendingLogs.Clear();
                 }
@@ -424,20 +424,17 @@ namespace Spoke {
     public struct FlushLogger {
         StringBuilder sb;
         List<Node> runHistory;
-        HashSet<Node> roots;
         public static FlushLogger Create() => new FlushLogger {
             sb = new StringBuilder(),
             runHistory = new List<Node>(),
-            roots = new HashSet<Node>()
         };
-        public void OnFlushStart() { sb.Clear(); roots.Clear(); runHistory.Clear(); HasErrors = false; }
+        public void OnFlushStart() { sb.Clear(); runHistory.Clear(); HasErrors = false; }
         public void OnFlushNode(Node n) { runHistory.Add(n); HasErrors |= n.Fault != null; }
         public bool HasErrors { get; private set; }
-        public void LogFlush(ISpokeLogger logger, string msg) {
+        public void LogFlush(ISpokeLogger logger, Node root, string msg) {
             sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
             foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-            foreach (var c in runHistory) roots.Add(c.Root);
-            foreach (var root in roots) PrintRoot(root);
+            PrintRoot(root);
             if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
         }
         void PrintErrors() {
