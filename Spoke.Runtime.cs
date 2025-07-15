@@ -48,17 +48,13 @@ namespace Spoke {
     /// </summary>
     public class Node<T> : Node where T : Epoch {
         public T Epoch { get; private set; }
-        protected override Epoch UntypedEpoch => Epoch;
+        public override Epoch UntypedEpoch => Epoch;
         public Node(T epoch) : base() {
             Epoch = epoch;
         }
     }
     internal interface ILifecycle { void Attach(Node parent); void Cleanup(); }
-    internal interface IExecutable {
-        void ScheduleMount();
-        void ScheduleTick();
-        void Execute(ExecutionEngine exec);
-    }
+    internal interface INodeFriend : ILifecycle { void Remount(); }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
@@ -67,7 +63,7 @@ namespace Spoke {
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action fn);
     }
-    public abstract class Node : ILifecycle, IExecutable {
+    public abstract class Node : INodeFriend {
         enum MountStatus { Sealed, Open, Unmounting }
         public static Node<T> CreateRoot<T>(T epoch) where T : ExecutionEngine {
             var node = new Node<T>(epoch);
@@ -83,9 +79,8 @@ namespace Spoke {
         EpochBuilderImpl builder;
         long siblingCounter = 0;
         Node Prev, Next;
-        ExecutionEngine mountEngine, tickEngine;
         MountStatus mountStatus = MountStatus.Sealed;
-        protected abstract Epoch UntypedEpoch { get; }
+        public abstract Epoch UntypedEpoch { get; }
         public Node Parent { get; private set; }
         public Node Root => Parent != null ? Parent.Root : this;
         public ReadOnlyList<Node> Children => new ReadOnlyList<Node>(children);
@@ -95,21 +90,6 @@ namespace Spoke {
         }
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
-        void IExecutable.ScheduleMount() {
-            if (mountEngine == null) throw new Exception("Cannot find Execution Engine");
-            if (Fault != null) return;
-            (mountEngine as IEngineFriend).Schedule(this);
-        }
-        // The code for scheduling ticks is messy because only an ExecutionEngine may schedule
-        // ticks, but all scheduling logic is still routed through Node. To clean it up the
-        // mount/unmount logic needs to be moved to Epoch, and the ExecutionEngine should
-        // schedule epochs instead of Nodes.
-        void IExecutable.ScheduleTick() {
-            if (!TryGetEpoch<ExecutionEngine>(out _)) throw new Exception("Only ExecutionEngine may Tick");
-            if (Fault != null) return;
-            if (tickEngine != null) (tickEngine as IEngineFriend).Schedule(this);
-            else (this as IExecutable).Execute(tickEngine); // Tick immediately
-        }
         void ILifecycle.Attach(Node parent) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
             Parent = parent;
@@ -118,8 +98,6 @@ namespace Spoke {
                 if (Prev != null) Prev.Next = this;
                 Coords = parent.Coords.Extend(parent.siblingCounter++);
             }
-            tickEngine = Parent?.mountEngine;
-            if (!TryGetEpoch(out mountEngine)) mountEngine = Parent?.mountEngine;
             (UntypedEpoch as ILifecycle).Attach(this);
         }
         void ILifecycle.Cleanup() {
@@ -129,11 +107,7 @@ namespace Spoke {
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
         }
-        void IExecutable.Execute(ExecutionEngine exec) {
-            if (TryGetEpoch<ExecutionEngine>(out var asEngine) && exec == tickEngine) {
-                try { (asEngine as IEngineFriend).Tick(); } catch (Exception e) { Fault = e; }
-                return;
-            }
+        void INodeFriend.Remount() {
             Unmount();
             mountStatus = MountStatus.Open;
             try { (UntypedEpoch as IEpochFriend).Mount(builder); } catch (Exception e) { Fault = e; }
@@ -228,7 +202,7 @@ namespace Spoke {
         }
     }
     // ============================== Epoch ============================================================
-    internal interface IEpochFriend { void Mount(EpochBuilder s); void ScheduleTick(); }
+    internal interface IEpochFriend { void Mount(EpochBuilder s); Node GetNode(); }
     /// <summary>
     /// A declarative, stateful execution unit that lives in the lifecycle tree.
     /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
@@ -237,13 +211,16 @@ namespace Spoke {
     public abstract class Epoch : IEpochFriend, ILifecycle {
         Node node;
         List<Action> cleanupBlocks = new List<Action>();
+        ExecutionEngine mountEngine;
         protected string Name = null;
         protected TreeCoords Coords => node.Coords;
         public override string ToString() => Name ?? base.ToString();
-        void ILifecycle.Attach(Node parent) {
+        void ILifecycle.Attach(Node hostNode) {
             if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
-            node = parent;
+            node = hostNode;
+            if (!node.TryGetEpoch(out mountEngine)) mountEngine = node.Parent?.UntypedEpoch.mountEngine;
             Action<Action> onDetached = fn => cleanupBlocks.Add(fn);
+            if (this is IEngineFriend engine) engine.OnAttached();
             OnAttached(onDetached);
             ScheduleMount();
         }
@@ -255,6 +232,7 @@ namespace Spoke {
             // TODO: Keyed epochs can unmount themselves before this function completes.
             OnMounted(s);
         }
+        Node IEpochFriend.GetNode() => node;
         protected virtual void OnAttached(Action<Action> onDetach) { }
         protected virtual void OnMounted(EpochBuilder s) { }
         protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
@@ -263,13 +241,18 @@ namespace Spoke {
         protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
         protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
         protected void DropDynamic(object key) => node.DropDynamic(key);
-        protected void ScheduleMount() => (node as IExecutable).ScheduleMount();
-        void IEpochFriend.ScheduleTick() => (node as IExecutable).ScheduleTick();
+        protected void ScheduleMount() {
+            if (mountEngine == null) throw new Exception("Cannot find Execution Engine");
+            if (node.Fault != null) return;
+            (mountEngine as IEngineFriend).Schedule(node);
+        }
     }
     // ============================== ExecutionEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    internal interface IEngineFriend { void Tick(); void Schedule(Node node); }
+    internal interface IEngineFriend { void OnAttached(); void Schedule(Node node); }
     public abstract class ExecutionEngine : Epoch, IEngineFriend {
+        Node node => (this as IEpochFriend).GetNode();
+        ExecutionEngine tickEngine;
         public FlushMode FlushMode = FlushMode.Immediate;
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
@@ -287,7 +270,7 @@ namespace Spoke {
             this.logger = logger ?? new ConsoleSpokeLogger();
         }
         public SpokeHandle Hold() => deferred.Hold();
-        void IEngineFriend.Tick() => OnTick();
+        void IEngineFriend.OnAttached() => TryGetContext(out tickEngine);
         void IEngineFriend.Schedule(Node node) {
             if (node.Fault != null) return;
             if (execSet.Contains(node)) return;
@@ -304,8 +287,11 @@ namespace Spoke {
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
         }
-        protected void OnTick() => BeginFlush();
-        protected void ScheduleTick() => (this as IEpochFriend).ScheduleTick();
+        void OnTick() => BeginFlush();
+        protected void ScheduleTick() {
+            if (tickEngine != null) (tickEngine as IEngineFriend).Schedule(node);
+            else OnTick(); // Tick immediately since we're the root engine
+        }
         protected void BeginFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
         void Flush() {
             if (IsFlushing) return;
@@ -320,7 +306,11 @@ namespace Spoke {
                         var exec = Next;
                         execSet.Remove(exec);
                         execOrder.RemoveAt(execOrder.Count - 1);
-                        (exec as IExecutable).Execute(this);
+
+                        // Figure out if we're ticking an engine, or remounting a generic epoch
+                        if (exec.TryGetEpoch<ExecutionEngine>(out var eng) && eng.tickEngine == this) eng.OnTick();
+                        else (exec as INodeFriend).Remount();
+
                         if (exec.Fault != null) OnFaulted(exec);
                         flushLogger.OnFlushNode(exec);
                         TakeScheduled();
