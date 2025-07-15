@@ -53,8 +53,6 @@ namespace Spoke {
             Epoch = epoch;
         }
     }
-    internal interface ILifecycle { void Attach(Node parent); void Cleanup(); }
-    internal interface INodeFriend : ILifecycle { void Remount(); }
     public interface EpochBuilder {
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
@@ -63,11 +61,12 @@ namespace Spoke {
         public bool TryGetLexical<T>(out T context) where T : Epoch;
         void OnCleanup(Action fn);
     }
-    public abstract class Node : INodeFriend {
+    public abstract class Node : Node.Friend {
+        internal interface Friend { void Attach(Node parent); void Cleanup(); void Remount(); }
         enum MountStatus { Sealed, Open, Unmounting }
         public static Node<T> CreateRoot<T>(T epoch) where T : ExecutionEngine {
             var node = new Node<T>(epoch);
-            (node as ILifecycle).Attach(null);
+            (node as Friend).Attach(null);
             return node;
         }
         List<Node> children = new List<Node>();
@@ -90,7 +89,7 @@ namespace Spoke {
         }
         public bool TryGetEpoch<T>(out T epoch) where T : Epoch => (epoch = (UntypedEpoch as T)) != null;
         public override string ToString() => UntypedEpoch.ToString();
-        void ILifecycle.Attach(Node parent) {
+        void Friend.Attach(Node parent) {
             if (Parent != null) throw new Exception($"Node {this} was used by {parent}, but it's already attached to {Parent}");
             Parent = parent;
             if (parent != null) {
@@ -98,19 +97,19 @@ namespace Spoke {
                 if (Prev != null) Prev.Next = this;
                 Coords = parent.Coords.Extend(parent.siblingCounter++);
             }
-            (UntypedEpoch as ILifecycle).Attach(this);
+            (UntypedEpoch as Epoch.Friend).Attach(this);
         }
-        void ILifecycle.Cleanup() {
+        void Friend.Cleanup() {
             Unmount();
-            (UntypedEpoch as ILifecycle).Cleanup();
+            (UntypedEpoch as Epoch.Friend).Cleanup();
             if (Next != null) Next.Prev = Prev;
             if (Prev != null) Prev.Next = Next;
             Next = Prev = null;
         }
-        void INodeFriend.Remount() {
+        void Friend.Remount() {
             Unmount();
             mountStatus = MountStatus.Open;
-            try { (UntypedEpoch as IEpochFriend).Mount(builder); } catch (Exception e) { Fault = e; }
+            try { (UntypedEpoch as Epoch.Friend).Mount(builder); } catch (Exception e) { Fault = e; }
             mountStatus = MountStatus.Sealed;
         }
         public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
@@ -143,20 +142,20 @@ namespace Spoke {
             var childNode = new Node<T>(epoch);
             dynamicChildren.Add(key, childNode);
             children.Add(childNode);
-            (childNode as ILifecycle).Attach(this);
+            (childNode as Friend).Attach(this);
             return childNode.Epoch;
         }
         public void DropDynamic(object key) {
             if (mountStatus == MountStatus.Unmounting) throw new Exception("Cannot mutate Node while it's unmounting");
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
             var index = children.IndexOf(child);
-            if (index >= 0) { (child as ILifecycle).Cleanup(); children.RemoveAt(index); }
+            if (index >= 0) { (child as Friend).Cleanup(); children.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
         void Unmount() {
             mountStatus = MountStatus.Unmounting;
             for (int i = children.Count - 1; i >= 0; i--)
-                try { (children[i] as ILifecycle).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
+                try { (children[i] as Friend).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
             children.Clear();
             siblingCounter = 0;
             dynamicChildren.Clear();
@@ -184,7 +183,7 @@ namespace Spoke {
                 NoMischief();
                 var childNode = new Node<T>(epoch);
                 node.children.Add(childNode);
-                (childNode as ILifecycle).Attach(node);
+                (childNode as Friend).Attach(node);
                 return childNode.Epoch;
             }
             public void Call(EpochBlock block) => Call(new Scope(block));
@@ -202,37 +201,37 @@ namespace Spoke {
         }
     }
     // ============================== Epoch ============================================================
-    internal interface IEpochFriend { void Mount(EpochBuilder s); Node GetNode(); }
     /// <summary>
     /// A declarative, stateful execution unit that lives in the lifecycle tree.
     /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
-    public abstract class Epoch : IEpochFriend, ILifecycle {
+    public abstract class Epoch : Epoch.Friend {
+        internal interface Friend { void Attach(Node hostNode); void Cleanup(); void Mount(EpochBuilder s); Node GetNode(); }
         Node node;
         List<Action> cleanupBlocks = new List<Action>();
         ExecutionEngine mountEngine;
         protected string Name = null;
         protected TreeCoords Coords => node.Coords;
         public override string ToString() => Name ?? base.ToString();
-        void ILifecycle.Attach(Node hostNode) {
+        void Friend.Attach(Node hostNode) {
             if (node != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
             node = hostNode;
             if (!node.TryGetEpoch(out mountEngine)) mountEngine = node.Parent?.UntypedEpoch.mountEngine;
             Action<Action> onDetached = fn => cleanupBlocks.Add(fn);
-            if (this is IEngineFriend engine) engine.OnAttached();
+            if (this is ExecutionEngine.Friend engine) engine.OnAttached();
             OnAttached(onDetached);
             ScheduleMount();
         }
-        void ILifecycle.Cleanup() {
+        void Friend.Cleanup() {
             foreach (var fn in cleanupBlocks) fn?.Invoke();
             cleanupBlocks.Clear();
         }
-        void IEpochFriend.Mount(EpochBuilder s) {
+        void Friend.Mount(EpochBuilder s) {
             // TODO: Keyed epochs can unmount themselves before this function completes.
             OnMounted(s);
         }
-        Node IEpochFriend.GetNode() => node;
+        Node Friend.GetNode() => node;
         protected virtual void OnAttached(Action<Action> onDetach) { }
         protected virtual void OnMounted(EpochBuilder s) { }
         protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
@@ -244,14 +243,14 @@ namespace Spoke {
         protected void ScheduleMount() {
             if (mountEngine == null) throw new Exception("Cannot find Execution Engine");
             if (node.Fault != null) return;
-            (mountEngine as IEngineFriend).Schedule(node);
+            (mountEngine as ExecutionEngine.Friend).Schedule(node);
         }
     }
     // ============================== ExecutionEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    internal interface IEngineFriend { void OnAttached(); void Schedule(Node node); }
-    public abstract class ExecutionEngine : Epoch, IEngineFriend {
-        Node node => (this as IEpochFriend).GetNode();
+    public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
+        new internal interface Friend { void OnAttached(); void Schedule(Node node); }
+        Node node => (this as Epoch.Friend).GetNode();
         ExecutionEngine tickEngine;
         public FlushMode FlushMode = FlushMode.Immediate;
         List<Node> incoming = new List<Node>();
@@ -270,8 +269,8 @@ namespace Spoke {
             this.logger = logger ?? new ConsoleSpokeLogger();
         }
         public SpokeHandle Hold() => deferred.Hold();
-        void IEngineFriend.OnAttached() => TryGetContext(out tickEngine);
-        void IEngineFriend.Schedule(Node node) {
+        void Friend.OnAttached() => TryGetContext(out tickEngine);
+        void Friend.Schedule(Node node) {
             if (node.Fault != null) return;
             if (execSet.Contains(node)) return;
             incoming.Add(node);
@@ -289,7 +288,7 @@ namespace Spoke {
         }
         void OnTick() => BeginFlush();
         protected void ScheduleTick() {
-            if (tickEngine != null) (tickEngine as IEngineFriend).Schedule(node);
+            if (tickEngine != null) (tickEngine as Friend).Schedule(node);
             else OnTick(); // Tick immediately since we're the root engine
         }
         protected void BeginFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
@@ -309,7 +308,7 @@ namespace Spoke {
 
                         // Figure out if we're ticking an engine, or remounting a generic epoch
                         if (exec.TryGetEpoch<ExecutionEngine>(out var eng) && eng.tickEngine == this) eng.OnTick();
-                        else (exec as INodeFriend).Remount();
+                        else (exec as Node.Friend).Remount();
 
                         if (exec.Fault != null) OnFaulted(exec);
                         flushLogger.OnFlushNode(exec);
