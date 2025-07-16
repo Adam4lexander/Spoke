@@ -274,7 +274,7 @@ namespace Spoke {
         protected bool HasPending => Next != null;
         protected long FlushNumber { get; private set; }
         public ExecutionEngine(ISpokeLogger logger = null) {
-            this.logger = logger ?? new ConsoleSpokeLogger();
+            this.logger = logger ?? SpokeError.DefaultLogger;
         }
         void Friend.OnAttached() => TryGetContext(out tickEngine);
         void Friend.Schedule(Node node) {
@@ -414,6 +414,7 @@ namespace Spoke {
     }
     public static class SpokeError {
         internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
+        internal static ISpokeLogger DefaultLogger = new ConsoleSpokeLogger();
     }
     // ============================== FlushLogger ============================================================
     public struct FlushLogger {

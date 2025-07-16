@@ -286,6 +286,7 @@ namespace Spoke {
             if (isInitialized) return;
             isInitialized = true;
             SpokeError.Log = (msg, ex) => Debug.LogError($"[Spoke] {msg}\n{ex}");
+            SpokeError.DefaultLogger = new UnitySpokeLogger();
         }
     }
 }
