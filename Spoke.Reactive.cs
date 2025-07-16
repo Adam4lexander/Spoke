@@ -258,15 +258,20 @@ namespace Spoke {
         public void Drop(object key) => DropDynamic(key);
     }
     // ============================== SpokeEngine ============================================================
+    public enum FlushMode { Immediate, Manual }
     public class SpokeEngine : ExecutionEngine {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => SpokeRoot.Create(new SpokeEngine(flushMode, logger)).Epoch;
+        public FlushMode FlushMode = FlushMode.Immediate;
+        DeferredQueue deferred = new DeferredQueue();
+        Action _requestTick;
         Action<long> _releaseEffect;
         long currId;
         long holdCount;
         SpokeHandle holdHandle;
-        internal void FastHold() { if (holdCount++ == 0) holdHandle = Hold(); }
+        internal void FastHold() { if (holdCount++ == 0) holdHandle = deferred.Hold(); }
         internal void FastRelease() { if (--holdCount == 0) holdHandle.Dispose(); }
-        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(flushMode, logger) {
+        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
+            _requestTick = RequestTick;
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
         }
@@ -277,18 +282,24 @@ namespace Spoke {
         }
         void ReleaseEffect(long id) => DropDynamic(id);
         public void Batch(Action action) {
-            var handle = Hold();
+            var handle = deferred.Hold();
             try { action(); } finally { handle.Dispose(); }
         }
         public void LogBatch(string msg, Action action) => Batch(() => {
             action();
-            if (HasPending) LogNextFlush(msg);
+            if (HasPending) Log(msg);
         });
-        public void Flush() => BeginFlush();
-        protected override bool ContinueFlush(long nPasses) {
+        protected override void OnHasPending() { if (FlushMode == FlushMode.Immediate) Flush(); }
+        public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_requestTick); }
+        protected override void OnTick() {
             const long maxPasses = 1000;
-            if (nPasses > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-            return true;
+            var startFlush = FlushNumber;
+            try {
+                while (HasPending) {
+                    if (FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    RunNext();
+                }
+            } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
         }
     }
     // ============================== Computation ============================================================
@@ -314,7 +325,7 @@ namespace Spoke {
         protected abstract void OnRun(EpochBuilder s);
         protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); }
         protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-        protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.LogNextFlush(msg); }
+        protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.Log(msg); }
     }
     // ============================== DependencyTracker ============================================================
     internal class DependencyTracker : IDisposable {

@@ -46,6 +46,7 @@ namespace Spoke {
         internal Node(T epoch) : base() { Epoch = epoch; }
     }
     public interface EpochBuilder {
+        void Log(string message);
         SpokeHandle Use(SpokeHandle handle);
         T Use<T>(T disposable) where T : IDisposable;
         T Call<T>(T epoch) where T : Epoch;
@@ -180,6 +181,10 @@ namespace Spoke {
             public EpochBuilderImpl(Node node) {
                 this.node = node;
             }
+            public void Log(string msg) {
+                if (!node.TryGetEpoch<ExecutionEngine>(out var engine)) node.TryGetContext(out engine);
+                engine.Log(msg);
+            }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); node.handles.Add(handle); return handle;
             }
@@ -254,89 +259,79 @@ namespace Spoke {
         }
     }
     // ============================== ExecutionEngine ============================================================
-    public enum FlushMode { Immediate, Manual }
     public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
         new internal interface Friend { void OnAttached(); void Schedule(Node node); }
         Node node => (this as Epoch.Friend).GetNode();
         ExecutionEngine tickEngine;
-        public FlushMode FlushMode = FlushMode.Immediate;
         List<Node> incoming = new List<Node>();
         HashSet<Node> execSet = new HashSet<Node>();
         List<Node> execOrder = new List<Node>();
         FlushLogger flushLogger = FlushLogger.Create();
         List<string> pendingLogs = new List<string>();
-        DeferredQueue deferred = new DeferredQueue();
         ISpokeLogger logger;
+        bool isRunning;
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         protected bool HasPending => Next != null;
-        public bool IsFlushing { get; private set; }
-        Action _flush;
-        public ExecutionEngine(FlushMode flushMode, ISpokeLogger logger = null) {
-            _flush = Flush;
+        protected long FlushNumber { get; private set; }
+        public ExecutionEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? new ConsoleSpokeLogger();
         }
-        public SpokeHandle Hold() => deferred.Hold();
         void Friend.OnAttached() => TryGetContext(out tickEngine);
         void Friend.Schedule(Node node) {
             if (node.Fault != null) return;
             if (execSet.Contains(node)) return;
             incoming.Add(node);
-            if (!IsFlushing) {
+            if (!isRunning) {
+                var prevHasPending = HasPending;
                 TakeScheduled();
-                if (HasPending && FlushMode == FlushMode.Immediate) ScheduleTick();
+                if (!prevHasPending && HasPending) OnHasPending();
             }
         }
         static readonly Comparison<Node> NodeComparison = (a, b) => b.CompareTo(a);
         void TakeScheduled() {
             if (incoming.Count == 0) return;
+            var prevNext = Next;
             foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
             incoming.Clear();
             execOrder.Sort(NodeComparison); // Reverse-order, to pop items from end of list
         }
-        void OnTick() => BeginFlush();
-        protected void ScheduleTick() {
+        protected void RequestTick() {
             if (tickEngine != null) (tickEngine as Friend).Schedule(node);
             else OnTick(); // Tick immediately since we're the root engine
         }
-        protected void BeginFlush() { if (deferred.IsEmpty) deferred.Enqueue(_flush); }
-        void Flush() {
-            if (IsFlushing) return;
-            IsFlushing = true;
+        Node prevExec;
+        protected Node RunNext() {
+            if (!HasPending) return null;
+            isRunning = true;
             try {
-                for (long pass = 0; Next != null; pass++) {
-                    Node prev = null;
-                    flushLogger.OnFlushStart();
-                    while (Next != null) {
-                        if (prev != null && prev.CompareTo(Next) > 0) break; // new pass
-                        if (!ContinueFlush(pass)) break;
-                        var exec = prev = Next;
-                        execSet.Remove(exec);
-                        execOrder.RemoveAt(execOrder.Count - 1);
+                if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
+                var exec = prevExec = Next;
+                execSet.Remove(exec);
+                execOrder.RemoveAt(execOrder.Count - 1);
 
-                        // Figure out if we're ticking an engine, or remounting a generic epoch
-                        if (exec.TryGetEpoch<ExecutionEngine>(out var eng) && eng.tickEngine == this) eng.OnTick();
-                        else (exec as Node.Friend).Remount();
+                // Figure out if we're ticking an engine, or remounting a generic epoch
+                if (exec.TryGetEpoch<ExecutionEngine>(out var eng) && eng.tickEngine == this) eng.OnTick();
+                else (exec as Node.Friend).Remount();
 
-                        if (exec.Fault != null) OnFaulted(exec);
-                        flushLogger.OnFlushNode(exec);
-                        TakeScheduled();
-                    }
-                    if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
-                        pendingLogs.Add($"Flush Pass: {pass}");
-                        flushLogger.LogFlush(logger, node, string.Join(",", pendingLogs));
-                    }
-                    pendingLogs.Clear();
-                }
-            } catch (Exception ex) {
-                SpokeError.Log("Internal Flush Error: ", ex);
-            } finally {
-                IsFlushing = false;
-                pendingLogs.Clear();
-            }
+                flushLogger.OnFlushNode(exec);
+                TakeScheduled();
+                if (!HasPending) IncrementFlush();
+                return exec;
+            } finally { isRunning = false; }
         }
-        public void LogNextFlush(string msg) => pendingLogs.Add(msg);
-        protected abstract bool ContinueFlush(long nPasses);
-        protected virtual void OnFaulted(Node node) { }
+        void IncrementFlush() {
+            if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
+                pendingLogs.Add($"Flush: {FlushNumber}");
+                flushLogger.LogFlush(logger, node, string.Join(",", pendingLogs));
+            }
+            flushLogger.OnFlushStart();
+            pendingLogs.Clear();
+            FlushNumber++;
+            prevExec = null;
+        }
+        public void Log(string msg) => pendingLogs.Add(msg);
+        protected virtual void OnHasPending() { }
+        protected virtual void OnTick() { }
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
