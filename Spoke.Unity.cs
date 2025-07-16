@@ -1,5 +1,6 @@
 // Spoke.Unity.cs
 // -----------------------------
+// > EffectBuilderExtensions
 // > SpokeTeardown
 // > SpokeBehaviour
 // > SpokeSingleton
@@ -9,8 +10,9 @@
 
 using System;
 using System.Collections;
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 
 #if UNITY_EDITOR
@@ -21,6 +23,17 @@ using System.Reflection;
 
 namespace Spoke {
 
+    // ============================== EffectBuilderExtensions ============================================================
+    public static partial class EffectBuilderExtensions {
+        public static void Subscribe(this EffectBuilder s, UnityEvent evt, UnityAction fn) {
+            evt.AddListener(fn);
+            s.OnCleanup(() => evt.RemoveListener(fn));
+        }
+        public static void Subscribe<T>(this EffectBuilder s, UnityEvent<T> evt, UnityAction<T> fn) {
+            evt.AddListener(fn);
+            s.OnCleanup(() => evt.RemoveListener(fn));
+        }
+    }
     // ============================== SpokeTeardown ============================================================
     public static class SpokeTeardown {
         static Trigger<Scene> scene = Trigger.Create<Scene>();
