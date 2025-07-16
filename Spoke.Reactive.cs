@@ -12,6 +12,7 @@
 // > SpokeEngine
 // > Computation
 // > DependencyTracker
+// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -259,17 +260,16 @@ namespace Spoke {
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class SpokeEngine : ExecutionEngine {
+    public class SpokeEngine : ExecutionEngine, SpokeEngine.Friend {
+        new internal interface Friend { void FastHold(); void FastRelease(); }
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => SpokeRoot.Create(new SpokeEngine(flushMode, logger)).Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
         DeferredQueue deferred = new DeferredQueue();
         Action _requestTick;
         Action<long> _releaseEffect;
         long currId;
-        long holdCount;
-        SpokeHandle holdHandle;
-        internal void FastHold() { if (holdCount++ == 0) holdHandle = deferred.Hold(); }
-        internal void FastRelease() { if (--holdCount == 0) holdHandle.Dispose(); }
+        void Friend.FastHold() => deferred.FastHold();
+        void Friend.FastRelease() => deferred.FastRelease();
         public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
             _requestTick = RequestTick;
             _releaseEffect = ReleaseEffect;
@@ -323,19 +323,19 @@ namespace Spoke {
             try { OnRun(s); } finally { tracker.EndDynamic(); }
         }
         protected abstract void OnRun(EpochBuilder s);
-        protected void AddStaticTrigger(ITrigger trigger) { tracker.AddStatic(trigger); }
+        protected void AddStaticTrigger(ITrigger trigger) => tracker.AddStatic(trigger);
         protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
         protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.Log(msg); }
     }
     // ============================== DependencyTracker ============================================================
     internal class DependencyTracker : IDisposable {
-        SpokeEngine engine;
+        SpokeEngine.Friend engine;
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
         public int depIndex;
-        public DependencyTracker(SpokeEngine engine, Action schedule) {
+        public DependencyTracker(SpokeEngine.Friend engine, Action schedule) {
             this.engine = engine;
             this.schedule = schedule;
         }
@@ -375,5 +375,32 @@ namespace Spoke {
             schedule();
             (trigger as IDeferredTrigger).OnAfterNotify(() => engine.FastRelease());
         };
+    }
+    // ============================== DeferredQueue ============================================================
+    internal class DeferredQueue {
+        long holdIdx;
+        HashSet<long> holdKeys = new HashSet<long>();
+        Queue<Action> queue = new Queue<Action>();
+        Action<long> _release;
+        long holdCount;
+        public bool IsDraining { get; private set; }
+        public bool IsEmpty => queue.Count == 0 && !IsDraining;
+        public DeferredQueue() { _release = Release; }
+        public SpokeHandle Hold() {
+            if (holdKeys.Add(holdIdx)) FastHold();
+            return SpokeHandle.Of(holdIdx++, _release);
+        }
+        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
+        public void FastHold() => holdCount++;
+        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
+        public void Enqueue(Action action) {
+            queue.Enqueue(action);
+            if (holdKeys.Count == 0 && !IsDraining) Drain();
+        }
+        void Drain() {
+            IsDraining = true;
+            while (queue.Count > 0) queue.Dequeue()();
+            IsDraining = false;
+        }
     }
 }

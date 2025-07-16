@@ -11,7 +11,6 @@
 // > FlushLogger
 // > SpokePool
 // > ReadOnlyList
-// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -479,31 +478,5 @@ namespace Spoke {
         public List<T>.Enumerator GetEnumerator() => list.GetEnumerator();
         public int Count => list?.Count ?? 0;
         public T this[int index] => list[index];
-    }
-    // ============================== DeferredQueue ============================================================
-    internal class DeferredQueue {
-        long holdIdx;
-        HashSet<long> holdKeys = new HashSet<long>();
-        Queue<Action> queue = new Queue<Action>();
-        Action<long> _release;
-        public bool IsDraining { get; private set; }
-        public bool IsEmpty => queue.Count == 0 && !IsDraining;
-        public DeferredQueue() { _release = Release; }
-        public SpokeHandle Hold() {
-            holdKeys.Add(holdIdx);
-            return SpokeHandle.Of(holdIdx++, _release);
-        }
-        void Release(long key) {
-            if (holdKeys.Remove(key)) if (holdKeys.Count == 0 && !IsDraining) Drain();
-        }
-        public void Enqueue(Action action) {
-            queue.Enqueue(action);
-            if (holdKeys.Count == 0 && !IsDraining) Drain();
-        }
-        void Drain() {
-            IsDraining = true;
-            while (queue.Count > 0) queue.Dequeue()();
-            IsDraining = false;
-        }
     }
 }
