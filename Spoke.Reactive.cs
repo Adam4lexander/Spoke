@@ -20,7 +20,7 @@ using System.Collections.Generic;
 namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
-    public delegate T EffectBlock<T>(EffectBuilder s);
+    public delegate IRef<T> EffectBlock<T>(EffectBuilder s);
 
     // ============================== Trigger ============================================================
     public interface ITrigger {
@@ -141,8 +141,8 @@ namespace Spoke {
         public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
         public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
         public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
         public static void Effect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect(name, buildLogic, triggers));
         public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction("Reaction", block, triggers));
@@ -208,10 +208,10 @@ namespace Spoke {
     public class Effect<T> : BaseEffect, ISignal<T>, IDeferredTrigger {
         State<T> state = State.Create<T>();
         public T Now => state.Now;
-        public Effect(string name, EffectBlock<IRef<T>> block, params ITrigger[] triggers) : base(name, triggers) {
+        public Effect(string name, EffectBlock<T> block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = Mount(block);
         }
-        EffectBlock Mount(EffectBlock<IRef<T>> block) => s => {
+        EffectBlock Mount(EffectBlock<T> block) => s => {
             if (block == null) return;
             var result = block.Invoke(s);
             if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
