@@ -27,7 +27,7 @@ namespace Spoke {
         SpokeHandle Subscribe(Action action);
         void Unsubscribe(Action action);
     }
-    public interface ITrigger<T> : ITrigger {
+    public interface ITrigger<out T> : ITrigger {
         SpokeHandle Subscribe(Action<T> action);
         void Unsubscribe(Action<T> action);
     }
@@ -96,10 +96,10 @@ namespace Spoke {
         void OnAfterNotify(Action action);
     }
     // ============================== State ============================================================
-    public interface IRef<T> {
+    public interface IRef<out T> {
         T Now { get; }
     }
-    public interface ISignal<T> : IRef<T>, ITrigger<T> { }
+    public interface ISignal<out T> : IRef<T>, ITrigger<T> { }
     public interface IState<T> : ISignal<T> {
         void Set(T value);
         void Update(Func<T, T> setter);
