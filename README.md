@@ -189,6 +189,7 @@ From the outset, I designed Spoke to simplify two patterns I had everywhere in m
 ### Scattered Resource Management
 
 ```cs
+// ----------------------------- MonoBehaviour Version ---------------------
 // There are 3 separate code-points to manage the lifecycle of myResource.
 public class MyBehaviour : MonoBehaviour {
 
@@ -203,6 +204,7 @@ public class MyBehaviour : MonoBehaviour {
     }
 }
 
+// ----------------------------- Spoke Version -----------------------------
 // In Spoke, resource and lifecycle management collapses into one coherent bundle.
 public class MySpokeBehaviour : SpokeBehaviour {
 
@@ -219,6 +221,7 @@ public class MySpokeBehaviour : SpokeBehaviour {
 ### Chained Event Subscriptions
 
 ```cs
+// ----------------------------- MonoBehaviour Version ---------------------
 // When an enemy is detected on radar, and it becomes destroyed. Then the
 // cockpit voice (BitchinBetty) should speak the phrase: "Enemy Destroyed".
 public class MyBehaviour : MonoBehaviour {
@@ -249,6 +252,7 @@ public class MyBehaviour : MonoBehaviour {
     }
 }
 
+// ----------------------------- Spoke Version -----------------------------
 // Again, Spoke collapses the problem into one cohesive bundle
 public class MySpokeBehaviour : SpokeBehaviour {
 
