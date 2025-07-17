@@ -51,7 +51,7 @@ public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
         // Subscribed when scope is mounted, auto-disposed when unmounted
-        s.UseSubscribe(myTrigger, evt => ReactToEvent(evt));
+        s.Subscribe(myTrigger, evt => ReactToEvent(evt));
     }
 }
 ```
