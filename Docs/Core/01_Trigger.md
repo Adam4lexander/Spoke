@@ -1,8 +1,8 @@
 # Trigger
 
-A `Trigger` is an event. It can be subscribed to and can notify subscribers with optional event data. It's conceptually similar to `UnityEvent` or a C# `event`.
+A trigger is an event broadcaster. It can be subscribed to and can notify subscribers with optional event data. It's conceptually similar to `UnityEvent` or a C# `event`.
 
-In Spoke, `Trigger` is also the **core primitive** that drives reactive computation.
+In Spoke, a trigger is also the **core primitive** that drives reactive computation.
 
 ---
 
@@ -56,6 +56,8 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
+---
+
 ### ⚠️ Alternative: Subscribe / Unsubscribe
 
 This resembles Unity-style events and works fine, but doesn’t leverage Spoke's lifecycle integration.
@@ -81,14 +83,16 @@ This can be useful when migrating from `UnityEvent` to `Trigger`, but it's not r
 
 ### `Trigger<T>`
 
-This is the concrete implementation. It implements both `ITrigger` and `ITrigger<T>`, and adds `Invoke(T param)` to emit events.
+This is the concrete implementation for a trigger. It exposes methods for `Subscribe` and also `Invoke`. Call `Invoke` on the trigger to broadcast an event to all its subscribers.
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
 
-    private Trigger<string> _myTrigger = Trigger.Create<string>();
+    // Keep the Trigger instance private, so only I can Invoke it
+    Trigger<string> _myTrigger = Trigger.Create<string>();
 
-    public ITrigger<string> MyTrigger => _myTrigger; // Only exposes subscribe
+    // ITrigger exposes 'Subscribe' but not 'Invoke'. External code can subscribe to my trigger, but not call it
+    public ITrigger<string> MyTrigger => _myTrigger;
 
     void DoInvokeTrigger() {
         _myTrigger.Invoke("Hello");
@@ -96,7 +100,60 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-> `Trigger.Create()` without a type parameter returns a trigger that emits no data — internally, it's just `Trigger<Unit>`, where `Unit` is an empty struct.
+---
+
+### `Trigger`
+
+Sometimes you need a trigger, but you don't need an event payload, just a pure notification. You can create one like this:
+
+```csharp
+public class MyBehaviour : SpokeBehaviour {
+
+    Trigger _myTrigger = Trigger.Create();
+
+    public ITrigger MyTrigger => _myTrigger;
+
+    void DoInvokeTrigger() {
+        _myTrigger.Invoke();
+    }
+}
+```
+
+> Internally, `Trigger.Create()` will instantiate a `Trigger<Unit>`, where `Unit` is struct defined with no fields. Spoke doesn't actually have a class `Trigger`.
+
+---
+
+## Combining with delegates or `UnityEvent`
+
+Spoke needs its own event emitting primitive to drive reactive updates. `ITrigger` is the common interface for binding to reactive dependencies.
+
+If you're already using delegates or UnityEvents, and you need them to behave like an `ITrigger`, this is how to do it:
+
+```cs
+public class MyBehaviour : SpokeBehaviour {
+
+    public UnityEvent SomeUnityEvent;
+    public event Action SomeDelegateEvent;
+
+    protected override void Init(EffectBuilder s) {
+        // Create a trigger that will facade SomeUnityEvent and also SomeDelegateEvent
+        var trigger = Trigger.Create();
+
+        // When the UnityEvent is invoked, it will invoke the trigger
+        s.Subscribe(SomeUnityEvent, trigger.Invoke);
+
+        // When the SomeDelegateEvent is invoked, it will also invoke the trigger
+        SomeDelegateEvent += trigger.Invoke;
+        // Manual cleanup when the behaviour unmounts, s.Subscribe() does for us already
+        s.OnCleanup(() => SomeDelegateEvent -= trigger.Invoke);
+
+        // Now we can bind reactive objects to the trigger
+        s.Reaction(s => {
+            Debug.Log("Either 'SomeUnityEvent' or 'SomeDelegateEvent' fired");
+        }, trigger);
+    }
+}
+```
 
 ---
 
