@@ -47,8 +47,8 @@ Each time you change the number in the Unity inspector, it will trigger the Effe
 You can create effects yourself without having to use `SpokeBehaviour`:
 
 ```cs
-// First create a SpokeEngine instance. Make sure you give it a UnitySpokeLogger, to show any errors in the Unity console
-var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+// First create a SpokeEngine instance.
+var engine = SpokeEngine.Create(FlushMode.Immediate);
 
 // A reactive state we can test with
 var number = State.Create(0);
@@ -77,7 +77,7 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 ### Explicit Dependencies
 
 ```csharp
-var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+var engine = SpokeEngine.Create(FlushMode.Immediate);
 
 var myTrigger = Trigger.Create();
 var myState = State.Create(0);
@@ -106,7 +106,7 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 `T D<T>(ISignal<T> signal);`
 
 ```csharp
-var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
+var engine = SpokeEngine.Create(FlushMode.Immediate);
 
 var name = State.Create("Spokey");
 var age = State.Create(0);
