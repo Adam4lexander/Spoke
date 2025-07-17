@@ -54,7 +54,7 @@ namespace Spoke {
         void OnCleanup(Action fn);
     }
     public abstract class Node : Node.Friend, IComparable<Node> {
-        internal interface Friend { void Remount(); void Attach(Node parent); void Cleanup(); }
+        internal interface Friend { void Remount(); void Attach(Node parent); void Cleanup(); void SetFault(Exception fault); }
         enum MountStatus { Sealed, Open, Unmounting }
         List<Node> children = new List<Node>();
         Dictionary<object, Node> dynamicChildren = new Dictionary<object, Node>();
@@ -120,6 +120,7 @@ namespace Spoke {
             try { (UntypedEpoch as Epoch.Friend).Mount(builder); } catch (Exception e) { Fault = e; }
             mountStatus = MountStatus.Sealed;
         }
+        void Friend.SetFault(Exception fault) => Fault = fault;
         public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
             if (TryGetEpoch(out epoch)) return true;
             foreach (var n in Children) if (n.TryGetSubEpoch(out epoch)) return true;
@@ -270,8 +271,8 @@ namespace Spoke {
         ISpokeLogger logger;
         bool isRunning;
         protected Node Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
-        protected bool HasPending => Next != null;
-        protected long FlushNumber { get; private set; }
+        public bool HasPending => Next != null;
+        public long FlushNumber { get; private set; }
         public ExecutionEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
@@ -331,6 +332,7 @@ namespace Spoke {
         public void Log(string msg) => pendingLogs.Add(msg);
         protected virtual void OnHasPending() { }
         protected virtual void OnTick() { }
+        protected void SetFault(Exception fault) => (node as Node.Friend).SetFault(fault);
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
