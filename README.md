@@ -186,6 +186,8 @@ Spoke was developed to support my passion project: **_Power Grip Dragoons_** —
 
 From the outset, I designed Spoke to simplify two patterns I had everywhere in my code:
 
+---
+
 ### Scattered Resource Management
 
 ```cs
