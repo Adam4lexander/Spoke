@@ -1,62 +1,69 @@
-# State
+# Signal
 
-A `State` is a reactive data container. It holds a value, and it implements an `ITrigger` that notifies subscribers when the value changes.
+A signal is a kind of trigger that additionally holds a value. It's a reactive data container that notifies subscribers when its value changes.
 
-## Types
+Triggers may be the fundamental primitive in Spoke, but signals are the objects you'll work with most often.
 
-### `ISignal<T>`
+---
+
+## `ISignal<T>`
+
+A signal is anything that extends the `ISignal<T>` interface:
 
 ```csharp
 public interface ISignal<T> : ITrigger<T> {
-    T Now { get; }
+
+    T Now { get; } // The signals current value
+
+    // Inherited from ITrigger<T>
+    SpokeHandle Subscribe(Action<T> action);
+    SpokeHandle Subscribe(Action action);
 }
 ```
 
-Before we discuss `State`, we need to understand `ISignal<T>` — a concept representing a value with change notifications.
+In Spoke, a signal is a readonly object. You can access its present value with `signal.Now`, and you can subscribe to the value changing with `signal.Subscribe()`.
 
-Many reactive frameworks use **Signal** as the fundamental unit of reactivity — a value that notifies when it changes.
+---
 
-In Spoke, however, the fundamental primitive is the **Trigger**, not the **Signal**. This better aligns with game development needs, where one-shot events often drive behavior more naturally than continuous value tracking.
-
-An `ISignal<T>` extends `ITrigger<T>` and adds a current value, accessed via `Now`.
+### Example
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
-        Debug.Log($"Signal started as {mySignal.Now}");
-        s.Subscribe(mySignal, v => Debug.Log($"Signal changed to {v}"));
+
+        // SpokeBehaviour exposes: IsAwake, IsEnabled and IsStarted
+        // They are each an ISignal<bool>
+
+        Debug.Log(IsEnabled.Now);       // Prints: false
+        s.Subscribe(IsEnabled, v => {
+            Debug.Log($"IsEnabled changed to {v}");
+        });
+
+        Debug.Log(IsStarted.Now);       // Prints: false
+        s.Phase(IsStarted, s => {
+            Debug.Log(IsStarted.Now);   // Prints: true
+        });
     }
 }
 ```
 
 ---
 
-### `IState<T>`
+## `State<T>`
+
+A state is a type of signal that lets you read and write its value. It implements `ISignal<T>` and extends it with the following methods:
 
 ```csharp
-public interface IState<T> : ISignal<T> {
-    void Set(T value);
-    void Update(Func<T, T> setter);
-}
+void Set(T value);              // Sets the value contained by the signal
+void Update(Func<T, T> setter); // Sets the value by a function of the existing value
 ```
 
-An `IState` extends `ISignal` with methods to mutate the value it contains, making it like a reactive variable.
-
-```csharp
-myState.Set(5);
-Debug.Log(myState.Now); // Prints: 5
-myState.Update(x => x * 5);
-Debug.Log(myState.Now); // Prints: 25
-```
+When it sets a new value, all subscribers are notified. Crucially, the new value is compared with the old using `EqualityComparer<T>.Default`. When you call `state.Set()` and pass a value equal to its `state.Now`, then it will not trigger.
 
 ---
 
-### `State<T>`
-
-`State<T>` is a concrete implementation of `IState`. It triggers when a **new** value is set.
-
-> Value comparison is given by `EqualityComparer<T>.Default`.
+### Example
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {

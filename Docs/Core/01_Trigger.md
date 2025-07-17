@@ -2,7 +2,7 @@
 
 A trigger is an event broadcaster. It can be subscribed to and can notify subscribers with optional event data. It's conceptually similar to `UnityEvent` or a C# `event`.
 
-In Spoke, a trigger is also the **core primitive** that drives reactive computation.
+In Spoke, a trigger is also the **core primitive** that drives reactive computation. When a trigger is invoked, all its dependants are notified and re-executed.
 
 ---
 
