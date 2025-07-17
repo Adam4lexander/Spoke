@@ -174,29 +174,102 @@ The reactive model behind Spoke is built around a few simple primitives:
 
 ## 🤔 What is Spoke-style Reactivity?
 
-Spoke shares a DNA with frontend reactivity engines like `React` or `SolidJS`. The mental model is the same, but the problem domain is different. Spoke was built from the ground up to express general game logic, not for building UIs. Think of it as "React for simulations — behaviour trees, not DOM trees."
+Spoke shares DNA with frontend reactivity engines like `React` and `SolidJS`. The mental model is the same, but instead of managing a DOM tree, you're sculpting simulation logic: behaviour trees, system interactions, and stateful gameplay.
 
-If you have experience with reactive frameworks, Spoke will feel natural. If not, it's a paradigm shift, but once it clicks, it unlocks a new level of clarity and control.
+These frameworks transformed how we write UI. Spoke applies the same reactivity model to general game logic. Once it clicks, it unlocks a new level of clarity and control.
 
 ---
 
 ## 🎮 Origins
 
-Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and runtime composability:
+Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and vehicle modularity. This game has brutal requirements for dynamic, eventful logic. Over 6 years I refined an architecture to express it. Architecture is a priority for me to keep development fun and engaging. It's a passion project after all, not a job.
 
-- **Mechs** are containers for **Servos**
-- **Servos** are containers for **Modules**
-- **Reactors** provide power to other **Modules**
-- **Sensors** detect blips and feed a shared, live targeting system
-- **Deflectors** increase armour across **Servos**, but draw power from **Reactors**
-- **Modules** are damaged, destroyed, repaired, disabled and reconfigured on the fly
-- Cockpit displays reflect functionality based on which **Modules** are mounted, powered, and still operational
+From the outset, I designed Spoke to simplify two patterns I had everywhere in my code:
 
-This game has brutal requirements for dynamic, eventful logic. For 6 years I tried to build an architecture that brought sanity to this chaos.
+### Scattered Resource Management
 
-**Spoke is the crystallized form for what I've learned.** Once it emerged in this form, all the complexity of my previous code evaporated. Suddenly, building a _modular-vehicle immersive simulator_ felt easy.
+```cs
+// There are 3 separate code-points to manage the lifecycle of myResource.
+public class MyBehaviour : MonoBehaviour {
 
-I believe Spoke could be a general-purpose pattern for game programming with huge potential. I've found it works across all code domains. It’s useful in any project, and seems to shine as complexity grows. The more deeply systems interact, the more value Spoke provides.
+    IDisposable myResource;
+
+    void OnEnable() {
+        myResource = new SomeCustomResource();
+    }
+
+    void OnDisable() {
+        myResource.Dispose();
+    }
+}
+
+// In Spoke, resource and lifecycle management collapses into one coherent bundle.
+public class MySpokeBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder s) {
+        s.Phase(IsEnabled, s => {
+            s.Use(new SomeCustomResource());
+        });
+    }
+}
+```
+
+---
+
+### Chained Event Subscriptions
+
+```cs
+// When an enemy is detected on radar, and it becomes destroyed. Then the
+// cockpit voice (BitchinBetty) should speak the phrase: "Enemy Destroyed".
+public class MyBehaviour : MonoBehaviour {
+
+    public UnityEvent<RadarBlip> EnemyDetected;
+    public UnityEvent<RadarBlip> EnemyLost;
+
+    void Awake() {
+        EnemyDetected.AddListener(HandleEnemyDetected);
+        EnemyLost.AddListener(HandleEnemyLost);
+    }
+
+    void OnDestroy() {
+        EnemyDetected.RemoveListener(HandleEnemyDetected);
+        EnemyLost.RemoveListener(HandleEnemyLost);
+    }
+
+    void HandleEnemyDetected(RadarBlip enemy) {
+        enemy.OnDestroyed.AddListener(HandleEnemyDestroyed);
+    }
+
+    void HandleEnemyLost(RadarBlip enemy) {
+        enemy.OnDestroyed.RemoveListener(HandleEnemyDestroyed);
+    }
+
+    void HandleEnemyDestroyed() {
+        BitchinBetty.SpeakEnemyDestroyed();
+    }
+}
+
+// Again, Spoke collapses the problem into one cohesive bundle
+public class MySpokeBehaviour : SpokeBehaviour {
+
+    public UnityEvent<RadarBlip> EnemyDetected;
+    public UnityEvent<RadarBlip> EnemyLost;
+
+    protected override void Init(EffectBuilder s) {
+        var dock = s.Dock();
+        s.Subscribe(EnemyDetected, enemy => dock.Effect(enemy, s => {
+            s.Subscribe(enemy.OnDestroyed, BitchinBetty.SpeakEnemyDestroyed);
+        }));
+        s.Subscribe(EnemyLost, enemy => dock.Drop(enemy));
+    }
+}
+```
+
+The first pattern: _Scattered Resource Management_, is annoying, but manageable. The second pattern can be soul-crushing. Chaining event subscriptions gets complicated very quickly. Spoke makes it effortless.
+
+Both these patterns are manifestations of the same core shape. They are lifecycle windows. OnEnable/OnDisable is a window, and so is EnemyDetected/EnemyLost. With Spoke, you declare what behaviour should exist in a window, how the windows are nested, and how to clean up when the window ends. It's all expressed in one cohesive bundle, and it feels as simple as writing imperative code.
+
+These problems prompted Spoke's creation, and I keep finding new and surprising ways to use it. Today, it powers everything in my game, from CPU-budgeted task management to procedural generation. For me, it's unlocked a way of programming I've always wanted — where I'm sculpting logic instead of fighting complexity. In simulation-heavy code, it makes a big difference.
 
 ---
 
