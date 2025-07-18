@@ -31,7 +31,7 @@ namespace Spoke {
     }
     public abstract class SpokeRoot : Node, IDisposable {
         public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch);
-        public void Dispose() => (this as Friend).Cleanup();
+        public void Dispose() => (this as Friend).Detach();
     }
     // ============================== Node ============================================================
     /// <summary>
@@ -54,7 +54,7 @@ namespace Spoke {
         void OnCleanup(Action fn);
     }
     public abstract class Node : Node.Friend, IComparable<Node> {
-        internal interface Friend { void Remount(); void Attach(Node parent); void Cleanup(); void SetFault(Exception fault); }
+        internal interface Friend { void Remount(); void Attach(Node parent); void Detach(); void SetFault(Exception fault); }
         enum MountStatus { Sealed, Open, Unmounting }
         List<Node> children = new List<Node>();
         Dictionary<object, Node> dynamicChildren = new Dictionary<object, Node>();
@@ -99,17 +99,17 @@ namespace Spoke {
             Coords = parent.Coords.Extend(parent.siblingCounter++);
             (UntypedEpoch as Epoch.Friend).Attach(this);
         }
-        void Friend.Cleanup() {
+        void Friend.Detach() {
             if (isDetached) return;
             isDetaching = true;
+            if (Next != null) (Next as Friend).Detach();
             Unmount();
             (UntypedEpoch as Epoch.Friend).Cleanup();
             for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
-                try { (dynamicChildrenList[i] as Friend).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
+                try { (dynamicChildrenList[i] as Friend).Detach(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
             dynamicChildrenList.Clear();
             dynamicChildren.Clear();
-            if (Next != null) Next.Prev = Prev;
-            if (Prev != null) Prev.Next = Next;
+            if (Prev != null) Prev.Next = null;
             Next = Prev = null;
             isDetached = true;
         }
@@ -158,13 +158,13 @@ namespace Spoke {
         public void DropDynamic(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
             var index = dynamicChildrenList.IndexOf(child);
-            if (index >= 0) { (child as Friend).Cleanup(); dynamicChildrenList.RemoveAt(index); }
+            if (index >= 0) { (child as Friend).Detach(); dynamicChildrenList.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
         void Unmount() {
             mountStatus = MountStatus.Unmounting;
             for (int i = children.Count - 1; i >= 0; i--)
-                try { (children[i] as Friend).Cleanup(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
+                try { (children[i] as Friend).Detach(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
             children.Clear();
             if (dynamicChildren.Count == 0) siblingCounter = 0;
             for (int i = mountCleanupFuncs.Count - 1; i >= 0; i--)
@@ -333,6 +333,11 @@ namespace Spoke {
         protected virtual void OnHasPending() { }
         protected virtual void OnTick() { }
         protected void SetFault(Exception fault) => (node as Node.Friend).SetFault(fault);
+        protected void Break() {
+            if (!HasPending) return;
+            (Next as Node.Friend).Detach();
+            incoming.Clear(); execSet.Clear(); execOrder.Clear();
+        }
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
