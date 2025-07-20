@@ -425,13 +425,13 @@ namespace Spoke {
     // ============================== FlushLogger ============================================================
     public struct FlushLogger {
         StringBuilder sb;
-        List<Node> runHistory;
+        HashSet<Node> execNodes;
         public static FlushLogger Create() => new FlushLogger {
             sb = new StringBuilder(),
-            runHistory = new List<Node>(),
+            execNodes = new HashSet<Node>(),
         };
-        public void OnFlushStart() { sb.Clear(); runHistory.Clear(); HasErrors = false; }
-        public void OnFlushNode(Node n) { runHistory.Add(n); HasErrors |= n.Fault != null; }
+        public void OnFlushStart() { sb.Clear(); execNodes.Clear(); HasErrors = false; }
+        public void OnFlushNode(Node n) { execNodes.Add(n); HasErrors |= n.Fault != null; }
         public bool HasErrors { get; private set; }
         public void LogFlush(ISpokeLogger logger, Node root, string msg) {
             sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
@@ -440,28 +440,24 @@ namespace Spoke {
             if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
         }
         void PrintErrors() {
-            foreach (var c in runHistory)
+            foreach (var c in execNodes)
                 if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
         }
         void PrintRoot(Node root) {
             var that = this;
             sb.AppendLine();
             Traverse(0, root, (depth, x) => {
-                var runIndex = that.runHistory.IndexOf(x);
                 for (int i = 0; i < depth; i++) that.sb.Append("    ");
                 that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
             });
         }
         string NodeLabel(Node node) {
-            var indexes = new List<int>();
-            for (int i = 0; i < runHistory.Count; i++)
-                if (ReferenceEquals(runHistory[i], node)) indexes.Add(i);
-            var indexStr = indexes.Count > 0 ? $"({string.Join(",", indexes)})-" : "";
-            return $"|--{indexStr}{node} ";
+            var prefix = execNodes.Contains(node) ? "(*)-" : "";
+            return $"|--{prefix}{node} ";
         }
         string FaultStatus(Node node) {
             if (node.Fault != null)
-                if (runHistory.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
+                if (execNodes.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
                 else return "[Faulted]";
             return "";
         }
