@@ -124,12 +124,14 @@ namespace Spoke {
         public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
             if (TryGetEpoch(out epoch)) return true;
             foreach (var n in Children) if (n.TryGetSubEpoch(out epoch)) return true;
+            foreach (var n in DynamicChildren) if (n.TryGetSubEpoch(out epoch)) return true;
             return false;
         }
         public List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch {
             storeIn = storeIn ?? new List<T>();
             if (TryGetEpoch<T>(out var epoch)) storeIn.Add(epoch);
             foreach (var n in Children) n.GetSubEpochs(storeIn);
+            foreach (var n in DynamicChildren) n.GetSubEpochs(storeIn);
             return storeIn;
         }
         public bool TryGetContext<T>(out T epoch) where T : Epoch {
