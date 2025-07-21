@@ -200,7 +200,7 @@ namespace Spoke {
                 return;
             }
             var newValue = value;
-            var storeSetCount = setCount;
+            var storeSetCount = ++setCount;
 #if UNITY_EDITOR
             EditorApplication.delayCall += () => {
                 if (setCount > storeSetCount) return;
