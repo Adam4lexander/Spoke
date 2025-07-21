@@ -95,7 +95,7 @@ namespace Spoke {
         void DoTeardown() {
             sceneTeardown.Dispose();
             appTeardown.Dispose();
-            enabled = false;
+            isEnabled.Set(false);
             initEffect.Dispose();
             isAwake.Set(false);
         }
