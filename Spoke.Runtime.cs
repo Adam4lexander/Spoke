@@ -44,15 +44,6 @@ namespace Spoke {
         public override Epoch UntypedEpoch => Epoch;
         internal Node(T epoch) : base() { Epoch = epoch; }
     }
-    public interface EpochBuilder {
-        void Log(string message);
-        SpokeHandle Use(SpokeHandle handle);
-        T Use<T>(T disposable) where T : IDisposable;
-        T Call<T>(T epoch) where T : Epoch;
-        void Call(EpochBlock block);
-        public bool TryGetLexical<T>(out T context) where T : Epoch;
-        void OnCleanup(Action fn);
-    }
     public abstract class Node : Node.Friend, IComparable<Node> {
         internal interface Friend { void Remount(); void Attach(Node parent); void Detach(); void SetFault(Exception fault); }
         enum MountStatus { Sealed, Open, Unmounting }
@@ -211,6 +202,7 @@ namespace Spoke {
         class Scope : Epoch {
             EpochBlock block;
             public Scope(EpochBlock block) => this.block = block;
+            protected override void OnAttached(AttachBuilder s) { }
             protected override void OnMounted(EpochBuilder s) => block(s);
         }
     }
@@ -234,7 +226,7 @@ namespace Spoke {
             if (!node.TryGetEpoch(out mountEngine)) mountEngine = node.Parent?.UntypedEpoch.mountEngine;
             Action<Action> onDetached = fn => cleanupBlocks.Add(fn);
             if (this is ExecutionEngine.Friend engine) engine.OnAttached();
-            OnAttached(onDetached);
+            OnAttached(new AttachBuilder(onDetached));
             ScheduleMount();
         }
         void Friend.Cleanup() {
@@ -246,8 +238,8 @@ namespace Spoke {
             OnMounted(s);
         }
         Node Friend.GetNode() => node;
-        protected virtual void OnAttached(Action<Action> onDetach) { }
-        protected virtual void OnMounted(EpochBuilder s) { }
+        protected abstract void OnAttached(AttachBuilder s);
+        protected abstract void OnMounted(EpochBuilder s);
         protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
         protected bool TryGetSubEpoch<T>(out T epoch) where T : Epoch => node.TryGetSubEpoch(out epoch);
         protected List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch => node.GetSubEpochs(storeIn);
@@ -259,6 +251,19 @@ namespace Spoke {
             if (node.Fault != null) return;
             (mountEngine as ExecutionEngine.Friend).Schedule(node);
         }
+    }
+    public struct AttachBuilder {
+        public Action<Action> OnDetach { get; }
+        internal AttachBuilder(Action<Action> onDetach) { OnDetach = onDetach; }
+    }
+    public interface EpochBuilder {
+        void Log(string message);
+        SpokeHandle Use(SpokeHandle handle);
+        T Use<T>(T disposable) where T : IDisposable;
+        T Call<T>(T epoch) where T : Epoch;
+        void Call(EpochBlock block);
+        public bool TryGetLexical<T>(out T context) where T : Epoch;
+        void OnCleanup(Action fn);
     }
     // ============================== ExecutionEngine ============================================================
     public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {

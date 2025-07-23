@@ -199,8 +199,8 @@ namespace Spoke {
             this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
-        protected override void OnAttached(Action<Action> onDetach) {
-            base.OnAttached(onDetach);
+        protected override void OnAttached(AttachBuilder s) {
+            base.OnAttached(s);
             AddStaticTrigger(mountWhen);
         }
     }
@@ -257,6 +257,8 @@ namespace Spoke {
         public void Effect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", key, buildLogic, triggers);
         public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, new Effect(name, buildLogic, triggers));
         public void Drop(object key) => DropDynamic(key);
+        protected override void OnAttached(AttachBuilder s) { }
+        protected override void OnMounted(EpochBuilder s) { }
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
@@ -289,6 +291,8 @@ namespace Spoke {
             action();
             if (HasPending) Log(msg);
         });
+        protected override void OnAttached(AttachBuilder s) { }
+        protected override void OnMounted(EpochBuilder s) { }
         protected override void OnHasPending() { if (FlushMode == FlushMode.Immediate) Flush(); }
         public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_requestTick); }
         protected override void OnTick() {
@@ -310,15 +314,13 @@ namespace Spoke {
             Name = name;
             this.triggers = triggers;
         }
-        protected override void OnAttached(Action<Action> onDetach) {
-            base.OnAttached(onDetach);
+        protected override void OnAttached(AttachBuilder s) {
             TryGetContext<SpokeEngine>(out var engine);
             tracker = new DependencyTracker(engine, ScheduleMount);
-            onDetach(() => tracker.Dispose());
+            s.OnDetach(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
         }
         protected override void OnMounted(EpochBuilder s) {
-            base.OnMounted(s);
             tracker.BeginDynamic();
             try { OnRun(s); } finally { tracker.EndDynamic(); }
         }
