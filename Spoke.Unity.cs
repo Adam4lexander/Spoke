@@ -95,6 +95,9 @@ namespace Spoke {
         void DoTeardown() {
             sceneTeardown.Dispose();
             appTeardown.Dispose();
+            // Avoid setting enabled=false for ExecuteAlways behaviours on domain reload. Because
+            // it will be serialized as disabled on each reload.
+            if (Application.isPlaying) enabled = false;
             isEnabled.Set(false);
             initEffect.Dispose();
             isAwake.Set(false);
