@@ -21,6 +21,7 @@ namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
     public delegate Ref<T> EffectBlock<T>(EffectBuilder s);
+    public delegate T MemoBlock<T>(MemoBuilder s);
 
     // ============================== Trigger ============================================================
     public interface ITrigger {
@@ -139,8 +140,8 @@ namespace Spoke {
     public static partial class EffectBuilderExtensions {
         public static void Subscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
         public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static ISignal<T> Memo<T>(this EffectBuilder s, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
-        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, MemoBlock<T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, MemoBlock<T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
         public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
         public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
         public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
@@ -228,12 +229,13 @@ namespace Spoke {
         State<T> state = State.Create<T>();
         public T Now => state.Now;
         Action<MemoBuilder> block;
-        MemoBuilder builder;
-        public Memo(string name, Func<MemoBuilder, T> selector, params ITrigger[] triggers) : base(name, triggers) {
-            builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger });
+        public Memo(string name, MemoBlock<T> selector, params ITrigger[] triggers) : base(name, triggers) {
             block = s => { if (selector != null) state.Set(selector(s)); };
         }
-        protected override void OnRun(EpochBuilder s) => block(builder);
+        protected override void OnRun(EpochBuilder s) {
+            var builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, OnCleanup = s.OnCleanup });
+            block(builder);
+        }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
@@ -243,10 +245,12 @@ namespace Spoke {
     public class MemoBuilder { // Concrete class for IL2CPP AOT generation
         internal struct Friend {
             public Action<ITrigger> AddDynamicTrigger;
+            public Action<Action> OnCleanup;
         }
         Friend memo;
         internal MemoBuilder(Friend memo) { this.memo = memo; }
         public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
+        public void OnCleanup(Action fn) => memo.OnCleanup(fn);
     }
     // ============================== Dock ============================================================
     public class Dock : Epoch {
