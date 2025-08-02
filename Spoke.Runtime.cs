@@ -112,19 +112,6 @@ namespace Spoke {
             mountStatus = MountStatus.Sealed;
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
-        public bool TryGetSubEpoch<T>(out T epoch) where T : Epoch {
-            if (TryGetEpoch(out epoch)) return true;
-            foreach (var n in Children) if (n.TryGetSubEpoch(out epoch)) return true;
-            foreach (var n in DynamicChildren) if (n.TryGetSubEpoch(out epoch)) return true;
-            return false;
-        }
-        public List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch {
-            storeIn = storeIn ?? new List<T>();
-            if (TryGetEpoch<T>(out var epoch)) storeIn.Add(epoch);
-            foreach (var n in Children) n.GetSubEpochs(storeIn);
-            foreach (var n in DynamicChildren) n.GetSubEpochs(storeIn);
-            return storeIn;
-        }
         public bool TryGetContext<T>(out T epoch) where T : Epoch {
             epoch = default;
             for (var curr = Parent; curr != null; curr = curr.Parent)
@@ -241,8 +228,6 @@ namespace Spoke {
         protected abstract void OnAttached(AttachBuilder s);
         protected abstract void OnMounted(EpochBuilder s);
         protected bool TryGetContext<T>(out T epoch) where T : Epoch => node.TryGetContext(out epoch);
-        protected bool TryGetSubEpoch<T>(out T epoch) where T : Epoch => node.TryGetSubEpoch(out epoch);
-        protected List<T> GetSubEpochs<T>(List<T> storeIn = null) where T : Epoch => node.GetSubEpochs(storeIn);
         protected bool TryGetLexical<T>(out T epoch) where T : Epoch => node.TryGetLexical(out epoch);
         protected T CallDynamic<T>(object key, T epoch) where T : Epoch => node.CallDynamic(key, epoch);
         protected void DropDynamic(object key) => node.DropDynamic(key);
