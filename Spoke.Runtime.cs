@@ -59,8 +59,8 @@ namespace Spoke {
             if (prev != null) prev.Next = this;
             Coords = coords;
             mountEngine = (this as ExecutionEngine) ?? Parent.mountEngine;
-            if (this is ExecutionEngine.Friend engine) engine.OnAttached();
             attachEpoch.Open(this, null);
+            if (this is ExecutionEngine.Friend engine) engine.OnAttached(new EpochBuilder(attachEpoch));
             mountBlock = Init(new EpochBuilder(attachEpoch));
             attachEpoch.Seal();
             ScheduleMount();
@@ -90,20 +90,6 @@ namespace Spoke {
             return storeIn;
         }
         protected abstract EpochBlock Init(EpochBuilder s);
-        protected bool TryGetContext<T>(out T epoch) where T : Epoch {
-            epoch = default;
-            for (var curr = Parent; curr != null; curr = curr.Parent)
-                if (curr is T o) { epoch = o; return true; }
-            return false;
-        }
-        protected bool TryGetLexical<T>(out T epoch) where T : Epoch {
-            epoch = default;
-            var start = Prev ?? Parent;
-            for (var anc = start; anc != null; anc = anc.Parent)
-                for (var curr = anc; curr != null; curr = curr.Prev)
-                    if (curr is T o) { epoch = o; return true; }
-            return false;
-        }
         protected void ScheduleMount() {
             if (mountEngine == null) throw new Exception("Cannot find Execution Engine");
             if (Fault != null) return;
@@ -141,8 +127,20 @@ namespace Spoke {
                 siblingCounter = 0;
                 Tail = null;
             }
-            public bool TryGetContext<T>(out T epoch) where T : Epoch => Owner.TryGetContext(out epoch);
-            public bool TryGetLexical<T>(out T epoch) where T : Epoch => Owner.TryGetLexical(out epoch);
+            public bool TryGetContext<T>(out T epoch) where T : Epoch {
+                epoch = default;
+                for (var curr = Owner.Parent; curr != null; curr = curr.Parent)
+                    if (curr is T o) { epoch = o; return true; }
+                return false;
+            }
+            public bool TryGetLexical<T>(out T epoch) where T : Epoch {
+                epoch = default;
+                var start = Owner.Prev ?? Owner.Parent;
+                for (var anc = start; anc != null; anc = anc.Parent)
+                    for (var curr = anc; curr != null; curr = curr.Prev)
+                        if (curr is T o) { epoch = o; return true; }
+                return false;
+            }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); handles.Add(handle); return handle;
             }
@@ -178,6 +176,7 @@ namespace Spoke {
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => Call(new Scope(block));
+        public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
         public bool TryGetLexical<T>(out T epoch) where T : Epoch => s.TryGetLexical(out epoch);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         class Scope : Epoch {
@@ -223,7 +222,7 @@ namespace Spoke {
     }
     // ============================== ExecutionEngine ============================================================
     public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
-        new internal interface Friend { void OnAttached(); void Schedule(Epoch epoch); }
+        new internal interface Friend { void OnAttached(EpochBuilder s); void Schedule(Epoch epoch); }
         ExecutionEngine tickEngine;
         List<Epoch> incoming = new List<Epoch>();
         HashSet<Epoch> execSet = new HashSet<Epoch>();
@@ -238,7 +237,7 @@ namespace Spoke {
         public ExecutionEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
-        void Friend.OnAttached() => TryGetContext(out tickEngine);
+        void Friend.OnAttached(EpochBuilder s) => s.TryGetContext(out tickEngine);
         void Friend.Schedule(Epoch epoch) {
             if (epoch.Fault != null) return;
             if (execSet.Contains(epoch)) return;

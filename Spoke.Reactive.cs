@@ -319,7 +319,7 @@ namespace Spoke {
             this.triggers = triggers;
         }
         protected override EpochBlock Init(EpochBuilder s) {
-            TryGetContext<SpokeEngine>(out var engine);
+            s.TryGetContext<SpokeEngine>(out var engine);
             tracker = new DependencyTracker(engine, ScheduleMount);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
