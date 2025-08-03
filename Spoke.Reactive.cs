@@ -181,7 +181,7 @@ namespace Spoke {
         public T D<T>(ISignal<T> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-        public T Call<T>(T identity) where T : Epoch => s.Call(identity);
+        public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => s.Call(block);
         public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
@@ -268,14 +268,13 @@ namespace Spoke {
         public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => SpokeRoot.Create(new SpokeEngine(flushMode, logger)).Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
         DeferredQueue deferred = new DeferredQueue();
-        Action _requestTick;
         Action<long> _releaseEffect;
         long currId;
         Dock dock;
+        Trigger flushCommand = Trigger.Create();
         void Friend.FastHold() => deferred.FastHold();
         void Friend.FastRelease() => deferred.FastRelease();
         public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
-            _requestTick = RequestTick;
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
         }
@@ -293,22 +292,28 @@ namespace Spoke {
             action();
             if (HasPending) Log(msg);
         });
-        protected override ExecBlock Init(EpochBuilder s) {
+        protected override ExecBlock Init(EngineBuilder s) {
+            Action _requestTick = s.RequestTick;
+            s.Use(flushCommand.Subscribe(() => {
+                if (deferred.IsEmpty) deferred.Enqueue(_requestTick);
+            }));
+            s.OnHasPending(() => {
+                if (FlushMode == FlushMode.Immediate) flushCommand.Invoke();
+            });
+            s.OnTick(() => {
+                const long maxPasses = 1000;
+                var startFlush = FlushNumber;
+                try {
+                    while (HasPending) {
+                        if (FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                        s.RunNext();
+                    }
+                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
+            });
             dock = s.Call(new Dock());
             return null;
         }
-        protected override void OnHasPending() { if (FlushMode == FlushMode.Immediate) Flush(); }
-        public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_requestTick); }
-        protected override void OnTick() {
-            const long maxPasses = 1000;
-            var startFlush = FlushNumber;
-            try {
-                while (HasPending) {
-                    if (FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    RunNext();
-                }
-            } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
-        }
+        public void Flush() => flushCommand.Invoke();
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {

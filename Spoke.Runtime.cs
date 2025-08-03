@@ -232,10 +232,12 @@ namespace Spoke {
         List<string> pendingLogs = new List<string>();
         ISpokeLogger logger;
         bool isRunning;
+        EngineEpoch engineEpoch;
         protected Epoch Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
         public bool HasPending => Next != null;
         public long FlushNumber { get; private set; }
         public ExecutionEngine(ISpokeLogger logger = null) {
+            engineEpoch = new EngineEpoch(this);
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
         void Friend.OnAttached(EpochBuilder s) => s.TryGetContext(out tickEngine);
@@ -246,7 +248,7 @@ namespace Spoke {
             if (!isRunning) {
                 var prevHasPending = HasPending;
                 TakeScheduled();
-                if (!prevHasPending && HasPending) OnHasPending();
+                if (!prevHasPending && HasPending) engineEpoch.TriggerHasPending();
             }
         }
         static readonly Comparison<Epoch> EpochComparison = (a, b) => b.CompareTo(a);
@@ -257,12 +259,12 @@ namespace Spoke {
             incoming.Clear();
             execOrder.Sort(EpochComparison); // Reverse-order, to pop items from end of list
         }
-        protected void RequestTick() {
+        void RequestTick() {
             if (tickEngine != null) (tickEngine as Friend).Schedule(this);
-            else OnTick(); // Tick immediately since we're the root engine
+            else engineEpoch.TriggerTick(); // Tick immediately since we're the root engine
         }
         Epoch prevExec;
-        protected Epoch RunNext() {
+        Epoch RunNext() {
             if (!HasPending) return null;
             isRunning = true;
             try {
@@ -272,7 +274,7 @@ namespace Spoke {
                 execOrder.RemoveAt(execOrder.Count - 1);
 
                 // Figure out if we're ticking an engine, or remounting a generic epoch
-                if ((exec is ExecutionEngine eng) && eng.tickEngine == this) eng.OnTick();
+                if ((exec is ExecutionEngine eng) && eng.tickEngine == this) eng.engineEpoch.TriggerTick();
                 else (exec as Epoch.Friend).Exec();
 
                 flushLogger.OnFlushNode(exec);
@@ -292,14 +294,58 @@ namespace Spoke {
             prevExec = null;
         }
         public void Log(string msg) => pendingLogs.Add(msg);
-        protected virtual void OnHasPending() { }
-        protected virtual void OnTick() { }
-        protected void SetFault(Exception fault) => (this as Epoch.Friend).SetFault(fault);
-        protected void Break() {
+        void Break() {
             if (!HasPending) return;
             (Next as Epoch.Friend).Detach();
             incoming.Clear(); execSet.Clear(); execOrder.Clear();
         }
+        protected sealed override ExecBlock Init(EpochBuilder s) {
+            var block = Init(new EngineBuilder(s, engineEpoch));
+            engineEpoch.Seal();
+            return block;
+        }
+        protected abstract ExecBlock Init(EngineBuilder s);
+        internal class EngineEpoch {
+            ExecutionEngine owner;
+            List<Action> onHasPending = new();
+            List<Action> onTick = new();
+            bool isSealed;
+            public EngineEpoch(ExecutionEngine owner) { this.owner = owner; }
+            public void Seal() => isSealed = true;
+            public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
+            public void OnTick(Action fn) { NoMischief(); onTick.Add(fn); }
+            public void TriggerHasPending() {
+                foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
+            }
+            public void TriggerTick() {
+                foreach (var fn in onTick) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
+            }
+            public void Break() => owner.Break();
+            public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
+            public Epoch RunNext() => owner.RunNext();
+            public void RequestTick() => owner.RequestTick();
+            void NoMischief() {
+                if (isSealed) throw new InvalidOperationException("Cannot mutate engine after it's sealed");
+            }
+        }
+    }
+    public struct EngineBuilder {
+        EpochBuilder s;
+        ExecutionEngine.EngineEpoch es;
+        internal EngineBuilder(EpochBuilder s, ExecutionEngine.EngineEpoch es) { this.s = s; this.es = es; }
+        public void Use(SpokeHandle trigger) => s.Use(trigger);
+        public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
+        public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
+        public void Call(EpochBlock block) => s.Call(block);
+        public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
+        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
+        public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        public void OnHasPending(Action fn) => es.OnHasPending(fn);
+        public void OnTick(Action fn) => es.OnTick(fn);
+        public void Break() => es.Break();
+        public void SetFault(Exception fault) => es.SetFault(fault);
+        public Epoch RunNext() => es.RunNext();
+        public void RequestTick() => es.RequestTick();
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
