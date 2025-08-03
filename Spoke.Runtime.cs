@@ -18,7 +18,8 @@ using System.Text;
 
 namespace Spoke {
 
-    public delegate void EpochBlock(EpochBuilder s);
+    public delegate ExecBlock EpochBlock(EpochBuilder s);
+    public delegate void ExecBlock(EpochBuilder s);
 
     // ============================== SpokeRoot ============================================================
     /// <summary>
@@ -41,15 +42,15 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords); void Detach(); void Remount(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
-        SubEpoch attachEpoch = new();
-        SubEpoch mountEpoch = new();
+        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
+        SubEpoch initEpoch = new();
+        SubEpoch execEpoch = new();
         public TreeCoords Coords { get; private set; }
         Epoch Parent, Prev, Next;
         bool isDetaching, isDetached;
         public Exception Fault { get; private set; }
-        ExecutionEngine mountEngine;
-        EpochBlock mountBlock;
+        ExecutionEngine execEngine;
+        ExecBlock execBlock;
         protected string Name = null;
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => Coords.CompareTo(other.Coords);
@@ -58,42 +59,42 @@ namespace Spoke {
             Prev = prev;
             if (prev != null) prev.Next = this;
             Coords = coords;
-            mountEngine = (this as ExecutionEngine) ?? Parent.mountEngine;
-            attachEpoch.Open(this, null);
-            if (this is ExecutionEngine.Friend engine) engine.OnAttached(new EpochBuilder(attachEpoch));
-            mountBlock = Init(new EpochBuilder(attachEpoch));
-            attachEpoch.Seal();
-            ScheduleMount();
+            execEngine = (this as ExecutionEngine) ?? Parent.execEngine;
+            initEpoch.Open(this, null);
+            if (this is ExecutionEngine.Friend engine) engine.OnAttached(new EpochBuilder(initEpoch));
+            execBlock = Init(new EpochBuilder(initEpoch));
+            initEpoch.Seal();
+            ScheduleExec();
         }
         void Friend.Detach() {
             if (isDetached) return;
             isDetaching = true;
             if (Next != null) (Next as Friend).Detach();
-            mountEpoch.Detach();
-            attachEpoch.Detach();
+            execEpoch.Detach();
+            initEpoch.Detach();
             if (Prev != null) Prev.Next = null;
             Next = Prev = null;
             isDetached = true;
         }
-        void Friend.Remount() {
+        void Friend.Exec() {
             // TODO: Keyed epochs can unmount themselves before this function completes.
             if (isDetached || isDetaching) return;
-            mountEpoch.Open(this, attachEpoch);
-            try { mountBlock?.Invoke(new EpochBuilder(mountEpoch)); } catch (Exception e) { Fault = e; }
-            mountEpoch.Seal();
+            execEpoch.Open(this, initEpoch);
+            try { execBlock?.Invoke(new EpochBuilder(execEpoch)); } catch (Exception e) { Fault = e; }
+            execEpoch.Seal();
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
         List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
-            attachEpoch.GetChildren(storeIn);
-            mountEpoch.GetChildren(storeIn);
+            initEpoch.GetChildren(storeIn);
+            execEpoch.GetChildren(storeIn);
             return storeIn;
         }
-        protected abstract EpochBlock Init(EpochBuilder s);
-        protected void ScheduleMount() {
-            if (mountEngine == null) throw new Exception("Cannot find Execution Engine");
+        protected abstract ExecBlock Init(EpochBuilder s);
+        protected void ScheduleExec() {
+            if (execEngine == null) throw new Exception("Cannot find Execution Engine");
             if (Fault != null) return;
-            (mountEngine as ExecutionEngine.Friend).Schedule(this);
+            (execEngine as ExecutionEngine.Friend).Schedule(this);
         }
         internal class SubEpoch {
             List<Action> onCleanup = new();
@@ -182,7 +183,7 @@ namespace Spoke {
         class Scope : Epoch {
             EpochBlock block;
             public Scope(EpochBlock block) => this.block = block;
-            protected override EpochBlock Init(EpochBuilder s) => s => block(s);
+            protected override ExecBlock Init(EpochBuilder s) => block(s);
         }
     }
     // ============================== Dock ============================================================
@@ -208,7 +209,7 @@ namespace Spoke {
             if (index >= 0) { (child as Epoch.Friend).Detach(); dynamicChildrenList.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
-        protected override EpochBlock Init(EpochBuilder s) {
+        protected override ExecBlock Init(EpochBuilder s) {
             s.OnCleanup(() => {
                 isDetaching = true;
                 for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
@@ -272,7 +273,7 @@ namespace Spoke {
 
                 // Figure out if we're ticking an engine, or remounting a generic epoch
                 if ((exec is ExecutionEngine eng) && eng.tickEngine == this) eng.OnTick();
-                else (exec as Epoch.Friend).Remount();
+                else (exec as Epoch.Friend).Exec();
 
                 flushLogger.OnFlushNode(exec);
                 TakeScheduled();

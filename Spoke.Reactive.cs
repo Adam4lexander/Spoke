@@ -206,7 +206,7 @@ namespace Spoke {
             this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
-        protected override EpochBlock Init(EpochBuilder s) {
+        protected override ExecBlock Init(EpochBuilder s) {
             var mountBlock = base.Init(s);
             AddStaticTrigger(mountWhen);
             return mountBlock;
@@ -223,7 +223,7 @@ namespace Spoke {
             if (block == null) return;
             var result = block.Invoke(s);
             if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
-            s.Call(s => state.Set(result.Now));
+            s.Call(s => s => state.Set(result.Now));
         };
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
@@ -293,7 +293,7 @@ namespace Spoke {
             action();
             if (HasPending) Log(msg);
         });
-        protected override EpochBlock Init(EpochBuilder s) {
+        protected override ExecBlock Init(EpochBuilder s) {
             dock = s.Call(new Dock());
             return null;
         }
@@ -318,9 +318,9 @@ namespace Spoke {
             Name = name;
             this.triggers = triggers;
         }
-        protected override EpochBlock Init(EpochBuilder s) {
+        protected override ExecBlock Init(EpochBuilder s) {
             s.TryGetContext<SpokeEngine>(out var engine);
-            tracker = new DependencyTracker(engine, ScheduleMount);
+            tracker = new DependencyTracker(engine, ScheduleExec);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             return s => {
