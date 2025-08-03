@@ -8,7 +8,6 @@
 // > Phase
 // > Effect<T>
 // > Memo
-// > Dock
 // > SpokeEngine
 // > Computation
 // > DependencyTracker
@@ -127,58 +126,65 @@ namespace Spoke {
         public void Update(Func<T, T> setter) { if (setter != null) Set(setter(Now)); }
     }
     // ============================== BaseEffect ============================================================
-    public interface EffectBuilder {
-        void Log(string msg);
-        T D<T>(ISignal<T> signal);
-        void Use(SpokeHandle trigger);
-        T Use<T>(T disposable) where T : IDisposable;
-        T Call<T>(T identity) where T : Epoch;
-        void Call(EpochBlock block);
-        public bool TryGetLexical<T>(out T context) where T : Epoch;
-        void OnCleanup(Action cleanup);
-    }
     public static partial class EffectBuilderExtensions {
-        public static void Subscribe(this EffectBuilder s, ITrigger trigger, Action action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action) => s.Use(trigger != null ? trigger.Subscribe(action) : default);
-        public static ISignal<T> Memo<T>(this EffectBuilder s, MemoBlock<T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>("Memo", selector, triggers));
-        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, MemoBlock<T> selector, params ITrigger[] triggers) => s.Call(new Memo<T>(name, selector, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>("Effect", block, triggers));
-        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers) => s.Call(new Effect<T>(name, block, triggers));
-        public static void Effect(this EffectBuilder s, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect("Effect", buildLogic, triggers));
-        public static void Effect(this EffectBuilder s, string name, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Effect(name, buildLogic, triggers));
-        public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction("Reaction", block, triggers));
-        public static void Reaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers) => s.Call(new Reaction(name, block, triggers));
-        public static void Phase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase("Phase", mountWhen, buildLogic, triggers));
-        public static void Phase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock buildLogic, params ITrigger[] triggers) => s.Call(new Phase(name, mountWhen, buildLogic, triggers));
-        public static Dock Dock(this EffectBuilder s) => s.Call(new Dock("Dock"));
-        public static Dock Dock(this EffectBuilder s, string name) => s.Call(new Dock(name));
+        public static void Subscribe(this EffectBuilder s, ITrigger trigger, Action action)
+            => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action)
+            => s.Use(trigger != null ? trigger.Subscribe(action) : default);
+        public static ISignal<T> Memo<T>(this EffectBuilder s, MemoBlock<T> selector, params ITrigger[] triggers)
+            => s.Call(new Memo<T>("Memo", selector, triggers));
+        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, MemoBlock<T> selector, params ITrigger[] triggers)
+            => s.Call(new Memo<T>(name, selector, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers)
+            => s.Call(new Effect<T>("Effect", block, triggers));
+        public static ISignal<T> Effect<T>(this EffectBuilder s, string name, EffectBlock<T> block, params ITrigger[] triggers)
+            => s.Call(new Effect<T>(name, block, triggers));
+        public static void Effect(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Effect("Effect", block, triggers));
+        public static void Effect(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Effect(name, block, triggers));
+        public static void Reaction(this EffectBuilder s, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Reaction("Reaction", block, triggers));
+        public static void Reaction(this EffectBuilder s, string name, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Reaction(name, block, triggers));
+        public static void Phase(this EffectBuilder s, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Phase("Phase", mountWhen, block, triggers));
+        public static void Phase(this EffectBuilder s, string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers)
+            => s.Call(new Phase(name, mountWhen, block, triggers));
+        public static Dock Dock(this EffectBuilder s)
+            => s.Call(new Dock("Dock"));
+        public static Dock Dock(this EffectBuilder s, string name)
+            => s.Call(new Dock(name));
+    }
+    public static partial class DockExtensions {
+        public static void Effect(this Dock dock, object key, EffectBlock block, params ITrigger[] triggers)
+            => dock.Call(key, new Effect("Effect", block, triggers));
+        public static void Effect(this Dock dock, string name, object key, EffectBlock block, params ITrigger[] triggers)
+            => dock.Call(key, new Effect(name, block, triggers));
     }
     public abstract class BaseEffect : Computation {
         protected EffectBlock block;
-        EffectBuilderImpl builder;
+        Action<ITrigger> _addDynamicTrigger;
         public BaseEffect(string name, IEnumerable<ITrigger> triggers) : base(name, triggers) {
-            builder = new EffectBuilderImpl(this);
+            _addDynamicTrigger = AddDynamicTrigger;
         }
-        protected override void OnRun(EpochBuilder s) => builder.Mount(s, block);
-        class EffectBuilderImpl : EffectBuilder {
-            BaseEffect effect;
-            EpochBuilder s;
-            public EffectBuilderImpl(BaseEffect owner) {
-                this.effect = owner;
-            }
-            public void Mount(EpochBuilder s, EffectBlock block) {
-                this.s = s;
-                block?.Invoke(this);
-            }
-            public void Log(string msg) => effect.LogFlush(msg);
-            public T D<T>(ISignal<T> signal) { effect.AddDynamicTrigger(signal); return signal.Now; }
-            public void Use(SpokeHandle trigger) => s.Use(trigger);
-            public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-            public T Call<T>(T identity) where T : Epoch => s.Call(identity);
-            public void Call(EpochBlock block) => s.Call(block);
-            public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
-            public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        protected override void OnRun(EpochBuilder s) => block?.Invoke(new EffectBuilder(_addDynamicTrigger, s));
+    }
+    public struct EffectBuilder {
+        Action<ITrigger> addDynamicTrigger;
+        EpochBuilder s;
+        public EffectBuilder(Action<ITrigger> addDynamicTrigger, EpochBuilder s) {
+            this.addDynamicTrigger = addDynamicTrigger;
+            this.s = s;
         }
+        public void Log(string msg) => s.Log(msg);
+        public T D<T>(ISignal<T> signal) { addDynamicTrigger(signal); return signal.Now; }
+        public void Use(SpokeHandle trigger) => s.Use(trigger);
+        public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
+        public T Call<T>(T identity) where T : Epoch => s.Call(identity);
+        public void Call(EpochBlock block) => s.Call(block);
+        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
+        public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
     // ============================== Effect ============================================================
     public class Effect : BaseEffect {
@@ -200,9 +206,10 @@ namespace Spoke {
             this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
-        protected override void OnAttached(AttachBuilder s) {
-            base.OnAttached(s);
+        protected override EpochBlock Init(EpochBuilder s) {
+            var mountBlock = base.Init(s);
             AddStaticTrigger(mountWhen);
+            return mountBlock;
         }
     }
     // ============================== Effect<T> ============================================================
@@ -227,13 +234,15 @@ namespace Spoke {
     // ============================== Memo ============================================================
     public class Memo<T> : Computation, ISignal<T>, IDeferredTrigger {
         State<T> state = State.Create<T>();
+        Action<ITrigger> _addDynamicTrigger;
         public T Now => state.Now;
         Action<MemoBuilder> block;
         public Memo(string name, MemoBlock<T> selector, params ITrigger[] triggers) : base(name, triggers) {
             block = s => { if (selector != null) state.Set(selector(s)); };
+            _addDynamicTrigger = AddDynamicTrigger;
         }
         protected override void OnRun(EpochBuilder s) {
-            var builder = new MemoBuilder(new MemoBuilder.Friend { AddDynamicTrigger = AddDynamicTrigger, OnCleanup = s.OnCleanup });
+            var builder = new MemoBuilder(_addDynamicTrigger, s);
             block(builder);
         }
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
@@ -242,27 +251,15 @@ namespace Spoke {
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
         void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
     }
-    public class MemoBuilder { // Concrete class for IL2CPP AOT generation
-        internal struct Friend {
-            public Action<ITrigger> AddDynamicTrigger;
-            public Action<Action> OnCleanup;
+    public struct MemoBuilder {
+        Action<ITrigger> addDynamicTrigger;
+        EpochBuilder s;
+        internal MemoBuilder(Action<ITrigger> addDynamicTrigger, EpochBuilder s) {
+            this.addDynamicTrigger = addDynamicTrigger;
+            this.s = s;
         }
-        Friend memo;
-        internal MemoBuilder(Friend memo) { this.memo = memo; }
-        public U D<U>(ISignal<U> signal) { memo.AddDynamicTrigger(signal); return signal.Now; }
-        public void OnCleanup(Action fn) => memo.OnCleanup(fn);
-    }
-    // ============================== Dock ============================================================
-    public class Dock : Epoch {
-        public Dock(string name) {
-            Name = name;
-        }
-        public T Call<T>(object key, T epoch) where T : Epoch => CallDynamic(key, epoch);
-        public void Effect(object key, EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", key, buildLogic, triggers);
-        public void Effect(string name, object key, EffectBlock buildLogic, params ITrigger[] triggers) => Call(key, new Effect(name, buildLogic, triggers));
-        public void Drop(object key) => DropDynamic(key);
-        protected override void OnAttached(AttachBuilder s) { }
-        protected override void OnMounted(EpochBuilder s) { }
+        public U D<U>(ISignal<U> signal) { addDynamicTrigger(signal); return signal.Now; }
+        public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
@@ -274,6 +271,7 @@ namespace Spoke {
         Action _requestTick;
         Action<long> _releaseEffect;
         long currId;
+        Dock dock;
         void Friend.FastHold() => deferred.FastHold();
         void Friend.FastRelease() => deferred.FastRelease();
         public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
@@ -283,10 +281,10 @@ namespace Spoke {
         }
         public SpokeHandle Effect(EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", buildLogic, triggers);
         public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            CallDynamic(currId, new Effect(name, buildLogic, triggers));
+            dock.Call(currId, new Effect(name, buildLogic, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
-        void ReleaseEffect(long id) => DropDynamic(id);
+        void ReleaseEffect(long id) => dock.Drop(id);
         public void Batch(Action action) {
             var handle = deferred.Hold();
             try { action(); } finally { handle.Dispose(); }
@@ -295,8 +293,10 @@ namespace Spoke {
             action();
             if (HasPending) Log(msg);
         });
-        protected override void OnAttached(AttachBuilder s) { }
-        protected override void OnMounted(EpochBuilder s) { }
+        protected override EpochBlock Init(EpochBuilder s) {
+            dock = s.Call(new Dock());
+            return null;
+        }
         protected override void OnHasPending() { if (FlushMode == FlushMode.Immediate) Flush(); }
         public void Flush() { if (deferred.IsEmpty) deferred.Enqueue(_requestTick); }
         protected override void OnTick() {
@@ -318,20 +318,19 @@ namespace Spoke {
             Name = name;
             this.triggers = triggers;
         }
-        protected override void OnAttached(AttachBuilder s) {
+        protected override EpochBlock Init(EpochBuilder s) {
             TryGetContext<SpokeEngine>(out var engine);
             tracker = new DependencyTracker(engine, ScheduleMount);
-            s.OnDetach(() => tracker.Dispose());
+            s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
-        }
-        protected override void OnMounted(EpochBuilder s) {
-            tracker.BeginDynamic();
-            try { OnRun(s); } finally { tracker.EndDynamic(); }
+            return s => {
+                tracker.BeginDynamic();
+                try { OnRun(s); } finally { tracker.EndDynamic(); }
+            };
         }
         protected abstract void OnRun(EpochBuilder s);
         protected void AddStaticTrigger(ITrigger trigger) => tracker.AddStatic(trigger);
         protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
-        protected void LogFlush(string msg) { if (TryGetContext<ExecutionEngine>(out var engine)) engine.Log(msg); }
     }
     // ============================== DependencyTracker ============================================================
     internal class DependencyTracker : IDisposable {
