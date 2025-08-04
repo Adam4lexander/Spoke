@@ -176,13 +176,13 @@ namespace Spoke {
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public void Call(EpochBlock block) => Call(new Scope(block));
+        public void Call(EpochBlock block) => Call(new FunctionalEpoch(block));
         public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
         public bool TryGetLexical<T>(out T epoch) where T : Epoch => s.TryGetLexical(out epoch);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        class Scope : Epoch {
+        class FunctionalEpoch : Epoch {
             EpochBlock block;
-            public Scope(EpochBlock block) => this.block = block;
+            public FunctionalEpoch(EpochBlock block) => this.block = block;
             protected override ExecBlock Init(EpochBuilder s) => block(s);
         }
     }
@@ -300,11 +300,11 @@ namespace Spoke {
             incoming.Clear(); execSet.Clear(); execOrder.Clear();
         }
         protected sealed override ExecBlock Init(EpochBuilder s) {
-            var block = Init(new EngineBuilder(s, engineEpoch));
+            var block = Bootstrap(new EngineBuilder(s, engineEpoch));
             engineEpoch.Seal();
-            return block;
+            return block(s);
         }
-        protected abstract ExecBlock Init(EngineBuilder s);
+        protected abstract EpochBlock Bootstrap(EngineBuilder s);
         internal class EngineEpoch {
             ExecutionEngine owner;
             List<Action> onHasPending = new();
@@ -335,8 +335,6 @@ namespace Spoke {
         internal EngineBuilder(EpochBuilder s, ExecutionEngine.EngineEpoch es) { this.s = s; this.es = es; }
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-        public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public void Call(EpochBlock block) => s.Call(block);
         public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
         public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);

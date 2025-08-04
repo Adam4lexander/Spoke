@@ -292,7 +292,7 @@ namespace Spoke {
             action();
             if (HasPending) Log(msg);
         });
-        protected override ExecBlock Init(EngineBuilder s) {
+        protected override EpochBlock Bootstrap(EngineBuilder s) {
             Action _requestTick = s.RequestTick;
             s.Use(flushCommand.Subscribe(() => {
                 if (deferred.IsEmpty) deferred.Enqueue(_requestTick);
@@ -310,8 +310,10 @@ namespace Spoke {
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
-            dock = s.Call(new Dock());
-            return null;
+            return s => {
+                dock = s.Call(new Dock());
+                return null;
+            };
         }
         public void Flush() => flushCommand.Invoke();
     }
