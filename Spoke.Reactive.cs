@@ -271,7 +271,7 @@ namespace Spoke {
         Action<long> _releaseEffect;
         long currId;
         Dock dock;
-        Trigger flushCommand = Trigger.Create();
+        Action flushCommand;
         void Friend.FastHold() => deferred.FastHold();
         void Friend.FastRelease() => deferred.FastRelease();
         public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
@@ -288,24 +288,21 @@ namespace Spoke {
             var handle = deferred.Hold();
             try { action(); } finally { handle.Dispose(); }
         }
-        public void LogBatch(string msg, Action action) => Batch(() => {
-            action();
-            if (HasPending) Log(msg);
-        });
         protected override EpochBlock Bootstrap(EngineBuilder s) {
             Action _requestTick = s.RequestTick;
-            s.Use(flushCommand.Subscribe(() => {
+            flushCommand = () => {
                 if (deferred.IsEmpty) deferred.Enqueue(_requestTick);
-            }));
+            };
+            s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand.Invoke();
             });
             s.OnTick(() => {
                 const long maxPasses = 1000;
-                var startFlush = FlushNumber;
+                var startFlush = s.FlushNumber;
                 try {
-                    while (HasPending) {
-                        if (FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    while (s.HasPending) {
+                        if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                         s.RunNext();
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
@@ -315,7 +312,7 @@ namespace Spoke {
                 return null;
             };
         }
-        public void Flush() => flushCommand.Invoke();
+        public void Flush() => flushCommand?.Invoke();
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {

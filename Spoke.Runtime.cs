@@ -61,7 +61,6 @@ namespace Spoke {
             Coords = coords;
             execEngine = (this as ExecutionEngine) ?? Parent.execEngine;
             initEpoch.Open(this, null);
-            if (this is ExecutionEngine.Friend engine) engine.OnAttached(new EpochBuilder(initEpoch));
             execBlock = Init(new EpochBuilder(initEpoch));
             initEpoch.Seal();
             ScheduleExec();
@@ -176,13 +175,13 @@ namespace Spoke {
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public void Call(EpochBlock block) => Call(new FunctionalEpoch(block));
+        public void Call(EpochBlock block) => Call(new Scope(block));
         public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
         public bool TryGetLexical<T>(out T epoch) where T : Epoch => s.TryGetLexical(out epoch);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        class FunctionalEpoch : Epoch {
+        class Scope : Epoch {
             EpochBlock block;
-            public FunctionalEpoch(EpochBlock block) => this.block = block;
+            public Scope(EpochBlock block) => this.block = block;
             protected override ExecBlock Init(EpochBuilder s) => block(s);
         }
     }
@@ -223,94 +222,41 @@ namespace Spoke {
     }
     // ============================== ExecutionEngine ============================================================
     public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
-        new internal interface Friend { void OnAttached(EpochBuilder s); void Schedule(Epoch epoch); }
-        ExecutionEngine tickEngine;
-        List<Epoch> incoming = new List<Epoch>();
-        HashSet<Epoch> execSet = new HashSet<Epoch>();
-        List<Epoch> execOrder = new List<Epoch>();
-        FlushLogger flushLogger = FlushLogger.Create();
-        List<string> pendingLogs = new List<string>();
+        new internal interface Friend { void Schedule(Epoch epoch); }
+        Runtime runtime;
         ISpokeLogger logger;
-        bool isRunning;
-        EngineEpoch engineEpoch;
-        protected Epoch Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
-        public bool HasPending => Next != null;
-        public long FlushNumber { get; private set; }
         public ExecutionEngine(ISpokeLogger logger = null) {
-            engineEpoch = new EngineEpoch(this);
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
-        void Friend.OnAttached(EpochBuilder s) => s.TryGetContext(out tickEngine);
-        void Friend.Schedule(Epoch epoch) {
-            if (epoch.Fault != null) return;
-            if (execSet.Contains(epoch)) return;
-            incoming.Add(epoch);
-            if (!isRunning) {
-                var prevHasPending = HasPending;
-                TakeScheduled();
-                if (!prevHasPending && HasPending) engineEpoch.TriggerHasPending();
-            }
-        }
-        static readonly Comparison<Epoch> EpochComparison = (a, b) => b.CompareTo(a);
-        void TakeScheduled() {
-            if (incoming.Count == 0) return;
-            var prevNext = Next;
-            foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
-            incoming.Clear();
-            execOrder.Sort(EpochComparison); // Reverse-order, to pop items from end of list
-        }
-        void RequestTick() {
-            if (tickEngine != null) (tickEngine as Friend).Schedule(this);
-            else engineEpoch.TriggerTick(); // Tick immediately since we're the root engine
-        }
-        Epoch prevExec;
-        Epoch RunNext() {
-            if (!HasPending) return null;
-            isRunning = true;
-            try {
-                if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
-                var exec = prevExec = Next;
-                execSet.Remove(exec);
-                execOrder.RemoveAt(execOrder.Count - 1);
-
-                // Figure out if we're ticking an engine, or remounting a generic epoch
-                if ((exec is ExecutionEngine eng) && eng.tickEngine == this) eng.engineEpoch.TriggerTick();
-                else (exec as Epoch.Friend).Exec();
-
-                flushLogger.OnFlushNode(exec);
-                TakeScheduled();
-                if (!HasPending) IncrementFlush();
-                return exec;
-            } finally { isRunning = false; }
-        }
-        void IncrementFlush() {
-            if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
-                pendingLogs.Add($"Flush: {FlushNumber}");
-                flushLogger.LogFlush(logger, this, string.Join(",", pendingLogs));
-            }
-            flushLogger.OnFlushStart();
-            pendingLogs.Clear();
-            FlushNumber++;
-            prevExec = null;
-        }
-        public void Log(string msg) => pendingLogs.Add(msg);
-        void Break() {
-            if (!HasPending) return;
-            (Next as Epoch.Friend).Detach();
-            incoming.Clear(); execSet.Clear(); execOrder.Clear();
-        }
+        void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
+        public void Log(string msg) => runtime.Log(msg);
         protected sealed override ExecBlock Init(EpochBuilder s) {
-            var block = Bootstrap(new EngineBuilder(s, engineEpoch));
-            engineEpoch.Seal();
+            s.TryGetContext(out ExecutionEngine tickEngine);
+            runtime = new Runtime(this, tickEngine);
+            var block = Bootstrap(new EngineBuilder(s, runtime));
+            runtime.Seal();
             return block(s);
         }
         protected abstract EpochBlock Bootstrap(EngineBuilder s);
-        internal class EngineEpoch {
+        internal class Runtime {
             ExecutionEngine owner;
+            protected Epoch Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
+            public bool HasPending => Next != null;
+            public long FlushNumber { get; private set; }
             List<Action> onHasPending = new();
             List<Action> onTick = new();
+            List<Epoch> incoming = new List<Epoch>();
+            HashSet<Epoch> execSet = new HashSet<Epoch>();
+            List<Epoch> execOrder = new List<Epoch>();
+            FlushLogger flushLogger = FlushLogger.Create();
+            List<string> pendingLogs = new List<string>();
+            ExecutionEngine tickEngine;
+            bool isRunning;
             bool isSealed;
-            public EngineEpoch(ExecutionEngine owner) { this.owner = owner; }
+            public Runtime(ExecutionEngine owner, ExecutionEngine tickEngine) {
+                this.owner = owner;
+                this.tickEngine = tickEngine;
+            }
             public void Seal() => isSealed = true;
             public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
             public void OnTick(Action fn) { NoMischief(); onTick.Add(fn); }
@@ -320,10 +266,65 @@ namespace Spoke {
             public void TriggerTick() {
                 foreach (var fn in onTick) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
             }
-            public void Break() => owner.Break();
+            public void Break() {
+                if (!HasPending) return;
+                (Next as Epoch.Friend).Detach();
+                incoming.Clear(); execSet.Clear(); execOrder.Clear();
+            }
+            public void Log(string msg) => pendingLogs.Add(msg);
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
-            public Epoch RunNext() => owner.RunNext();
-            public void RequestTick() => owner.RequestTick();
+            Epoch prevExec;
+            public Epoch RunNext() {
+                if (!HasPending) return null;
+                isRunning = true;
+                try {
+                    if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
+                    var exec = prevExec = Next;
+                    execSet.Remove(exec);
+                    execOrder.RemoveAt(execOrder.Count - 1);
+
+                    // Figure out if we're ticking an engine, or remounting a generic epoch
+                    if ((exec is ExecutionEngine eng) && eng.runtime.tickEngine == owner) eng.runtime.TriggerTick();
+                    else (exec as Epoch.Friend).Exec();
+
+                    flushLogger.OnFlushNode(exec);
+                    TakeScheduled();
+                    if (!HasPending) IncrementFlush();
+                    return exec;
+                } finally { isRunning = false; }
+            }
+            public void RequestTick() {
+                if (tickEngine is Friend te) te.Schedule(owner);
+                else TriggerTick(); // Tick immediately since we're the root engine
+            }
+            public void Schedule(Epoch epoch) {
+                if (epoch.Fault != null) return;
+                if (execSet.Contains(epoch)) return;
+                incoming.Add(epoch);
+                if (!isRunning) {
+                    var prevHasPending = HasPending;
+                    TakeScheduled();
+                    if (!prevHasPending && HasPending) TriggerHasPending();
+                }
+            }
+            static readonly Comparison<Epoch> EpochComparison = (a, b) => b.CompareTo(a);
+            void TakeScheduled() {
+                if (incoming.Count == 0) return;
+                var prevNext = Next;
+                foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
+                incoming.Clear();
+                execOrder.Sort(EpochComparison); // Reverse-order, to pop items from end of list
+            }
+            void IncrementFlush() {
+                if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
+                    pendingLogs.Add($"Flush: {FlushNumber}");
+                    flushLogger.LogFlush(owner.logger, owner, string.Join(",", pendingLogs));
+                }
+                flushLogger.OnFlushStart();
+                pendingLogs.Clear();
+                FlushNumber++;
+                prevExec = null;
+            }
             void NoMischief() {
                 if (isSealed) throw new InvalidOperationException("Cannot mutate engine after it's sealed");
             }
@@ -331,19 +332,21 @@ namespace Spoke {
     }
     public struct EngineBuilder {
         EpochBuilder s;
-        ExecutionEngine.EngineEpoch es;
-        internal EngineBuilder(EpochBuilder s, ExecutionEngine.EngineEpoch es) { this.s = s; this.es = es; }
+        ExecutionEngine.Runtime r;
+        internal EngineBuilder(EpochBuilder s, ExecutionEngine.Runtime es) { this.s = s; this.r = es; }
+        public bool HasPending => r.HasPending;
+        public long FlushNumber => r.FlushNumber;
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
         public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void OnHasPending(Action fn) => es.OnHasPending(fn);
-        public void OnTick(Action fn) => es.OnTick(fn);
-        public void Break() => es.Break();
-        public void SetFault(Exception fault) => es.SetFault(fault);
-        public Epoch RunNext() => es.RunNext();
-        public void RequestTick() => es.RequestTick();
+        public void OnHasPending(Action fn) => r.OnHasPending(fn);
+        public void OnTick(Action fn) => r.OnTick(fn);
+        public void Break() => r.Break();
+        public void SetFault(Exception fault) => r.SetFault(fault);
+        public Epoch RunNext() => r.RunNext();
+        public void RequestTick() => r.RequestTick();
     }
     // ============================== TreeCoords ============================================================
     /// <summary>

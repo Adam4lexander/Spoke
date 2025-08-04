@@ -67,21 +67,6 @@ The output has two sections:
 
 ---
 
-## Usage: `SpokeEngine.LogBatch`
-
-You can also trigger the flush logger when batching reactive updates:
-
-```csharp
-SpokeEngine.LogBatch("My log message", () => {
-
-    someState.Set("someValue");
-});
-```
-
-This behaves just like `SpokeEngine.Batch`, but also invokes the `FlushLogger` if any logs were recorded during the flush.
-
----
-
 ## Exception Handling
 
 If any effects or memos throw an exception the flush logger is invoked automatically.
