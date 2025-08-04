@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.1 - 2025-08-04
+
+This update continues to refine the declarative lifecycle tree in `Spoke.Runtime`. The documented behaviour of Spoke and its reactive engine is unchanged. The reactivity APIs in Spoke are stabilizing, even though the runtime changes often.
+
+Eventually the runtime will be a key abstraction in Spoke, where Reactivity is one possible modules built in top.
+
+Key changes:
+
+- Implemented `PackedTreeCoords` for efficient sorting of execution order
+- Moved `Dock` from `Spoke.Reactive` to `Spoke.Runtime`. It's a core primitive of the epoch model
+- Builders like `EffectBuilder` are structs instead of classes
+- Add `UnityEvent` overloads for `EffectBuilder.Subscribe`
+- Remove Node from `Spoke.Runtime`, now Epoch manages tree structure
+- Implement functional composition style configuration of Epoch and ExecutionEngine, instead of abstract lifecycle methods
+- Removed Epoch.GetSubEpochs. Epochs can look up, but not down. For safety reasons. An Epoch instance must explicitely offer its internal state upwards. Cannot poke down through the tree
+
 ## 1.1.0 - 2025-07-14
 
 This is a big update with quite a few breaking changes. Sorry anyone who might be trying Spoke out! It's mostly just naming changes on the external API surface. The bigger changes are internal.
