@@ -289,15 +289,15 @@ namespace Spoke {
             try { action(); } finally { handle.Dispose(); }
         }
         protected override EpochBlock Bootstrap(EngineBuilder s) {
-            Action _requestTick = s.RequestTick;
+            Action _scheduleExec = s.ScheduleExec;
             flushCommand = () => {
-                if (deferred.IsEmpty) deferred.Enqueue(_requestTick);
+                if (deferred.IsEmpty) deferred.Enqueue(_scheduleExec);
             };
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand.Invoke();
             });
-            s.OnTick(() => {
+            s.OnExec(() => {
                 const long maxPasses = 1000;
                 var startFlush = s.FlushNumber;
                 try {
@@ -324,7 +324,7 @@ namespace Spoke {
         }
         protected override ExecBlock Init(EpochBuilder s) {
             s.TryGetContext<SpokeEngine>(out var engine);
-            tracker = new DependencyTracker(engine, ScheduleExec);
+            tracker = new DependencyTracker(engine, s.ScheduleExec);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             return s => {

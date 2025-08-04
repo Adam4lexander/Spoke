@@ -49,7 +49,7 @@ namespace Spoke {
         Epoch Parent, Prev, Next;
         bool isDetaching, isDetached;
         public Exception Fault { get; private set; }
-        ExecutionEngine execEngine;
+        ExecutionEngine engine;
         ExecBlock execBlock;
         protected string Name = null;
         public override string ToString() => Name ?? GetType().Name;
@@ -59,7 +59,7 @@ namespace Spoke {
             Prev = prev;
             if (prev != null) prev.Next = this;
             Coords = coords;
-            execEngine = (this as ExecutionEngine) ?? Parent.execEngine;
+            engine = (Parent as ExecutionEngine) ?? Parent?.engine;
             initEpoch.Open(this, null);
             execBlock = Init(new EpochBuilder(initEpoch));
             initEpoch.Seal();
@@ -90,10 +90,10 @@ namespace Spoke {
             return storeIn;
         }
         protected abstract ExecBlock Init(EpochBuilder s);
-        protected void ScheduleExec() {
-            if (execEngine == null) throw new Exception("Cannot find Execution Engine");
+        void ScheduleExec() {
             if (Fault != null) return;
-            (execEngine as ExecutionEngine.Friend).Schedule(this);
+            if (engine == null) (this as Friend).Exec();
+            else (engine as ExecutionEngine.Friend).Schedule(this);
         }
         internal class SubEpoch {
             List<Action> onCleanup = new();
@@ -161,6 +161,7 @@ namespace Spoke {
             public void GetChildren(List<Epoch> storeIn) {
                 foreach (var c in children) storeIn.Add(c);
             }
+            public void ScheduleExec() => Owner?.ScheduleExec();
             void NoMischief() {
                 if (!isOpen) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
@@ -179,6 +180,7 @@ namespace Spoke {
         public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
         public bool TryGetLexical<T>(out T epoch) where T : Epoch => s.TryGetLexical(out epoch);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        public void ScheduleExec() => s.ScheduleExec();
         class Scope : Epoch {
             EpochBlock block;
             public Scope(EpochBlock block) => this.block = block;
@@ -231,11 +233,11 @@ namespace Spoke {
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
         public void Log(string msg) => runtime.Log(msg);
         protected sealed override ExecBlock Init(EpochBuilder s) {
-            s.TryGetContext(out ExecutionEngine tickEngine);
-            runtime = new Runtime(this, tickEngine);
+            runtime = new Runtime(this);
             var block = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
-            return block(s);
+            s.Call(block);
+            return s => runtime.TriggerExec();
         }
         protected abstract EpochBlock Bootstrap(EngineBuilder s);
         internal class Runtime {
@@ -244,27 +246,25 @@ namespace Spoke {
             public bool HasPending => Next != null;
             public long FlushNumber { get; private set; }
             List<Action> onHasPending = new();
-            List<Action> onTick = new();
+            List<Action> onExec = new();
             List<Epoch> incoming = new List<Epoch>();
             HashSet<Epoch> execSet = new HashSet<Epoch>();
             List<Epoch> execOrder = new List<Epoch>();
             FlushLogger flushLogger = FlushLogger.Create();
             List<string> pendingLogs = new List<string>();
-            ExecutionEngine tickEngine;
             bool isRunning;
             bool isSealed;
-            public Runtime(ExecutionEngine owner, ExecutionEngine tickEngine) {
+            public Runtime(ExecutionEngine owner) {
                 this.owner = owner;
-                this.tickEngine = tickEngine;
             }
             public void Seal() => isSealed = true;
             public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
-            public void OnTick(Action fn) { NoMischief(); onTick.Add(fn); }
+            public void OnExec(Action fn) { NoMischief(); onExec.Add(fn); }
             public void TriggerHasPending() {
                 foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
             }
-            public void TriggerTick() {
-                foreach (var fn in onTick) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
+            public void TriggerExec() {
+                foreach (var fn in onExec) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
             }
             public void Break() {
                 if (!HasPending) return;
@@ -282,20 +282,12 @@ namespace Spoke {
                     var exec = prevExec = Next;
                     execSet.Remove(exec);
                     execOrder.RemoveAt(execOrder.Count - 1);
-
-                    // Figure out if we're ticking an engine, or remounting a generic epoch
-                    if ((exec is ExecutionEngine eng) && eng.runtime.tickEngine == owner) eng.runtime.TriggerTick();
-                    else (exec as Epoch.Friend).Exec();
-
+                    (exec as Epoch.Friend).Exec();
                     flushLogger.OnFlushNode(exec);
                     TakeScheduled();
                     if (!HasPending) IncrementFlush();
                     return exec;
                 } finally { isRunning = false; }
-            }
-            public void RequestTick() {
-                if (tickEngine is Friend te) te.Schedule(owner);
-                else TriggerTick(); // Tick immediately since we're the root engine
             }
             public void Schedule(Epoch epoch) {
                 if (epoch.Fault != null) return;
@@ -342,11 +334,11 @@ namespace Spoke {
         public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void OnHasPending(Action fn) => r.OnHasPending(fn);
-        public void OnTick(Action fn) => r.OnTick(fn);
+        public void OnExec(Action fn) => r.OnExec(fn);
         public void Break() => r.Break();
         public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();
-        public void RequestTick() => r.RequestTick();
+        public void ScheduleExec() => s.ScheduleExec();
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
