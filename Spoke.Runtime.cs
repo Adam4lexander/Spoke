@@ -27,7 +27,7 @@ namespace Spoke {
     /// </summary>
     public class SpokeRoot<T> : SpokeRoot where T : ExecutionEngine {
         public T Epoch { get; private set; }
-        public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null, null, default); }
+        public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null, null, default, -1); }
         protected override Epoch UntypedEpoch => Epoch;
     }
     public abstract class SpokeRoot : IDisposable {
@@ -42,134 +42,128 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
-        SubEpoch initEpoch = new();
-        SubEpoch execEpoch = new();
+        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
+        readonly struct AttachRecord {
+            public enum Kind : byte { Cleanup, Handle, Use, Call }
+            public readonly Kind Type;
+            public readonly object AsObj;
+            public readonly SpokeHandle Handle;
+            public AttachRecord(Action cleanup) { this = default; Type = Kind.Cleanup; AsObj = cleanup; }
+            public AttachRecord(SpokeHandle handle) { this = default; Type = Kind.Handle; Handle = handle; }
+            public AttachRecord(IDisposable use) { this = default; Type = Kind.Use; AsObj = use; }
+            public AttachRecord(Epoch child) { this = default; Type = Kind.Call; AsObj = child; }
+            public void Detach(Epoch that) {
+                if (Type == Kind.Cleanup) try { (AsObj as Action)?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{that}'", e); }
+                if (Type == Kind.Handle) Handle.Dispose();
+                if (Type == Kind.Use) try { (AsObj as IDisposable).Dispose(); } catch (Exception e) { SpokeError.Log($"Dispose failed in '{that}'", e); }
+                if (Type == Kind.Call) try { that.tail = that.tail.prev; (AsObj as Epoch).DetachFrom(0); that.siblingCounter--; } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
+            }
+        }
+        List<AttachRecord> attachEvents = new();
+        long siblingCounter;
+        int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
         public TreeCoords Coords { get; private set; }
-        Epoch Parent, Prev, Next;
-        bool isDetaching, isDetached;
+        Epoch parent, prev, tail;
+        bool isOpen;
+        bool isAttached => execAttachStart >= 0 && (parent == null || parent.detachFrom > attachIndex);
         public Exception Fault { get; private set; }
         ExecutionEngine engine;
         ExecBlock execBlock;
         protected string Name = null;
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => Coords.CompareTo(other.Coords);
-        void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords) {
-            Parent = parent;
-            Prev = prev;
-            if (prev != null) prev.Next = this;
+        void DetachFrom(int i) {
+            if (i < 0 || i >= attachEvents.Count) return;
+            var isReentrant = detachFrom < int.MaxValue;
+            detachFrom = Math.Min(detachFrom, i);
+            if (isReentrant) return;
+            while (attachEvents.Count > detachFrom) {
+                attachEvents[attachEvents.Count - 1].Detach(this);
+                attachEvents.RemoveAt(attachEvents.Count - 1);
+            }
+            execAttachStart = Math.Min(execAttachStart, attachEvents.Count - 1);
+            detachFrom = int.MaxValue;
+        }
+        void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex) {
+            this.parent = parent;
+            this.prev = prev;
             Coords = coords;
-            engine = (Parent as ExecutionEngine) ?? Parent?.engine;
-            initEpoch.Open(this, null);
-            execBlock = Init(new EpochBuilder(initEpoch));
-            initEpoch.Seal();
-            ScheduleExec();
+            this.attachIndex = attachIndex;
+            engine = (this.parent as ExecutionEngine) ?? this.parent?.engine;
+            isOpen = true;
+            execBlock = Init(new EpochBuilder(new EpochMutations(this)));
+            execAttachStart = attachEvents.Count;
+            isOpen = false;
+            TryScheduleExec();
         }
         void Friend.Detach() {
-            if (isDetached) return;
-            isDetaching = true;
-            if (Next != null) (Next as Friend).Detach();
-            execEpoch.Detach();
-            initEpoch.Detach();
-            if (Prev != null) Prev.Next = null;
-            Next = Prev = null;
-            isDetached = true;
+            // TODO: Test docks detaching themselves while executing
+            if (!isAttached) return;
+            if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
+            else DetachFrom(0);
         }
         void Friend.Exec() {
-            // TODO: Keyed epochs can unmount themselves before this function completes.
-            if (isDetached || isDetaching) return;
-            execEpoch.Open(this, initEpoch);
-            try { execBlock?.Invoke(new EpochBuilder(execEpoch)); } catch (Exception e) { Fault = e; }
-            execEpoch.Seal();
+            if (!isAttached) return;
+            isOpen = true;
+            DetachFrom(execAttachStart);
+            try { execBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
+            isOpen = false;
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
         List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
-            initEpoch.GetChildren(storeIn);
-            execEpoch.GetChildren(storeIn);
+            foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
             return storeIn;
         }
         protected abstract ExecBlock Init(EpochBuilder s);
-        void ScheduleExec() {
-            if (Fault != null) return;
+        void TryScheduleExec() {
+            if (!isAttached || Fault != null) return;
             if (engine == null) (this as Friend).Exec();
             else (engine as ExecutionEngine.Friend).Schedule(this);
         }
-        internal class SubEpoch {
-            List<Action> onCleanup = new();
-            List<SpokeHandle> handles = new();
-            List<IDisposable> disposables = new();
-            List<Epoch> children = new();
-            bool isOpen;
-            public Epoch Owner { get; private set; }
-            long siblingCounter;
-            public Epoch Tail { get; private set; }
-            public void Open(Epoch owner, SubEpoch prev) {
-                Detach();
-                Owner = owner;
-                siblingCounter = prev?.siblingCounter ?? 0;
-                Tail = prev?.Tail;
-                isOpen = true;
-            }
-            public void Seal() => isOpen = false;
-            public void Detach() {
-                for (int i = children.Count - 1; i >= 0; i--)
-                    try { (children[i] as Friend).Detach(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{this}': {children[i]}", e); }
-                children.Clear();
-                for (int i = onCleanup.Count - 1; i >= 0; i--)
-                    try { onCleanup[i]?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{this}'", e); }
-                onCleanup.Clear();
-                foreach (var handle in handles) handle.Dispose();
-                handles.Clear();
-                foreach (var disposable in disposables) disposable.Dispose();
-                disposables.Clear();
-                Owner = null;
-                siblingCounter = 0;
-                Tail = null;
-            }
+        internal struct EpochMutations {
+            Epoch owner;
+            public EpochMutations(Epoch owner) => this.owner = owner;
             public bool TryGetContext<T>(out T epoch) where T : Epoch {
                 epoch = default;
-                for (var curr = Owner.Parent; curr != null; curr = curr.Parent)
+                for (var curr = owner.parent; curr != null; curr = curr.parent)
                     if (curr is T o) { epoch = o; return true; }
                 return false;
             }
             public bool TryGetLexical<T>(out T epoch) where T : Epoch {
                 epoch = default;
-                var start = Owner.Prev ?? Owner.Parent;
-                for (var anc = start; anc != null; anc = anc.Parent)
-                    for (var curr = anc; curr != null; curr = curr.Prev)
+                var start = owner.prev ?? owner.parent;
+                for (var anc = start; anc != null; anc = anc.parent)
+                    for (var curr = anc; curr != null; curr = curr.prev)
                         if (curr is T o) { epoch = o; return true; }
                 return false;
             }
             public SpokeHandle Use(SpokeHandle handle) {
-                NoMischief(); handles.Add(handle); return handle;
+                NoMischief(); owner.attachEvents.Add(new AttachRecord(handle)); return handle;
             }
             public T Use<T>(T disposable) where T : IDisposable {
-                NoMischief(); disposables.Add(disposable); return disposable;
+                NoMischief(); owner.attachEvents.Add(new AttachRecord(disposable)); return disposable;
             }
             public T Call<T>(T epoch) where T : Epoch {
                 NoMischief();
-                if (epoch.Parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
-                var tail = children.Count > 0 ? children[children.Count - 1] : null;
-                children.Add(epoch);
-                (epoch as Friend).Init(Owner, tail, Owner.Coords.Extend(siblingCounter++));
+                if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
+                owner.attachEvents.Add(new AttachRecord(epoch));
+                (epoch as Friend).Init(owner, owner.tail, owner.Coords.Extend(owner.siblingCounter++), owner.attachEvents.Count - 1);
+                owner.tail = epoch;
                 return epoch;
             }
             public void OnCleanup(Action fn) {
-                NoMischief(); onCleanup.Add(fn);
+                NoMischief(); owner.attachEvents.Add(new AttachRecord(fn));
             }
-            public void GetChildren(List<Epoch> storeIn) {
-                foreach (var c in children) storeIn.Add(c);
-            }
-            public void ScheduleExec() => Owner?.ScheduleExec();
+            public void ScheduleExec() => owner?.TryScheduleExec();
             void NoMischief() {
-                if (!isOpen) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
+                if (!owner.isOpen) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
         }
     }
     public struct EpochBuilder {
-        Epoch.SubEpoch s;
-        internal EpochBuilder(Epoch.SubEpoch s) { this.s = s; }
+        Epoch.EpochMutations s;
+        internal EpochBuilder(Epoch.EpochMutations s) { this.s = s; }
         public void Log(string msg) {
             if (s.TryGetContext(out ExecutionEngine engine)) engine.Log(msg);
         }
@@ -201,7 +195,7 @@ namespace Spoke {
             Drop(key);
             dynamicChildren.Add(key, epoch);
             dynamicChildrenList.Add(epoch);
-            (epoch as Epoch.Friend).Init(this, null, Coords.Extend(siblingCounter++));
+            (epoch as Epoch.Friend).Init(this, null, Coords.Extend(siblingCounter++), -1);
             return epoch;
         }
         public void Drop(object key) {
@@ -252,8 +246,7 @@ namespace Spoke {
             List<Epoch> execOrder = new List<Epoch>();
             FlushLogger flushLogger = FlushLogger.Create();
             List<string> pendingLogs = new List<string>();
-            bool isRunning;
-            bool isSealed;
+            bool isRunning, isSealed;
             public Runtime(ExecutionEngine owner) {
                 this.owner = owner;
             }
