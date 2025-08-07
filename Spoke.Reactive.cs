@@ -265,29 +265,18 @@ namespace Spoke {
     public enum FlushMode { Immediate, Manual }
     public class SpokeEngine : ExecutionEngine, SpokeEngine.Friend {
         new internal interface Friend { void FastHold(); void FastRelease(); }
-        public static SpokeEngine Create(FlushMode flushMode, ISpokeLogger logger = null) => SpokeRoot.Create(new SpokeEngine(flushMode, logger)).Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
         DeferredQueue deferred = new DeferredQueue();
-        Action<long> _releaseEffect;
-        long currId;
-        Dock dock;
         Action flushCommand;
         EffectBlock block;
         void Friend.FastHold() => deferred.FastHold();
         void Friend.FastRelease() => deferred.FastRelease();
-        public SpokeEngine(FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
-            _releaseEffect = ReleaseEffect;
+        public SpokeEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
+            Name = name;
+            this.block = block;
             FlushMode = flushMode;
         }
-        public SpokeEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(flushMode, logger) {
-            this.block = block;
-        }
-        public SpokeHandle Effect(EffectBlock block, params ITrigger[] triggers) => Effect("Effect", block, triggers);
-        public SpokeHandle Effect(string name, EffectBlock block, params ITrigger[] triggers) {
-            dock.Call(currId, new Effect(name, block, triggers));
-            return SpokeHandle.Of(currId++, _releaseEffect);
-        }
-        void ReleaseEffect(long id) => dock.Drop(id);
+        public SpokeEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("SpokeEngine", block, flushMode, logger) { }
         public void Batch(Action action) {
             var handle = deferred.Hold();
             try { action(); } finally { handle.Dispose(); }
@@ -312,7 +301,6 @@ namespace Spoke {
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
             return s => {
-                dock = s.Call(new Dock());
                 if (block == null) return null;
                 return s => s.Call(new Effect("Root", block));
             };

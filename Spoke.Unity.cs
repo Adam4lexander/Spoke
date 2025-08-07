@@ -60,15 +60,15 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
+        SpokeRoot<SpokeEngine> root;
         SpokeEngine engine;
         protected SpokeEngine SpokeEngine {
             get {
-                engine = engine ?? OverrideEngine() ?? SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger(this));
+                engine = engine ?? new SpokeEngine($"{GetType().Name}:Init", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
                 return engine;
             }
         }
-        SpokeHandle sceneTeardown, appTeardown, initEffect;
-        protected virtual SpokeEngine OverrideEngine() => null;
+        SpokeHandle sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
             DoInit();
@@ -77,7 +77,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (initEffect == default) DoInit(); // Domain reload may not run Awake
+            if (root == null) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -87,7 +87,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            initEffect = SpokeEngine.Effect($"{GetType().Name}:Init", Init);
+            root = SpokeRoot.Create(SpokeEngine);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -99,7 +99,7 @@ namespace Spoke {
             // it will be serialized as disabled on each reload.
             if (Application.isPlaying) enabled = false;
             isEnabled.Set(false);
-            initEffect.Dispose();
+            root?.Dispose();
             isAwake.Set(false);
         }
     }
