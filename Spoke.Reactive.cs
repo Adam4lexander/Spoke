@@ -397,7 +397,7 @@ namespace Spoke {
         public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
         public void Enqueue(Action action) {
             queue.Enqueue(action);
-            if (holdKeys.Count == 0 && !IsDraining) Drain();
+            if (holdCount == 0 && !IsDraining) Drain();
         }
         void Drain() {
             IsDraining = true;
