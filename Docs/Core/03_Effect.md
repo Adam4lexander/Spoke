@@ -47,16 +47,13 @@ Each time you change the number in the Unity inspector, it will trigger the Effe
 You can create effects yourself without having to use `SpokeBehaviour`:
 
 ```cs
-// First create a SpokeEngine instance.
-var engine = SpokeEngine.Create(FlushMode.Immediate);
-
 // A reactive state we can test with
 var number = State.Create(0);
 
-// Create an Effect belonging to the engine. It will run immediately because we chose 'FlushMode.Immediate'
-engine.Effect(s => {
+// Create an engine and define its root effect
+SpokeRoot.Create(new SpokeEngine(s => {
     Debug.Log($"number is: {s.D(number)}");
-});
+}));
 ```
 
 This pretty much replicates what `SpokeBehaviour` is doing before it calls `Init`.
@@ -77,14 +74,12 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 ### Explicit Dependencies
 
 ```csharp
-var engine = SpokeEngine.Create(FlushMode.Immediate);
-
 var myTrigger = Trigger.Create();
 var myState = State.Create(0);
 
-engine.Effect(s => {
+SpokeRoot.Create(new SpokeEngine(s => {
     Debug.Log($"myState is {myState.Now}");
-}, myTrigger, myState); // any number of dependencies in final args
+}, myTrigger, myState)); // any number of dependencies in final args
 
 // Instantiating effect Prints: myState is 0
 
@@ -106,14 +101,12 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 `T D<T>(ISignal<T> signal);`
 
 ```csharp
-var engine = SpokeEngine.Create(FlushMode.Immediate);
-
 var name = State.Create("Spokey");
 var age = State.Create(0);
 
-engine.Effect(s => {
+SpokeRoot.Create(new SpokeEngine(s => {
     Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
-});
+}));
 
 // Instantiating effect Prints: name: Spokey, age: 0
 
@@ -126,14 +119,14 @@ age.Set(1);         // Prints: name: Reacts, age 1
 If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
 
 ```csharp
-engine.Effect(s => {
+SpokeRoot.Create(new SpokeEngine(s => {
     // Totally fine
     if (s.D(condition)) {
         DoSomething(s.D(foo));
     } else {
         SomethingElse(s.D(bar));
     }
-});
+}));
 ```
 
 - **Advantages**: Better ergonomics, more flexible, more powerful.

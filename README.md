@@ -131,23 +131,21 @@ using Spoke;
 public class MyBehaviour : MonoBehaviour {
 
     State<bool> isEnabled = State.Create(false);
-    SpokeHandle effectHandle;
+    SpokeRoot root;
 
     void Awake() {
         // A SpokeEngine is the execution scheduler for the reactive objects it contains
-        var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger(this));
-
-        effectHandle = engine.Effect("MyEffect", engine, s => {
+        root = SpokeRoot.Create(new SpokeEngine(s => {
             s.Phase(isEnabled, s => {
                 // OnEnable logic
                 s.OnCleanup(() => {
                     // OnDisable logic
                 });
             });
-        });
+        }));
     }
 
-    void OnDestroy() => effectHandle.Dispose();
+    void OnDestroy() => root.Dispose();
 
     void OnEnable() => isEnabled.Set(true);
     void OnDisable() => isEnabled.Set(false);

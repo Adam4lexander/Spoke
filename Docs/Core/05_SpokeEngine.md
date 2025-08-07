@@ -10,55 +10,7 @@ When the engine begins a flush, it will synchronously execute all scheduled epoc
 
 ## Usage with SpokeBehaviour
 
-Each `SpokeBehaviour` creates it's own personal `SpokeEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immedaite`.
-
-You can override the engine used by overriding one of the methods on `SpokeBehaviour`:
-
-```cs
-public class MyBehaviour : SpokeBehaviour {
-
-    public override SpokeEngine OverrideEngine() {
-        return SpokeEngine.Create(FlushMode.Manual, new UnitySpokeLogger(this));
-    }
-
-    protected override void Init(EffectBuilder s) { }
-
-    // Manually flush the engine once every 1 second
-    float timer;
-    void Update() {
-        timer += Time.deltaTime;
-        if (timer > 1) {
-            timer = 0;
-            SpokeEngine.Flush();
-        }
-    }
-}
-```
-
-You could also use one global `SpokeEngine` shared by all behaviours, and inject it here if you wanted to.
-
----
-
-## Manual Creation
-
-You can create your own instances of `SpokeEngine` outside of a `SpokeBehaviour` too:
-
-```cs
-var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
-
-// And then attach an effect
-var handle = engine.Effect(s => { /*...*/ });
-
-// Later detach the effect
-handle.Dispose();
-
-// Just don't instantiate the SpokeEngine directly, it won't work
-engine = new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger());
-engine.Effect(s => { /* ... */ }); // Will throw an error, because the engine isn't hosted by a Node
-
-// This would work though:
-engine = Node.CreateRoot(new SpokeEngine(FlushMode.Immediate, new UnitySpokeLogger())).Epoch;
-```
+Each `SpokeBehaviour` creates it's own personal `SpokeEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immediate`.
 
 ---
 
