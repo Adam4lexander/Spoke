@@ -272,15 +272,19 @@ namespace Spoke {
         long currId;
         Dock dock;
         Action flushCommand;
+        EffectBlock block;
         void Friend.FastHold() => deferred.FastHold();
         void Friend.FastRelease() => deferred.FastRelease();
-        public SpokeEngine(FlushMode flushMode, ISpokeLogger logger = null) : base(logger) {
+        public SpokeEngine(FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
             _releaseEffect = ReleaseEffect;
             FlushMode = flushMode;
         }
-        public SpokeHandle Effect(EffectBlock buildLogic, params ITrigger[] triggers) => Effect("Effect", buildLogic, triggers);
-        public SpokeHandle Effect(string name, EffectBlock buildLogic, params ITrigger[] triggers) {
-            dock.Call(currId, new Effect(name, buildLogic, triggers));
+        public SpokeEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(flushMode, logger) {
+            this.block = block;
+        }
+        public SpokeHandle Effect(EffectBlock block, params ITrigger[] triggers) => Effect("Effect", block, triggers);
+        public SpokeHandle Effect(string name, EffectBlock block, params ITrigger[] triggers) {
+            dock.Call(currId, new Effect(name, block, triggers));
             return SpokeHandle.Of(currId++, _releaseEffect);
         }
         void ReleaseEffect(long id) => dock.Drop(id);
@@ -309,7 +313,8 @@ namespace Spoke {
             });
             return s => {
                 dock = s.Call(new Dock());
-                return null;
+                if (block == null) return null;
+                return s => s.Call(new Effect("Root", block));
             };
         }
         public void Flush() => flushCommand?.Invoke();

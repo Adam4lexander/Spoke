@@ -81,7 +81,7 @@ namespace Spoke {
                 attachEvents[attachEvents.Count - 1].Detach(this);
                 attachEvents.RemoveAt(attachEvents.Count - 1);
             }
-            execAttachStart = Math.Min(execAttachStart, attachEvents.Count - 1);
+            execAttachStart = Math.Min(execAttachStart, attachEvents.Count);
             detachFrom = int.MaxValue;
         }
         void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex) {
