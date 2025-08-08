@@ -11,6 +11,7 @@
 // > FlushLogger
 // > SpokePool
 // > ReadOnlyList
+// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -61,15 +62,16 @@ namespace Spoke {
         }
         List<AttachRecord> attachEvents = new();
         long siblingCounter;
-        int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
         public TreeCoords Coords { get; private set; }
         Epoch parent, prev, tail;
-        bool isOpen;
+        int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
         bool isAttached => execAttachStart >= 0 && (parent == null || parent.detachFrom > attachIndex);
-        public Exception Fault { get; private set; }
         ExecutionEngine engine;
         ExecBlock execBlock;
+        DeferredQueue deferAfterOpen = new();
+        Action _scheduleExec;
         protected string Name = null;
+        public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => Coords.CompareTo(other.Coords);
         void DetachFrom(int i) {
@@ -85,16 +87,17 @@ namespace Spoke {
             detachFrom = int.MaxValue;
         }
         void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex) {
+            _scheduleExec = ScheduleExec;
             this.parent = parent;
             this.prev = prev;
             Coords = coords;
             this.attachIndex = attachIndex;
             engine = (this.parent as ExecutionEngine) ?? this.parent?.engine;
-            isOpen = true;
+            deferAfterOpen.FastHold();
             execBlock = Init(new EpochBuilder(new EpochMutations(this)));
             execAttachStart = attachEvents.Count;
-            isOpen = false;
-            TryScheduleExec();
+            deferAfterOpen.FastRelease();
+            ScheduleExec();
         }
         void Friend.Detach() {
             // TODO: Test docks detaching themselves while executing
@@ -104,10 +107,10 @@ namespace Spoke {
         }
         void Friend.Exec() {
             if (!isAttached) return;
-            isOpen = true;
+            deferAfterOpen.FastHold();
             DetachFrom(execAttachStart);
             try { execBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
-            isOpen = false;
+            deferAfterOpen.FastRelease();
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
         List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
@@ -116,8 +119,8 @@ namespace Spoke {
             return storeIn;
         }
         protected abstract ExecBlock Init(EpochBuilder s);
-        void TryScheduleExec() {
-            if (!isAttached || Fault != null) return;
+        void ScheduleExec() {
+            if (Fault != null) return;
             if (engine == null) (this as Friend).Exec();
             else (engine as ExecutionEngine.Friend).Schedule(this);
         }
@@ -155,9 +158,9 @@ namespace Spoke {
             public void OnCleanup(Action fn) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(fn));
             }
-            public void ScheduleExec() => owner?.TryScheduleExec();
+            public void ScheduleExec() => owner?.deferAfterOpen.Enqueue(owner._scheduleExec);
             void NoMischief() {
-                if (!owner.isOpen) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
+                if (!owner.deferAfterOpen.IsHolding) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
         }
     }
@@ -485,5 +488,32 @@ namespace Spoke {
         public List<T>.Enumerator GetEnumerator() => list.GetEnumerator();
         public int Count => list?.Count ?? 0;
         public T this[int index] => list[index];
+    }
+    // ============================== DeferredQueue ============================================================
+    internal class DeferredQueue {
+        long holdIdx;
+        HashSet<long> holdKeys = new HashSet<long>();
+        Queue<Action> queue = new Queue<Action>();
+        Action<long> _release;
+        long holdCount;
+        public bool IsDraining { get; private set; }
+        public bool IsHolding => holdCount > 0;
+        public DeferredQueue() { _release = Release; }
+        public SpokeHandle Hold() {
+            if (holdKeys.Add(holdIdx)) FastHold();
+            return SpokeHandle.Of(holdIdx++, _release);
+        }
+        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
+        public void FastHold() => holdCount++;
+        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
+        public void Enqueue(Action action) {
+            queue.Enqueue(action);
+            if (holdCount == 0 && !IsDraining) Drain();
+        }
+        void Drain() {
+            IsDraining = true;
+            while (queue.Count > 0) queue.Dequeue()();
+            IsDraining = false;
+        }
     }
 }

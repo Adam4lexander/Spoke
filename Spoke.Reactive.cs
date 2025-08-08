@@ -283,8 +283,11 @@ namespace Spoke {
         }
         protected override EpochBlock Bootstrap(EngineBuilder s) {
             Action _scheduleExec = s.ScheduleExec;
+            var isPending = false;
             flushCommand = () => {
-                if (deferred.IsEmpty) deferred.Enqueue(_scheduleExec);
+                if (isPending) return;
+                isPending = true;
+                deferred.Enqueue(_scheduleExec);
             };
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
@@ -292,6 +295,8 @@ namespace Spoke {
             });
             s.OnExec(s => {
                 const long maxPasses = 1000;
+                if (!isPending) return;
+                isPending = false;
                 var startFlush = s.FlushNumber;
                 try {
                     while (s.HasPending) {
@@ -377,32 +382,5 @@ namespace Spoke {
             schedule();
             (trigger as IDeferredTrigger).OnAfterNotify(() => engine.FastRelease());
         };
-    }
-    // ============================== DeferredQueue ============================================================
-    internal class DeferredQueue {
-        long holdIdx;
-        HashSet<long> holdKeys = new HashSet<long>();
-        Queue<Action> queue = new Queue<Action>();
-        Action<long> _release;
-        long holdCount;
-        public bool IsDraining { get; private set; }
-        public bool IsEmpty => queue.Count == 0 && !IsDraining;
-        public DeferredQueue() { _release = Release; }
-        public SpokeHandle Hold() {
-            if (holdKeys.Add(holdIdx)) FastHold();
-            return SpokeHandle.Of(holdIdx++, _release);
-        }
-        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
-        public void FastHold() => holdCount++;
-        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
-        public void Enqueue(Action action) {
-            queue.Enqueue(action);
-            if (holdCount == 0 && !IsDraining) Drain();
-        }
-        void Drain() {
-            IsDraining = true;
-            while (queue.Count > 0) queue.Dequeue()();
-            IsDraining = false;
-        }
     }
 }
