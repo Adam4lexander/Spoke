@@ -252,23 +252,23 @@ public class MyCustomEpoch : Epoch {
         Name = "My Epoch"; // Optionally set the name, which will show in debugging views
     }
 
-    protected override void OnAttached(Action<Action> onDetach) {
-        // For logic that outside the Mount/Unmount phase
+    protected override ExecBlock Init(EpochBuilder s) {
+        // This code block is run eagerly, as soon as the epoch attaches to the tree, and before
+        // its scheduled for execution on the nearest engine
         IsAttached = true;
-        onDetach(() => IsAttached = false);
-    }
+        s.OnCleanup(() => IsAttached = false);
 
-    protected override void OnMounted(EpochBuilder s) {
-        // For declaring child epochs or declaring setup/cleanup of lifecycle-bound resources
-        IsMounted = true;
-        s.OnCleanup(() => IsMounted = false);
+        return s => {
+            // Returns a 'continuation' for logic that's deferred and scheduled on the nearest engine.
+            // This block is cleaned up, and executed again fresh each time the epoch is 'executed'
+            IsMounted = true;
+            s.OnCleanup(() => IsMounted = false);
+        };
     }
 }
 ```
 
-> At the beginning of the page I said an epoch was a function with continuations to run when detached.<br>
-> That's the abstract mental model.<br>
-> In Spoke it's a class, with 2 epochs in one. OnAttach and OnMount would be distinct nested epochs as I originally defined them. Spoke combines them for convenience.
+> In Spoke, an Epoch runs across two temporal zones. Epochs attach a linear sequence of sub-epochs, resources and cleanup functions in Init, followed by Init's continuation. The Init block binds resources to the lifetime of the Epoch. The ExecBlock can be rerun repeatedly, by an engine, each time cleaning up and attaching a new set of children.
 
 You can attach the custom epoch into the call-tree by 'calling' it from a parent epoch:
 
