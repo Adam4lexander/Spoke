@@ -231,7 +231,7 @@ namespace Spoke {
             var block = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
             s.Call(block);
-            return s => runtime.TriggerExec();
+            return s => runtime.TriggerExec(s);
         }
         protected abstract EpochBlock Bootstrap(EngineBuilder s);
         internal class Runtime {
@@ -240,7 +240,7 @@ namespace Spoke {
             public bool HasPending => Next != null;
             public long FlushNumber { get; private set; }
             List<Action> onHasPending = new();
-            List<Action> onExec = new();
+            List<Action<ExecContext>> onExec = new();
             List<Epoch> incoming = new List<Epoch>();
             HashSet<Epoch> execSet = new HashSet<Epoch>();
             List<Epoch> execOrder = new List<Epoch>();
@@ -252,14 +252,17 @@ namespace Spoke {
             }
             public void Seal() => isSealed = true;
             public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
-            public void OnExec(Action fn) { NoMischief(); onExec.Add(fn); }
+            public void OnExec(Action<ExecContext> fn) { NoMischief(); onExec.Add(fn); }
             public void TriggerHasPending() {
                 foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
             }
-            public void TriggerExec() {
-                foreach (var fn in onExec) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
+            public void TriggerExec(EpochBuilder s) {
+                isRunning = true;
+                foreach (var fn in onExec) try { fn?.Invoke(new ExecContext(s, this)); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
+                isRunning = false;
             }
             public void Break() {
+                if (!isRunning) throw new Exception("Break() must be called from within an OnExec block");
                 if (!HasPending) return;
                 (Next as Epoch.Friend).Detach();
                 incoming.Clear(); execSet.Clear(); execOrder.Clear();
@@ -268,19 +271,17 @@ namespace Spoke {
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
             Epoch prevExec;
             public Epoch RunNext() {
+                if (!isRunning) throw new Exception("RunNext() must be called from within an OnExec block");
                 if (!HasPending) return null;
-                isRunning = true;
-                try {
-                    if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
-                    var exec = prevExec = Next;
-                    execSet.Remove(exec);
-                    execOrder.RemoveAt(execOrder.Count - 1);
-                    (exec as Epoch.Friend).Exec();
-                    flushLogger.OnFlushNode(exec);
-                    TakeScheduled();
-                    if (!HasPending) IncrementFlush();
-                    return exec;
-                } finally { isRunning = false; }
+                if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
+                var exec = prevExec = Next;
+                execSet.Remove(exec);
+                execOrder.RemoveAt(execOrder.Count - 1);
+                (exec as Epoch.Friend).Exec();
+                flushLogger.OnFlushNode(exec);
+                TakeScheduled();
+                if (!HasPending) IncrementFlush();
+                return exec;
             }
             public void Schedule(Epoch epoch) {
                 if (epoch.Fault != null) return;
@@ -320,14 +321,21 @@ namespace Spoke {
         ExecutionEngine.Runtime r;
         internal EngineBuilder(EpochBuilder s, ExecutionEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
-        public long FlushNumber => r.FlushNumber;
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
         public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void OnHasPending(Action fn) => r.OnHasPending(fn);
-        public void OnExec(Action fn) => r.OnExec(fn);
+        public void OnExec(Action<ExecContext> fn) => r.OnExec(fn);
+        public void ScheduleExec() => s.ScheduleExec();
+    }
+    public struct ExecContext {
+        EpochBuilder s;
+        ExecutionEngine.Runtime r;
+        internal ExecContext(EpochBuilder s, ExecutionEngine.Runtime es) { this.s = s; this.r = es; }
+        public bool HasPending => r.HasPending;
+        public long FlushNumber => r.FlushNumber;
         public void Break() => r.Break();
         public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();

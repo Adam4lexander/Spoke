@@ -290,7 +290,7 @@ namespace Spoke {
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand.Invoke();
             });
-            s.OnExec(() => {
+            s.OnExec(s => {
                 const long maxPasses = 1000;
                 var startFlush = s.FlushNumber;
                 try {
