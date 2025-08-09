@@ -65,11 +65,10 @@ namespace Spoke {
         public TreeCoords Coords { get; private set; }
         Epoch parent, prev, tail;
         int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
-        bool isAttached => execAttachStart >= 0 && (parent == null || parent.detachFrom > attachIndex);
         ExecutionEngine engine;
         ExecBlock execBlock;
         DeferredQueue deferAfterOpen = new();
-        Action _scheduleExec;
+        Action _scheduleExec, _detach;
         protected string Name = null;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
@@ -87,7 +86,7 @@ namespace Spoke {
             detachFrom = int.MaxValue;
         }
         void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex) {
-            _scheduleExec = ScheduleExec;
+            _scheduleExec = ScheduleExec; _detach = Detach;
             this.parent = parent;
             this.prev = prev;
             Coords = coords;
@@ -99,14 +98,12 @@ namespace Spoke {
             deferAfterOpen.FastRelease();
             ScheduleExec();
         }
-        void Friend.Detach() {
-            // TODO: Test docks detaching themselves while executing
-            if (!isAttached) return;
+        void Friend.Detach() => deferAfterOpen.Enqueue(_detach);
+        void Detach() {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
         }
         void Friend.Exec() {
-            if (!isAttached) return;
             deferAfterOpen.FastHold();
             DetachFrom(execAttachStart);
             try { execBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }

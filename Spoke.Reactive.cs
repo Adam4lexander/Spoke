@@ -11,7 +11,6 @@
 // > SpokeEngine
 // > Computation
 // > DependencyTracker
-// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
