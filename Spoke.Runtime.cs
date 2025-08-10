@@ -122,25 +122,15 @@ namespace Spoke {
         internal struct EpochMutations {
             Epoch owner;
             public EpochMutations(Epoch owner) => this.owner = owner;
-            public bool TryGetContext<T>(out T epoch) where T : Epoch {
-                epoch = default;
-                for (var curr = owner.parent; curr != null; curr = curr.parent)
-                    if (curr is T o) { epoch = o; return true; }
-                return false;
-            }
-            public bool TryImport<T>(out T obj) {
-                obj = default;
+            public T Import<T>() {
                 var startIndex = owner.attachEvents.Count - 1;
                 for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
                     for (var i = startIndex; i >= 0; i--) {
                         var evt = anc.attachEvents[i];
-                        if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) {
-                            obj = o;
-                            return true;
-                        }
+                        if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) return o;
                     }
                 }
-                return false;
+                throw new Exception($"Failed to import: {typeof(T).Name}");
             }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(handle)); return handle;
@@ -156,7 +146,7 @@ namespace Spoke {
                 owner.tail = epoch;
                 return epoch;
             }
-            public T Let<T>(T obj) {
+            public T Export<T>(T obj) {
                 NoMischief();
                 owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Export, obj));
                 return obj;
@@ -174,15 +164,15 @@ namespace Spoke {
         Epoch.EpochMutations s;
         internal EpochBuilder(Epoch.EpochMutations s) { this.s = s; }
         public void Log(string msg) {
-            if (s.TryGetContext(out ExecutionEngine engine)) engine.Log(msg);
+            var engine = s.Import<ExecutionEngine>();
+            engine.Log(msg);
         }
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => Call(new Scope(block));
-        public T Export<T>(T obj) => s.Let(obj);
-        public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
-        public bool TryImport<T>(out T obj) => s.TryImport(out obj);
+        public T Export<T>(T obj) => s.Export(obj);
+        public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void ScheduleExec() => s.ScheduleExec();
         class Scope : Epoch {
@@ -334,8 +324,8 @@ namespace Spoke {
         public bool HasPending => r.HasPending;
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-        public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
-        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryImport(out context);
+        public T Export<T>(T obj) => s.Export(obj);
+        public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void OnHasPending(Action fn) => r.OnHasPending(fn);
         public void OnExec(Action<ExecContext> fn) => r.OnExec(fn);

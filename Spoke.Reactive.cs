@@ -183,7 +183,7 @@ namespace Spoke {
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => s.Call(block);
         public T Export<T>(T obj) => s.Export(obj);
-        public bool TryImport<T>(out T context) => s.TryImport(out context);
+        public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
     // ============================== Effect ============================================================
@@ -321,7 +321,7 @@ namespace Spoke {
             this.triggers = triggers;
         }
         protected override ExecBlock Init(EpochBuilder s) {
-            s.TryGetContext<SpokeEngine>(out var engine);
+            var engine = s.Import<SpokeEngine>();
             tracker = new DependencyTracker(engine, s.ScheduleExec);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
