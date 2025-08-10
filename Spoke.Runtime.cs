@@ -24,17 +24,14 @@ namespace Spoke {
 
     // ============================== SpokeRoot ============================================================
     /// <summary>
-    /// The root node of the call-tree must host an ExecutionEngine epoch.
+    /// The SpokeRoot hosts the root Engine of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
-    public class SpokeRoot<T> : SpokeRoot where T : ExecutionEngine {
+    public interface ISpokeRoot<out T> : IDisposable where T : ExecutionEngine { T Epoch { get; } }
+    public static class SpokeRoot { public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch); }
+    public class SpokeRoot<T> : ISpokeRoot<T> where T : ExecutionEngine {
         public T Epoch { get; private set; }
         public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null, null, default, -1); }
-        protected override Epoch UntypedEpoch => Epoch;
-    }
-    public abstract class SpokeRoot : IDisposable {
-        public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch);
-        public void Dispose() => (UntypedEpoch as Epoch.Friend).Detach();
-        protected abstract Epoch UntypedEpoch { get; }
+        public void Dispose() => (Epoch as Epoch.Friend).Detach();
     }
     // ============================== Epoch ============================================================
     /// <summary>
@@ -132,6 +129,17 @@ namespace Spoke {
                 }
                 throw new Exception($"Failed to import: {typeof(T).Name}");
             }
+            public List<T> ImportAll<T>() {
+                var result = new List<T>();
+                var startIndex = owner.attachEvents.Count - 1;
+                for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+                    for (var i = startIndex; i >= 0; i--) {
+                        var evt = anc.attachEvents[i];
+                        if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) result.Add(o);
+                    }
+                }
+                return result;
+            }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(handle)); return handle;
             }
@@ -173,6 +181,7 @@ namespace Spoke {
         public void Call(EpochBlock block) => Call(new Scope(block));
         public T Export<T>(T obj) => s.Export(obj);
         public T Import<T>() => s.Import<T>();
+        public List<T> ImportAll<T>() => s.ImportAll<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void ScheduleExec() => s.ScheduleExec();
         class Scope : Epoch {
@@ -183,38 +192,103 @@ namespace Spoke {
     }
     // ============================== Dock ============================================================
     public class Dock : Epoch, Dock.Friend {
-        new internal interface Friend { ReadOnlyList<Epoch> GetChildren(); }
-        Dictionary<object, Epoch> dynamicChildren = new Dictionary<object, Epoch>();
-        List<Epoch> dynamicChildrenList = new List<Epoch>();
+        new internal interface Friend { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
+        Dictionary<object, ISpokeRoot<DockedEngine>> dynamicChildren = new Dictionary<object, ISpokeRoot<DockedEngine>>();
+        List<ISpokeRoot<DockedEngine>> dynamicChildrenList = new List<ISpokeRoot<DockedEngine>>();
+        DeferredQueue deferred = new();
         bool isDetaching;
         long siblingCounter;
+        List<object> scope = new();
+        List<DockedEngine> incoming = new();
+        HashSet<DockedEngine> scheduledSet = new();
+        List<DockedEngine> scheduledList = new();
+        Action _takeScheduled;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
         public T Call<T>(object key, T epoch) where T : Epoch {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
-            dynamicChildren.Add(key, epoch);
-            dynamicChildrenList.Add(epoch);
-            (epoch as Epoch.Friend).Init(this, null, Coords.Extend(siblingCounter++), -1);
+            deferred.FastHold();
+            var root = SpokeRoot.Create(new DockedEngine(this, scope, epoch, siblingCounter++));
+            dynamicChildren.Add(key, root);
+            dynamicChildrenList.Add(root);
+            deferred.FastRelease();
             return epoch;
         }
         public void Drop(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
             var index = dynamicChildrenList.IndexOf(child);
-            if (index >= 0) { (child as Epoch.Friend).Detach(); dynamicChildrenList.RemoveAt(index); }
+            if (index >= 0) { child.Dispose(); dynamicChildrenList.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
+        static readonly Comparison<DockedEngine> DockedEngineComparison = (a, b) => b.CompareTo(a);
         protected override ExecBlock Init(EpochBuilder s) {
+            scope = s.ImportAll<object>();
+            _takeScheduled = () => {
+                if (incoming.Count == 0) return;
+                foreach (var root in incoming) if (scheduledSet.Add(root)) scheduledList.Add(root);
+                incoming.Clear();
+                scheduledList.Sort(DockedEngineComparison);
+                s.ScheduleExec();
+            };
             s.OnCleanup(() => {
                 isDetaching = true;
                 for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
-                    try { (dynamicChildrenList[i] as Epoch.Friend).Detach(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
+                    try { dynamicChildrenList[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
                 dynamicChildrenList.Clear();
                 dynamicChildren.Clear();
             });
-            return null;
+            return s => {
+                if (scheduledList.Count == 0) return;
+                var next = scheduledList[scheduledList.Count - 1];
+                deferred.FastHold();
+                var hasMore = next.Tick();
+                if (!hasMore) {
+                    scheduledList.RemoveAt(scheduledList.Count - 1);
+                    scheduledSet.Remove(next);
+                }
+                deferred.FastRelease();
+                if (scheduledList.Count > 0) s.ScheduleExec();
+            };
         }
-        ReadOnlyList<Epoch> Friend.GetChildren() => new ReadOnlyList<Epoch>(dynamicChildrenList);
+        void Schedule(DockedEngine root) {
+            incoming.Add(root);
+            deferred.Enqueue(_takeScheduled);
+        }
+        List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
+            storeIn = storeIn ?? new List<Epoch>();
+            foreach (var r in dynamicChildrenList) storeIn.Add(r.Epoch);
+            return storeIn;
+        }
+        class DockedEngine : ExecutionEngine, IComparable<DockedEngine> {
+            Dock owner;
+            List<object> scope;
+            Epoch epoch;
+            long idx;
+            Func<bool> tickCommand;
+            public DockedEngine(Dock owner, List<object> scope, Epoch epoch, long idx) {
+                this.owner = owner;
+                this.scope = scope;
+                this.epoch = epoch;
+                this.idx = idx;
+            }
+            public int CompareTo(DockedEngine other) => idx.CompareTo(other.idx);
+            public bool Tick() => tickCommand?.Invoke() ?? false;
+            protected override EpochBlock Bootstrap(EngineBuilder s) {
+                tickCommand = () => {
+                    s.ScheduleExec();
+                    return s.HasPending;
+                };
+                s.OnCleanup(() => tickCommand = null);
+                s.OnHasPending(() => owner.Schedule(this));
+                s.OnExec(s => s.RunNext());
+                return s => {
+                    for (int i = scope.Count - 1; i >= 0; i--) s.Export(scope[i]);
+                    s.Call(epoch);
+                    return null;
+                };
+            }
+        }
     }
     // ============================== ExecutionEngine ============================================================
     public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
