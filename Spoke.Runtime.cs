@@ -2,9 +2,10 @@
 // -----------------------------
 // > SpokeRoot
 // > Epoch
+// > LambdaEpoch
 // > Dock
 // > ExecutionEngine
-// > PendingQueue
+// > OrderedWorkSet
 // > TreeCoords
 // > PackedTreeCoords128
 // > SpokeHandle
@@ -17,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using static UnityEngine.UI.GridLayoutGroup;
 
 namespace Spoke {
 
@@ -41,7 +43,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
+        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); List<object> GetExports(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -111,6 +113,17 @@ namespace Spoke {
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
             return storeIn;
         }
+        List<object> Friend.GetExports() {
+            var result = new List<object>();
+            var startIndex = attachEvents.Count - 1;
+            for (var anc = this; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+                for (var i = startIndex; i >= 0; i--) {
+                    var evt = anc.attachEvents[i];
+                    if (evt.Type == AttachRecord.Kind.Export) result.Add(evt.AsObj);
+                }
+            }
+            return result;
+        }
         protected abstract ExecBlock Init(EpochBuilder s);
         void ScheduleExec() {
             if (Fault != null) return;
@@ -129,17 +142,6 @@ namespace Spoke {
                     }
                 }
                 throw new Exception($"Failed to import: {typeof(T).Name}");
-            }
-            public List<T> ImportAll<T>() {
-                var result = new List<T>();
-                var startIndex = owner.attachEvents.Count - 1;
-                for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
-                    for (var i = startIndex; i >= 0; i--) {
-                        var evt = anc.attachEvents[i];
-                        if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) result.Add(o);
-                    }
-                }
-                return result;
             }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(handle)); return handle;
@@ -179,17 +181,17 @@ namespace Spoke {
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public void Call(EpochBlock block) => Call(new Scope(block));
         public T Export<T>(T obj) => s.Export(obj);
         public T Import<T>() => s.Import<T>();
-        public List<T> ImportAll<T>() => s.ImportAll<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void ScheduleExec() => s.ScheduleExec();
-        class Scope : Epoch {
-            EpochBlock block;
-            public Scope(EpochBlock block) => this.block = block;
-            protected override ExecBlock Init(EpochBuilder s) => block(s);
-        }
+    }
+    // ============================== LambdaEpoch ============================================================
+    public class LambdaEpoch : Epoch {
+        EpochBlock block;
+        public LambdaEpoch(string name, EpochBlock block) { Name = name; this.block = block; }
+        public LambdaEpoch(EpochBlock block) : this("LambdaEpoch", block) { }
+        protected override ExecBlock Init(EpochBuilder s) => block(s);
     }
     // ============================== Dock ============================================================
     public class Dock : Epoch, Dock.Friend {
@@ -200,7 +202,7 @@ namespace Spoke {
         bool isDetaching;
         long siblingCounter;
         List<object> scope = new();
-        PendingQueue<DockedEngine> pending = new((a, b) => b.CompareTo(a));
+        OrderedWorkSet<DockedEngine> pending = new((a, b) => b.CompareTo(a));
         Action _takeScheduled;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
@@ -208,7 +210,7 @@ namespace Spoke {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
             deferred.FastHold();
-            var root = SpokeRoot.Create(new DockedEngine(this, scope, epoch, siblingCounter++));
+            var root = SpokeRoot.Create(new DockedEngine(this, epoch, siblingCounter++));
             dynamicChildren.Add(key, root);
             dynamicChildrenList.Add(root);
             deferred.FastRelease();
@@ -221,7 +223,7 @@ namespace Spoke {
             dynamicChildren.Remove(key);
         }
         protected override ExecBlock Init(EpochBuilder s) {
-            scope = s.ImportAll<object>();
+            scope = (this as Epoch.Friend).GetExports();
             _takeScheduled = () => { pending.Take(); s.ScheduleExec(); };
             s.OnCleanup(() => {
                 isDetaching = true;
@@ -249,32 +251,20 @@ namespace Spoke {
             return storeIn;
         }
         class DockedEngine : ExecutionEngine, IComparable<DockedEngine> {
-            Dock owner;
-            List<object> scope;
-            Epoch epoch;
-            long idx;
-            Func<bool> tickCommand;
-            public DockedEngine(Dock owner, List<object> scope, Epoch epoch, long idx) {
-                this.owner = owner;
-                this.scope = scope;
-                this.epoch = epoch;
-                this.idx = idx;
-            }
+            Dock dock; Epoch epoch; long idx; Func<bool> tickCommand;
+            public DockedEngine(Dock dock, Epoch epoch, long idx) { this.dock = dock; this.epoch = epoch; this.idx = idx; }
             public int CompareTo(DockedEngine other) => idx.CompareTo(other.idx);
             public bool Tick() => tickCommand?.Invoke() ?? false;
-            protected override EpochBlock Bootstrap(EngineBuilder s) {
-                tickCommand = () => {
-                    s.ScheduleExec();
-                    return s.HasPending;
-                };
+            protected override Epoch Bootstrap(EngineBuilder s) {
+                tickCommand = () => { s.ScheduleExec(); return s.HasPending; };
                 s.OnCleanup(() => tickCommand = null);
-                s.OnHasPending(() => owner.Schedule(this));
+                s.OnHasPending(() => dock.Schedule(this));
                 s.OnExec(s => s.RunNext());
-                return s => {
-                    for (int i = scope.Count - 1; i >= 0; i--) s.Export(scope[i]);
+                return new LambdaEpoch("Portal", s => {
+                    for (int i = dock.scope.Count - 1; i >= 0; i--) s.Export(dock.scope[i]);
                     s.Call(epoch);
                     return null;
-                };
+                });
             }
         }
     }
@@ -290,13 +280,13 @@ namespace Spoke {
         public void Log(string msg) => runtime.Log(msg);
         protected sealed override ExecBlock Init(EpochBuilder s) {
             runtime = new Runtime(this);
-            var block = Bootstrap(new EngineBuilder(s, runtime));
+            var root = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
             s.Export(this);
-            s.Call(block);
+            s.Call(root);
             return s => runtime.TriggerExec(s);
         }
-        protected abstract EpochBlock Bootstrap(EngineBuilder s);
+        protected abstract Epoch Bootstrap(EngineBuilder s);
         internal class Runtime {
             ExecutionEngine owner;
             protected Epoch Next => pending.Peek();
@@ -304,7 +294,7 @@ namespace Spoke {
             public long FlushNumber { get; private set; }
             List<Action> onHasPending = new();
             List<Action<ExecContext>> onExec = new();
-            PendingQueue<Epoch> pending = new((a, b) => b.CompareTo(a));
+            OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
             FlushLogger flushLogger = FlushLogger.Create();
             List<string> pendingLogs = new List<string>();
             bool isRunning, isSealed;
@@ -392,9 +382,9 @@ namespace Spoke {
         public void ScheduleExec() => s.ScheduleExec();
     }
     // ============================== PendingQueue ============================================================
-    internal class PendingQueue<T> {
+    internal class OrderedWorkSet<T> {
         List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
-        public PendingQueue(Comparison<T> comp) { this.comp = comp; }
+        public OrderedWorkSet(Comparison<T> comp) { this.comp = comp; }
         public bool Has => list.Count > 0;
         public void Enqueue(T t) { incoming.Add(t); }
         public void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }

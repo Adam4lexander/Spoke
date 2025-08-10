@@ -181,7 +181,6 @@ namespace Spoke {
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public void Call(EpochBlock block) => s.Call(block);
         public T Export<T>(T obj) => s.Export(obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
@@ -223,7 +222,7 @@ namespace Spoke {
             if (block == null) return;
             var result = block.Invoke(s);
             if (result is ISignal<T> signal) s.Subscribe(signal, x => state.Set(x));
-            s.Call(s => s => state.Set(result.Now));
+            s.Call(new LambdaEpoch("Deferred Initializer", s => s => state.Set(result.Now)));
         };
         public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
@@ -281,7 +280,7 @@ namespace Spoke {
             var handle = deferred.Hold();
             try { action(); } finally { handle.Dispose(); }
         }
-        protected override EpochBlock Bootstrap(EngineBuilder s) {
+        protected override Epoch Bootstrap(EngineBuilder s) {
             Action _scheduleExec = s.ScheduleExec;
             var isPending = false;
             flushCommand = () => {
@@ -305,10 +304,7 @@ namespace Spoke {
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
-            return s => {
-                if (block == null) return null;
-                return s => s.Call(new Effect("Root", block));
-            };
+            return new Effect("Root", block);
         }
         public void Flush() => flushCommand?.Invoke();
     }
