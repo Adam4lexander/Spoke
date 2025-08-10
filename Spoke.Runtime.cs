@@ -4,6 +4,7 @@
 // > Epoch
 // > Dock
 // > ExecutionEngine
+// > PendingQueue
 // > TreeCoords
 // > PackedTreeCoords128
 // > SpokeHandle
@@ -199,9 +200,7 @@ namespace Spoke {
         bool isDetaching;
         long siblingCounter;
         List<object> scope = new();
-        List<DockedEngine> incoming = new();
-        HashSet<DockedEngine> scheduledSet = new();
-        List<DockedEngine> scheduledList = new();
+        PendingQueue<DockedEngine> pending = new((a, b) => b.CompareTo(a));
         Action _takeScheduled;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
@@ -221,16 +220,9 @@ namespace Spoke {
             if (index >= 0) { child.Dispose(); dynamicChildrenList.RemoveAt(index); }
             dynamicChildren.Remove(key);
         }
-        static readonly Comparison<DockedEngine> DockedEngineComparison = (a, b) => b.CompareTo(a);
         protected override ExecBlock Init(EpochBuilder s) {
             scope = s.ImportAll<object>();
-            _takeScheduled = () => {
-                if (incoming.Count == 0) return;
-                foreach (var root in incoming) if (scheduledSet.Add(root)) scheduledList.Add(root);
-                incoming.Clear();
-                scheduledList.Sort(DockedEngineComparison);
-                s.ScheduleExec();
-            };
+            _takeScheduled = () => { pending.Take(); s.ScheduleExec(); };
             s.OnCleanup(() => {
                 isDetaching = true;
                 for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
@@ -239,20 +231,16 @@ namespace Spoke {
                 dynamicChildren.Clear();
             });
             return s => {
-                if (scheduledList.Count == 0) return;
-                var next = scheduledList[scheduledList.Count - 1];
+                if (!pending.Has) return;
                 deferred.FastHold();
-                var hasMore = next.Tick();
-                if (!hasMore) {
-                    scheduledList.RemoveAt(scheduledList.Count - 1);
-                    scheduledSet.Remove(next);
-                }
+                var hasMore = pending.Peek().Tick();
+                if (!hasMore) pending.Pop();
                 deferred.FastRelease();
-                if (scheduledList.Count > 0) s.ScheduleExec();
+                if (pending.Has) s.ScheduleExec();
             };
         }
         void Schedule(DockedEngine root) {
-            incoming.Add(root);
+            pending.Enqueue(root);
             deferred.Enqueue(_takeScheduled);
         }
         List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
@@ -311,14 +299,12 @@ namespace Spoke {
         protected abstract EpochBlock Bootstrap(EngineBuilder s);
         internal class Runtime {
             ExecutionEngine owner;
-            protected Epoch Next => execOrder.Count > 0 ? execOrder[execOrder.Count - 1] : null;
+            protected Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
             public long FlushNumber { get; private set; }
             List<Action> onHasPending = new();
             List<Action<ExecContext>> onExec = new();
-            List<Epoch> incoming = new List<Epoch>();
-            HashSet<Epoch> execSet = new HashSet<Epoch>();
-            List<Epoch> execOrder = new List<Epoch>();
+            PendingQueue<Epoch> pending = new((a, b) => b.CompareTo(a));
             FlushLogger flushLogger = FlushLogger.Create();
             List<string> pendingLogs = new List<string>();
             bool isRunning, isSealed;
@@ -340,7 +326,7 @@ namespace Spoke {
                 if (!isRunning) throw new Exception("Break() must be called from within an OnExec block");
                 if (!HasPending) return;
                 (Next as Epoch.Friend).Detach();
-                incoming.Clear(); execSet.Clear(); execOrder.Clear();
+                while (pending.Has) pending.Pop();
             }
             public void Log(string msg) => pendingLogs.Add(msg);
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
@@ -349,32 +335,21 @@ namespace Spoke {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnExec block");
                 if (!HasPending) return null;
                 if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
-                var exec = prevExec = Next;
-                execSet.Remove(exec);
-                execOrder.RemoveAt(execOrder.Count - 1);
+                var exec = prevExec = pending.Pop();
                 (exec as Epoch.Friend).Exec();
                 flushLogger.OnFlushNode(exec);
-                TakeScheduled();
+                pending.Take();
                 if (!HasPending) IncrementFlush();
                 return exec;
             }
             public void Schedule(Epoch epoch) {
                 if (epoch.Fault != null) return;
-                if (execSet.Contains(epoch)) return;
-                incoming.Add(epoch);
+                pending.Enqueue(epoch);
                 if (!isRunning) {
                     var prevHasPending = HasPending;
-                    TakeScheduled();
+                    pending.Take();
                     if (!prevHasPending && HasPending) TriggerHasPending();
                 }
-            }
-            static readonly Comparison<Epoch> EpochComparison = (a, b) => b.CompareTo(a);
-            void TakeScheduled() {
-                if (incoming.Count == 0) return;
-                var prevNext = Next;
-                foreach (var node in incoming) if (execSet.Add(node)) execOrder.Add(node);
-                incoming.Clear();
-                execOrder.Sort(EpochComparison); // Reverse-order, to pop items from end of list
             }
             void IncrementFlush() {
                 if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
@@ -415,6 +390,16 @@ namespace Spoke {
         public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();
         public void ScheduleExec() => s.ScheduleExec();
+    }
+    // ============================== PendingQueue ============================================================
+    internal class PendingQueue<T> {
+        List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
+        public PendingQueue(Comparison<T> comp) { this.comp = comp; }
+        public bool Has => list.Count > 0;
+        public void Enqueue(T t) { incoming.Add(t); }
+        public void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }
+        public T Pop() { var x = list[^1]; list.RemoveAt(list.Count - 1); set.Remove(x); return x; }
+        public T Peek() => list.Count > 0 ? list[^1] : default;
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
