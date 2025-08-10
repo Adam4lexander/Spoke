@@ -32,7 +32,7 @@ namespace Spoke {
     public static class SpokeRoot { public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch); }
     public class SpokeRoot<T> : ISpokeRoot<T> where T : ExecutionEngine {
         public T Epoch { get; private set; }
-        public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null, null, default, -1); }
+        public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null); }
         public void Dispose() => (Epoch as Epoch.Friend).Detach();
     }
     // ============================== Epoch ============================================================
@@ -42,7 +42,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); List<object> GetExports(); }
+        internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); List<object> GetExports(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -54,13 +54,13 @@ namespace Spoke {
                 if (Type == Kind.Cleanup) try { (AsObj as Action)?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{that}'", e); }
                 if (Type == Kind.Handle) Handle.Dispose();
                 if (Type == Kind.Use) try { (AsObj as IDisposable).Dispose(); } catch (Exception e) { SpokeError.Log($"Dispose failed in '{that}'", e); }
-                if (Type == Kind.Call) try { that.tail = that.tail.prev; (AsObj as Epoch).DetachFrom(0); that.siblingCounter--; } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
+                if (Type == Kind.Call) try { (AsObj as Epoch).DetachFrom(0); that.siblingCounter--; } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
             }
         }
         List<AttachRecord> attachEvents = new();
         long siblingCounter;
         public TreeCoords Coords { get; private set; }
-        Epoch parent, prev, tail;
+        Epoch parent;
         int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
         ExecutionEngine engine;
         ExecBlock execBlock;
@@ -82,12 +82,11 @@ namespace Spoke {
             execAttachStart = Math.Min(execAttachStart, attachEvents.Count);
             detachFrom = int.MaxValue;
         }
-        void Friend.Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex) {
+        void Friend.Init(Epoch parent) {
             _scheduleExec = ScheduleExec; _detach = Detach;
             this.parent = parent;
-            this.prev = prev;
-            Coords = coords;
-            this.attachIndex = attachIndex;
+            Coords = (parent == null || parent is ExecutionEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
+            attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             engine = (this.parent as ExecutionEngine) ?? this.parent?.engine;
             deferAfterOpen.FastHold();
             execBlock = Init(new EpochBuilder(new EpochMutations(this)));
@@ -152,8 +151,7 @@ namespace Spoke {
                 NoMischief();
                 if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
                 owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Call, epoch));
-                (epoch as Friend).Init(owner, owner.tail, owner.Coords.Extend(owner.siblingCounter++), owner.attachEvents.Count - 1);
-                owner.tail = epoch;
+                (epoch as Friend).Init(owner);
                 return epoch;
             }
             public T Export<T>(T obj) {
@@ -380,7 +378,7 @@ namespace Spoke {
         public Epoch RunNext() => r.RunNext();
         public void ScheduleExec() => s.ScheduleExec();
     }
-    // ============================== PendingQueue ============================================================
+    // ============================== OrderedWorkSet ============================================================
     internal class OrderedWorkSet<T> {
         List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
         public OrderedWorkSet(Comparison<T> comp) { this.comp = comp; }
