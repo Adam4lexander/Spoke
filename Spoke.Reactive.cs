@@ -182,7 +182,8 @@ namespace Spoke {
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => s.Call(block);
-        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
+        public T Export<T>(T obj) => s.Export(obj);
+        public bool TryImport<T>(out T context) => s.TryImport(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
     // ============================== Effect ============================================================

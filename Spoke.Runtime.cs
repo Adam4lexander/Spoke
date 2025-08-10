@@ -45,14 +45,12 @@ namespace Spoke {
     public abstract class Epoch : Epoch.Friend {
         internal interface Friend { void Init(Epoch parent, Epoch prev, TreeCoords coords, int attachIndex); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); }
         readonly struct AttachRecord {
-            public enum Kind : byte { Cleanup, Handle, Use, Call }
+            public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
             public readonly object AsObj;
             public readonly SpokeHandle Handle;
-            public AttachRecord(Action cleanup) { this = default; Type = Kind.Cleanup; AsObj = cleanup; }
             public AttachRecord(SpokeHandle handle) { this = default; Type = Kind.Handle; Handle = handle; }
-            public AttachRecord(IDisposable use) { this = default; Type = Kind.Use; AsObj = use; }
-            public AttachRecord(Epoch child) { this = default; Type = Kind.Call; AsObj = child; }
+            public AttachRecord(Kind type, object asObj) { this = default; Type = type; AsObj = asObj; }
             public void Detach(Epoch that) {
                 if (Type == Kind.Cleanup) try { (AsObj as Action)?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{that}'", e); }
                 if (Type == Kind.Handle) Handle.Dispose();
@@ -130,30 +128,41 @@ namespace Spoke {
                     if (curr is T o) { epoch = o; return true; }
                 return false;
             }
-            public bool TryGetLexical<T>(out T epoch) where T : Epoch {
-                epoch = default;
-                var start = owner.prev ?? owner.parent;
-                for (var anc = start; anc != null; anc = anc.parent)
-                    for (var curr = anc; curr != null; curr = curr.prev)
-                        if (curr is T o) { epoch = o; return true; }
+            public bool TryImport<T>(out T obj) {
+                obj = default;
+                var startIndex = owner.attachEvents.Count - 1;
+                for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+                    for (var i = startIndex; i >= 0; i--) {
+                        var evt = anc.attachEvents[i];
+                        if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) {
+                            obj = o;
+                            return true;
+                        }
+                    }
+                }
                 return false;
             }
             public SpokeHandle Use(SpokeHandle handle) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(handle)); return handle;
             }
             public T Use<T>(T disposable) where T : IDisposable {
-                NoMischief(); owner.attachEvents.Add(new AttachRecord(disposable)); return disposable;
+                NoMischief(); owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Use, disposable)); return disposable;
             }
             public T Call<T>(T epoch) where T : Epoch {
                 NoMischief();
                 if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
-                owner.attachEvents.Add(new AttachRecord(epoch));
+                owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Call, epoch));
                 (epoch as Friend).Init(owner, owner.tail, owner.Coords.Extend(owner.siblingCounter++), owner.attachEvents.Count - 1);
                 owner.tail = epoch;
                 return epoch;
             }
+            public T Let<T>(T obj) {
+                NoMischief();
+                owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Export, obj));
+                return obj;
+            }
             public void OnCleanup(Action fn) {
-                NoMischief(); owner.attachEvents.Add(new AttachRecord(fn));
+                NoMischief(); owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Cleanup, fn));
             }
             public void ScheduleExec() => owner?.deferAfterOpen.Enqueue(owner._scheduleExec);
             void NoMischief() {
@@ -171,8 +180,9 @@ namespace Spoke {
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public void Call(EpochBlock block) => Call(new Scope(block));
+        public T Export<T>(T obj) => s.Let(obj);
         public bool TryGetContext<T>(out T epoch) where T : Epoch => s.TryGetContext(out epoch);
-        public bool TryGetLexical<T>(out T epoch) where T : Epoch => s.TryGetLexical(out epoch);
+        public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void ScheduleExec() => s.ScheduleExec();
         class Scope : Epoch {
@@ -230,6 +240,7 @@ namespace Spoke {
             runtime = new Runtime(this);
             var block = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
+            s.Export(this);
             s.Call(block);
             return s => runtime.TriggerExec(s);
         }
@@ -324,7 +335,7 @@ namespace Spoke {
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public bool TryGetContext<T>(out T context) where T : Epoch => s.TryGetContext(out context);
-        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryGetLexical(out context);
+        public bool TryGetLexical<T>(out T context) where T : Epoch => s.TryImport(out context);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void OnHasPending(Action fn) => r.OnHasPending(fn);
         public void OnExec(Action<ExecContext> fn) => r.OnExec(fn);
