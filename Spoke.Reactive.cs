@@ -9,6 +9,7 @@
 // > Effect<T>
 // > Memo
 // > SpokeEngine
+// > FlushStack
 // > Computation
 // > DependencyTracker
 
@@ -39,22 +40,25 @@ namespace Spoke {
         public abstract void Unsubscribe(Action action);
         protected abstract void Unsub(long id);
     }
-    public class Trigger<T> : Trigger, ITrigger<T>, IDeferredTrigger {
+    public class Trigger<T> : Trigger, ITrigger<T> {
         List<Subscription> subs = new List<Subscription>();
         SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
-        DeferredQueue deferred = new DeferredQueue();
-        Action<long> _Unsub; Action _Flush;
+        Action<long> _Unsub;
         long idCount = 0;
-        public Trigger() { _Unsub = Unsub; _Flush = Flush; }
+        bool isFlushing;
+        public Trigger() { _Unsub = Unsub; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(Subscription.Create(idCount++, action));
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(Subscription.Create(idCount++, action));
         public override void Invoke() => Invoke(default(T));
-        public void Invoke(T param) { events.Enqueue(param); deferred.Enqueue(_Flush); }
+        public void Invoke(T param) { events.Enqueue(param); Flush(); }
         public override void Unsubscribe(Action action) => Unsub(action);
         public void Unsubscribe(Action<T> action) => Unsub(action);
         void Flush() {
+            if (isFlushing) return;
+            FlushStack.Hold();
+            isFlushing = true;
             while (events.Count > 0) {
                 var evt = events.Dequeue();
                 var subList = subListPool.Get();
@@ -64,8 +68,9 @@ namespace Spoke {
                 }
                 subListPool.Return(subList);
             }
+            isFlushing = false;
+            FlushStack.Release();
         }
-        void IDeferredTrigger.OnAfterNotify(Action action) => deferred.Enqueue(action);
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
             foreach (var sub in subs) if (sub.Key == action) idList.Add(sub.Id);
@@ -91,9 +96,6 @@ namespace Spoke {
             }
         }
     }
-    internal interface IDeferredTrigger {
-        void OnAfterNotify(Action action);
-    }
     // ============================== State ============================================================
     public interface Ref<out T> {
         T Now { get; }
@@ -106,7 +108,7 @@ namespace Spoke {
     public static class State {
         public static State<T> Create<T>(T val = default) => new State<T>(val);
     }
-    public class State<T> : IState<T>, IDeferredTrigger {
+    public class State<T> : IState<T> {
         T value;
         Trigger<T> trigger = new Trigger<T>();
         public State() { }
@@ -116,7 +118,6 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => trigger.Subscribe(action);
         public void Unsubscribe(Action action) => trigger.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => trigger.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (trigger as IDeferredTrigger).OnAfterNotify(action);
         public void Set(T value) {
             if (EqualityComparer<T>.Default.Equals(value, this.value)) return;
             this.value = value;
@@ -212,7 +213,7 @@ namespace Spoke {
         }
     }
     // ============================== Effect<T> ============================================================
-    public class Effect<T> : BaseEffect, ISignal<T>, IDeferredTrigger {
+    public class Effect<T> : BaseEffect, ISignal<T> {
         State<T> state = State.Create<T>();
         public T Now => state.Now;
         public Effect(string name, EffectBlock<T> block, params ITrigger[] triggers) : base(name, triggers) {
@@ -228,10 +229,9 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
     }
     // ============================== Memo ============================================================
-    public class Memo<T> : Computation, ISignal<T>, IDeferredTrigger {
+    public class Memo<T> : Computation, ISignal<T> {
         State<T> state = State.Create<T>();
         Action<ITrigger> _addDynamicTrigger;
         public T Now => state.Now;
@@ -248,7 +248,6 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
         public void Unsubscribe(Action action) => state.Unsubscribe(action);
         public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
-        void IDeferredTrigger.OnAfterNotify(Action action) => (state as IDeferredTrigger).OnAfterNotify(action);
     }
     public struct MemoBuilder {
         Action<ITrigger> addDynamicTrigger;
@@ -262,31 +261,22 @@ namespace Spoke {
     }
     // ============================== SpokeEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class SpokeEngine : ExecutionEngine, SpokeEngine.Friend {
-        new internal interface Friend { void FastHold(); void FastRelease(); }
+    public class SpokeEngine : ExecutionEngine {
         public FlushMode FlushMode = FlushMode.Immediate;
-        DeferredQueue deferred = new DeferredQueue();
         Action flushCommand;
         EffectBlock block;
-        void Friend.FastHold() => deferred.FastHold();
-        void Friend.FastRelease() => deferred.FastRelease();
         public SpokeEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
             Name = name;
             this.block = block;
             FlushMode = flushMode;
         }
         public SpokeEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("SpokeEngine", block, flushMode, logger) { }
-        public void Batch(Action action) {
-            var handle = deferred.Hold();
-            try { action(); } finally { handle.Dispose(); }
-        }
         protected override Epoch Bootstrap(EngineBuilder s) {
             Action _scheduleExec = s.ScheduleExec;
-            var isPending = false;
+            var isFlushing = false;
             flushCommand = () => {
-                if (isPending) return;
-                isPending = true;
-                deferred.Enqueue(_scheduleExec);
+                if (isFlushing) return;
+                FlushStack.Enqueue(_scheduleExec);
             };
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
@@ -294,19 +284,45 @@ namespace Spoke {
             });
             s.OnExec(s => {
                 const long maxPasses = 1000;
-                if (!isPending) return;
-                isPending = false;
                 var startFlush = s.FlushNumber;
                 try {
+                    isFlushing = true;
                     while (s.HasPending) {
                         if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                         s.RunNext();
                     }
-                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
+                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); } finally { isFlushing = false; }
             });
             return new Effect("Root", block);
         }
         public void Flush() => flushCommand?.Invoke();
+        public static void Batch(Action action) {
+            FlushStack.Hold();
+            try { action(); } finally { FlushStack.Release(); }
+        }
+    }
+    // ============================== FlushStack ============================================================
+    internal static class FlushStack {
+        static SpokePool<DeferredQueue> dqPool = SpokePool<DeferredQueue>.Create(dq => { });
+        static Stack<DeferredQueue> dqStack = new Stack<DeferredQueue>();
+        public static void Hold() {
+            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) {
+                dqStack.Push(dqPool.Get());
+            }
+            dqStack.Peek().FastHold();
+        }
+        public static void Enqueue(Action action) {
+            if (dqStack.Count == 0 || dqStack.Peek().IsDraining) {
+                action?.Invoke();
+                return;
+            }
+            dqStack.Peek().Enqueue(action);
+        }
+        public static void Release() {
+            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) throw new InvalidOperationException("[FlushStack] Cannot release");
+            dqStack.Peek().FastRelease();
+            if (!dqStack.Peek().IsHolding) dqPool.Return(dqStack.Pop());
+        }
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
@@ -317,8 +333,7 @@ namespace Spoke {
             this.triggers = triggers;
         }
         protected override ExecBlock Init(EpochBuilder s) {
-            var engine = s.Import<SpokeEngine>();
-            tracker = new DependencyTracker(engine, s.ScheduleExec);
+            tracker = new DependencyTracker(s.ScheduleExec);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             return s => {
@@ -332,19 +347,17 @@ namespace Spoke {
     }
     // ============================== DependencyTracker ============================================================
     internal class DependencyTracker : IDisposable {
-        SpokeEngine.Friend engine;
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
         public int depIndex;
-        public DependencyTracker(SpokeEngine.Friend engine, Action schedule) {
-            this.engine = engine;
+        public DependencyTracker(Action schedule) {
             this.schedule = schedule;
         }
         public void AddStatic(ITrigger trigger) {
             if (!seen.Add(trigger)) return;
-            staticHandles.Add((trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, -1))));
+            staticHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(-1))));
         }
         public void BeginDynamic() {
             depIndex = 0;
@@ -353,10 +366,10 @@ namespace Spoke {
         }
         public void AddDynamic(ITrigger trigger) {
             if (!seen.Add(trigger)) return;
-            if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, depIndex))));
+            if (depIndex >= dynamicHandles.Count) dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(depIndex))));
             else if (dynamicHandles[depIndex].t != trigger) {
                 dynamicHandles[depIndex].h.Dispose();
-                dynamicHandles[depIndex] = (trigger, trigger.Subscribe(ScheduleFromTrigger(trigger, depIndex)));
+                dynamicHandles[depIndex] = (trigger, trigger.Subscribe(ScheduleFromIndex(depIndex)));
             }
             depIndex++;
         }
@@ -372,11 +385,6 @@ namespace Spoke {
             foreach (var handle in dynamicHandles) handle.h.Dispose();
             staticHandles.Clear(); dynamicHandles.Clear();
         }
-        Action ScheduleFromTrigger(ITrigger trigger, int index) => () => {
-            if (index >= depIndex) return;
-            engine.FastHold();
-            schedule();
-            (trigger as IDeferredTrigger).OnAfterNotify(() => engine.FastRelease());
-        };
+        Action ScheduleFromIndex(int index) => () => { if (index < depIndex) schedule(); };
     }
 }

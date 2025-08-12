@@ -61,13 +61,6 @@ namespace Spoke {
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
         SpokeRoot<SpokeEngine> root;
-        SpokeEngine engine;
-        protected SpokeEngine SpokeEngine {
-            get {
-                engine = engine ?? new SpokeEngine($"{GetType().Name}:Init", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
-                return engine;
-            }
-        }
         SpokeHandle sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -87,7 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = SpokeRoot.Create(SpokeEngine);
+            root = SpokeRoot.Create(new SpokeEngine($"{GetType().Name}:Init", Init, FlushMode.Immediate, new UnitySpokeLogger(this)));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -167,7 +160,7 @@ namespace Spoke {
         public static UState<T> Create<T>(T val = default) => new UState<T>(val);
     }
     [Serializable]
-    public class UState<T> : IState<T>, IDeferredTrigger, ISerializationCallbackReceiver {
+    public class UState<T> : IState<T>, ISerializationCallbackReceiver {
         [SerializeField] T value;
         T runtimeValue;
         Trigger<T> trigger = new Trigger<T>();
@@ -182,7 +175,6 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) { EnsureInitialized(); return trigger.Subscribe(action); }
         public void Unsubscribe(Action action) { EnsureInitialized(); trigger.Unsubscribe(action); }
         public void Unsubscribe(Action<T> action) { EnsureInitialized(); trigger.Unsubscribe(action); }
-        void IDeferredTrigger.OnAfterNotify(Action action) => (trigger as IDeferredTrigger).OnAfterNotify(action);
         public void Set(T value) {
             setCount++;
             EnsureInitialized();
