@@ -301,11 +301,11 @@ namespace Spoke {
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
             dock = new Dock("Zones");
+            s.OnCleanup(() => dock = null);
             if (epoch == null) return dock;
             return new LambdaEpoch("Roots", s => {
                 if (epoch != null) s.Call(epoch);
                 s.Call(dock);
-                s.OnCleanup(() => dock = null);
                 return null;
             });
         }
