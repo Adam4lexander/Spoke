@@ -60,7 +60,6 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        static SpokeRoot<FlushEngine> globalEngine = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
         SpokeHandle root, sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -80,7 +79,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = globalEngine.Epoch.AddFlushRegion($"{GetType().Name}", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
+            root = FlushEngine.Global.AddFlushZone($"{GetType().Name}", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);

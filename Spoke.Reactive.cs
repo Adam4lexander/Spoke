@@ -262,6 +262,8 @@ namespace Spoke {
     // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
     public class FlushEngine : SpokeEngine {
+        static SpokeRoot<FlushEngine> globalRoot = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
+        public static FlushEngine Global = globalRoot.Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
         Epoch epoch;
@@ -275,9 +277,9 @@ namespace Spoke {
         public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
         public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, (Epoch)null, flushMode, logger) { }
         public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("Reactor", block, flushMode, logger) { }
-        public SpokeHandle AddFlushRegion(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
+        public SpokeHandle AddFlushZone(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
             var id = idCounter++;
-            var subEngine = new FlushEngine(name, new RegionInit(init), FlushMode.Immediate, logger);
+            var subEngine = new FlushEngine(name, new ZoneInit(init), FlushMode.Immediate, logger);
             dock.Call(id, subEngine);
             return SpokeHandle.Of(id, id => dock.Drop(id));
         }
@@ -298,7 +300,7 @@ namespace Spoke {
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
-            dock = new Dock("Regions");
+            dock = new Dock("Zones");
             if (epoch == null) return dock;
             return new LambdaEpoch("Roots", s => {
                 if (epoch != null) s.Call(epoch);
@@ -312,12 +314,12 @@ namespace Spoke {
             FlushStack.Hold();
             try { action(); } finally { FlushStack.Release(); }
         }
-        class RegionInit : Epoch {
+        class ZoneInit : Epoch {
             EffectBlock block;
-            public RegionInit(EffectBlock block) { this.block = block; }
+            public ZoneInit(EffectBlock block) { this.block = block; }
             protected override ExecBlock Init(EpochBuilder s) {
                 Action<ITrigger> addDynamicTrigger = _ => {
-                    throw new InvalidOperationException("Cannot call D() from flush region initializer");
+                    throw new InvalidOperationException("Cannot call D() from flush zone initializer");
                 };
                 block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
                 return null;
