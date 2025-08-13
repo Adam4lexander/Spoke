@@ -80,8 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            var subEngine = new FlushEngine($"{GetType().Name}", new InitScope(Init), FlushMode.Immediate, new UnitySpokeLogger(this));
-            root = globalEngine.Epoch.Call(subEngine);
+            root = globalEngine.Epoch.AddFlushRegion($"{GetType().Name}", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -95,17 +94,6 @@ namespace Spoke {
             isEnabled.Set(false);
             root.Dispose();
             isAwake.Set(false);
-        }
-        class InitScope : Epoch {
-            EffectBlock block;
-            public InitScope(EffectBlock block) { this.block = block; }
-            protected override ExecBlock Init(EpochBuilder s) {
-                Action<ITrigger> addDynamicTrigger = _ => {
-                    throw new InvalidOperationException("Cannot call D() from Init");
-                };
-                block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
-                return null;
-            }
         }
     }
     // ============================== SpokeSingleton ============================================================
