@@ -264,36 +264,32 @@ namespace Spoke {
     public class SpokeEngine : ExecutionEngine {
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
-        EffectBlock block;
-        public SpokeEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
+        Epoch epoch;
+        public SpokeEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
             Name = name;
-            this.block = block;
+            this.epoch = epoch;
             FlushMode = flushMode;
         }
+        public SpokeEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
         public SpokeEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("SpokeEngine", block, flushMode, logger) { }
         protected override Epoch Bootstrap(EngineBuilder s) {
-            Action _scheduleExec = s.ScheduleExec;
-            var isFlushing = false;
-            flushCommand = () => {
-                if (isFlushing) return;
-                FlushStack.Enqueue(_scheduleExec);
-            };
+            flushCommand = () => s.ScheduleExec();
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
-                if (FlushMode == FlushMode.Immediate) flushCommand.Invoke();
+                if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
             });
             s.OnExec(s => {
+                if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
                 var startFlush = s.FlushNumber;
                 try {
-                    isFlushing = true;
                     while (s.HasPending) {
                         if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                         s.RunNext();
                     }
-                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); } finally { isFlushing = false; }
+                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
-            return new Effect("Root", block);
+            return epoch;
         }
         public void Flush() => flushCommand?.Invoke();
         public static void Batch(Action action) {
@@ -311,12 +307,12 @@ namespace Spoke {
             }
             dqStack.Peek().FastHold();
         }
-        public static void Enqueue(Action action) {
+        public static bool TryAllowFlush(Action deferOnHold) {
             if (dqStack.Count == 0 || dqStack.Peek().IsDraining) {
-                action?.Invoke();
-                return;
+                return true;
             }
-            dqStack.Peek().Enqueue(action);
+            dqStack.Peek().Enqueue(deferOnHold);
+            return false;
         }
         public static void Release() {
             if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) throw new InvalidOperationException("[FlushStack] Cannot release");
