@@ -265,13 +265,21 @@ namespace Spoke {
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
         Epoch epoch;
+        Dock dock;
+        long idCounter;
         public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
             Name = name;
             this.epoch = epoch;
             FlushMode = flushMode;
         }
         public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
+        public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, (Epoch)null, flushMode, logger) { }
         public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("Reactor", block, flushMode, logger) { }
+        public SpokeHandle Call(Epoch epoch) {
+            var id = idCounter++;
+            dock.Call(id, epoch);
+            return SpokeHandle.Of(id, id => dock.Drop(id));
+        }
         protected override Epoch Bootstrap(EngineBuilder s) {
             flushCommand = () => s.ScheduleExec();
             s.OnCleanup(() => flushCommand = null);
@@ -289,7 +297,14 @@ namespace Spoke {
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
-            return epoch;
+            dock = new Dock("Islands");
+            if (epoch == null) return dock;
+            return new LambdaEpoch("Roots", s => {
+                if (epoch != null) s.Call(epoch);
+                dock = s.Call(new Dock("Islands"));
+                s.OnCleanup(() => dock = null);
+                return null;
+            });
         }
         public void Flush() => flushCommand?.Invoke();
         public static void Batch(Action action) {

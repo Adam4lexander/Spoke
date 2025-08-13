@@ -3,7 +3,6 @@
 // > EffectBuilderExtensions
 // > SpokeTeardown
 // > SpokeBehaviour
-// > FlushEngineHub
 // > SpokeSingleton
 // > UState
 // > Drawers
@@ -61,7 +60,7 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        static FlushEngineHub globalHub = new FlushEngineHub();
+        static SpokeRoot<FlushEngine> globalEngine = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
         SpokeHandle root, sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -81,7 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = globalHub.Effect($"{GetType().Name}", Init);
+            root = globalEngine.Epoch.Call(new FlushEngine($"{GetType().Name}", new InitScope(Init)));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -96,27 +95,9 @@ namespace Spoke {
             root.Dispose();
             isAwake.Set(false);
         }
-    }
-    // ============================== FlushEngineHub ============================================================
-    public class FlushEngineHub {
-        Dock dock;
-        long idx;
-        public FlushEngineHub() {
-            SpokeRoot.Create(new FlushEngine("root", s => {
-                dock = s.Dock();
-            }));
-        }
-        public SpokeHandle Effect(string name, EffectBlock block) {
-            var myId = idx++;
-            dock.Call(myId, new FlushEngine(name, new InitEffect("Init", block)));
-            return SpokeHandle.Of(myId, myId => dock.Drop(myId));
-        }
-        class InitEffect : Epoch {
+        class InitScope : Epoch {
             EffectBlock block;
-            public InitEffect(string name, EffectBlock block) {
-                Name = name;
-                this.block = block;
-            }
+            public InitScope(EffectBlock block) { this.block = block; }
             protected override ExecBlock Init(EpochBuilder s) {
                 Action<ITrigger> addDynamicTrigger = _ => {
                     throw new InvalidOperationException("Cannot call D() from Init");
