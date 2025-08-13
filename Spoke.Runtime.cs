@@ -4,7 +4,7 @@
 // > Epoch
 // > LambdaEpoch
 // > Dock
-// > ExecutionEngine
+// > SpokeEngine
 // > OrderedWorkSet
 // > TreeCoords
 // > PackedTreeCoords128
@@ -28,9 +28,9 @@ namespace Spoke {
     /// <summary>
     /// The SpokeRoot hosts the root Engine of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
-    public interface ISpokeRoot<out T> : IDisposable where T : ExecutionEngine { T Epoch { get; } }
-    public static class SpokeRoot { public static SpokeRoot<T> Create<T>(T epoch) where T : ExecutionEngine => new SpokeRoot<T>(epoch); }
-    public class SpokeRoot<T> : ISpokeRoot<T> where T : ExecutionEngine {
+    public interface ISpokeRoot<out T> : IDisposable where T : SpokeEngine { T Epoch { get; } }
+    public static class SpokeRoot { public static SpokeRoot<T> Create<T>(T epoch) where T : SpokeEngine => new SpokeRoot<T>(epoch); }
+    public class SpokeRoot<T> : ISpokeRoot<T> where T : SpokeEngine {
         public T Epoch { get; private set; }
         public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null); }
         public void Dispose() => (Epoch as Epoch.Friend).Detach();
@@ -62,7 +62,7 @@ namespace Spoke {
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
-        ExecutionEngine engine;
+        SpokeEngine engine;
         ExecBlock execBlock;
         DeferredQueue deferAfterOpen = new();
         Action _scheduleExec, _detach;
@@ -85,9 +85,9 @@ namespace Spoke {
         void Friend.Init(Epoch parent) {
             _scheduleExec = ScheduleExec; _detach = Detach;
             this.parent = parent;
-            Coords = (parent == null || parent is ExecutionEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
+            Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
-            engine = (this.parent as ExecutionEngine) ?? this.parent?.engine;
+            engine = (this.parent as SpokeEngine) ?? this.parent?.engine;
             deferAfterOpen.FastHold();
             execBlock = Init(new EpochBuilder(new EpochMutations(this)));
             execAttachStart = attachEvents.Count;
@@ -126,7 +126,7 @@ namespace Spoke {
         void ScheduleExec() {
             if (Fault != null) return;
             if (engine == null) (this as Friend).Exec();
-            else (engine as ExecutionEngine.Friend).Schedule(this);
+            else (engine as SpokeEngine.Friend).Schedule(this);
         }
         internal struct EpochMutations {
             Epoch owner;
@@ -172,7 +172,7 @@ namespace Spoke {
         Epoch.EpochMutations s;
         internal EpochBuilder(Epoch.EpochMutations s) { this.s = s; }
         public void Log(string msg) {
-            var engine = s.Import<ExecutionEngine>();
+            var engine = s.Import<SpokeEngine>();
             engine.Log(msg);
         }
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
@@ -247,7 +247,7 @@ namespace Spoke {
             foreach (var r in dynamicChildrenList) storeIn.Add(r.Epoch);
             return storeIn;
         }
-        class DockedEngine : ExecutionEngine, IComparable<DockedEngine> {
+        class DockedEngine : SpokeEngine, IComparable<DockedEngine> {
             Dock dock; Epoch epoch; long idx; Func<bool> tickCommand;
             public DockedEngine(Dock dock, Epoch epoch, long idx) { this.dock = dock; this.epoch = epoch; this.idx = idx; }
             public int CompareTo(DockedEngine other) => idx.CompareTo(other.idx);
@@ -265,12 +265,12 @@ namespace Spoke {
             }
         }
     }
-    // ============================== ExecutionEngine ============================================================
-    public abstract class ExecutionEngine : Epoch, ExecutionEngine.Friend {
+    // ============================== SpokeEngine ============================================================
+    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend {
         new internal interface Friend { void Schedule(Epoch epoch); }
         Runtime runtime;
         ISpokeLogger logger;
-        public ExecutionEngine(ISpokeLogger logger = null) {
+        public SpokeEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
@@ -285,7 +285,7 @@ namespace Spoke {
         }
         protected abstract Epoch Bootstrap(EngineBuilder s);
         internal class Runtime {
-            ExecutionEngine owner;
+            SpokeEngine owner;
             protected Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
             public long FlushNumber { get; private set; }
@@ -295,7 +295,7 @@ namespace Spoke {
             FlushLogger flushLogger = FlushLogger.Create();
             List<string> pendingLogs = new List<string>();
             bool isRunning, isSealed;
-            public Runtime(ExecutionEngine owner) {
+            public Runtime(SpokeEngine owner) {
                 this.owner = owner;
             }
             public void Seal() => isSealed = true;
@@ -355,8 +355,8 @@ namespace Spoke {
     }
     public struct EngineBuilder {
         EpochBuilder s;
-        ExecutionEngine.Runtime r;
-        internal EngineBuilder(EpochBuilder s, ExecutionEngine.Runtime es) { this.s = s; this.r = es; }
+        SpokeEngine.Runtime r;
+        internal EngineBuilder(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
@@ -369,8 +369,8 @@ namespace Spoke {
     }
     public struct ExecContext {
         EpochBuilder s;
-        ExecutionEngine.Runtime r;
-        internal ExecContext(EpochBuilder s, ExecutionEngine.Runtime es) { this.s = s; this.r = es; }
+        SpokeEngine.Runtime r;
+        internal ExecContext(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
         public long FlushNumber => r.FlushNumber;
         public void Break() => r.Break();

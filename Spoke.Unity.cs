@@ -113,13 +113,13 @@ namespace Spoke {
             Dock dock;
             long idx;
             public RootContainer() {
-                SpokeRoot.Create(new SpokeEngine("root", s => {
+                SpokeRoot.Create(new Reactor("root", s => {
                     dock = s.Dock();
                 }));
             }
             public SpokeHandle Engine(string name, EffectBlock block) {
                 var myId = idx++;
-                dock.Call(myId, new SpokeEngine(name, new InitEffect("Init", block)));
+                dock.Call(myId, new Reactor(name, new InitEffect("Init", block)));
                 return SpokeHandle.Of(myId, myId => dock.Drop(myId));
             }
         }
