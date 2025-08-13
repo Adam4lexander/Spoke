@@ -81,7 +81,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = globalHub.Engine($"{GetType().Name}", Init);
+            root = globalHub.Effect($"{GetType().Name}", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -106,7 +106,7 @@ namespace Spoke {
                 dock = s.Dock();
             }));
         }
-        public SpokeHandle Engine(string name, EffectBlock block) {
+        public SpokeHandle Effect(string name, EffectBlock block) {
             var myId = idx++;
             dock.Call(myId, new Reactor(name, new InitEffect("Init", block)));
             return SpokeHandle.Of(myId, myId => dock.Drop(myId));
