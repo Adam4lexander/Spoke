@@ -3,7 +3,7 @@
 // > EffectBuilderExtensions
 // > SpokeTeardown
 // > SpokeBehaviour
-// > ReactorHub
+// > FlushEngineHub
 // > SpokeSingleton
 // > UState
 // > Drawers
@@ -61,7 +61,7 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        static ReactorHub globalHub = new ReactorHub();
+        static FlushEngineHub globalHub = new FlushEngineHub();
         SpokeHandle root, sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -97,18 +97,18 @@ namespace Spoke {
             isAwake.Set(false);
         }
     }
-    // ============================== ReactorHub ============================================================
-    public class ReactorHub {
+    // ============================== FlushEngineHub ============================================================
+    public class FlushEngineHub {
         Dock dock;
         long idx;
-        public ReactorHub() {
-            SpokeRoot.Create(new Reactor("root", s => {
+        public FlushEngineHub() {
+            SpokeRoot.Create(new FlushEngine("root", s => {
                 dock = s.Dock();
             }));
         }
         public SpokeHandle Effect(string name, EffectBlock block) {
             var myId = idx++;
-            dock.Call(myId, new Reactor(name, new InitEffect("Init", block)));
+            dock.Call(myId, new FlushEngine(name, new InitEffect("Init", block)));
             return SpokeHandle.Of(myId, myId => dock.Drop(myId));
         }
         class InitEffect : Epoch {

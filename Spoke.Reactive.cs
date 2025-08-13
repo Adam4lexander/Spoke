@@ -8,7 +8,7 @@
 // > Phase
 // > Effect<T>
 // > Memo
-// > Reactor
+// > FlushEngine
 // > FlushStack
 // > Computation
 // > DependencyTracker
@@ -259,19 +259,19 @@ namespace Spoke {
         public U D<U>(ISignal<U> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
-    // ============================== Reactor ============================================================
+    // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class Reactor : SpokeEngine {
+    public class FlushEngine : SpokeEngine {
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
         Epoch epoch;
-        public Reactor(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
+        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
             Name = name;
             this.epoch = epoch;
             FlushMode = flushMode;
         }
-        public Reactor(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
-        public Reactor(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("Reactor", block, flushMode, logger) { }
+        public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
+        public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("Reactor", block, flushMode, logger) { }
         protected override Epoch Bootstrap(EngineBuilder s) {
             flushCommand = () => s.ScheduleExec();
             s.OnCleanup(() => flushCommand = null);
