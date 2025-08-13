@@ -3,6 +3,7 @@
 // > EffectBuilderExtensions
 // > SpokeTeardown
 // > SpokeBehaviour
+// > ReactorHub
 // > SpokeSingleton
 // > UState
 // > Drawers
@@ -60,7 +61,7 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        static RootContainer container = new RootContainer();
+        static ReactorHub globalHub = new ReactorHub();
         SpokeHandle root, sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
@@ -80,7 +81,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = container.Engine($"{GetType().Name}", Init);
+            root = globalHub.Engine($"{GetType().Name}", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -95,6 +96,21 @@ namespace Spoke {
             root.Dispose();
             isAwake.Set(false);
         }
+    }
+    // ============================== ReactorHub ============================================================
+    public class ReactorHub {
+        Dock dock;
+        long idx;
+        public ReactorHub() {
+            SpokeRoot.Create(new Reactor("root", s => {
+                dock = s.Dock();
+            }));
+        }
+        public SpokeHandle Engine(string name, EffectBlock block) {
+            var myId = idx++;
+            dock.Call(myId, new Reactor(name, new InitEffect("Init", block)));
+            return SpokeHandle.Of(myId, myId => dock.Drop(myId));
+        }
         class InitEffect : Epoch {
             EffectBlock block;
             public InitEffect(string name, EffectBlock block) {
@@ -107,20 +123,6 @@ namespace Spoke {
                 };
                 block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
                 return null;
-            }
-        }
-        class RootContainer {
-            Dock dock;
-            long idx;
-            public RootContainer() {
-                SpokeRoot.Create(new Reactor("root", s => {
-                    dock = s.Dock();
-                }));
-            }
-            public SpokeHandle Engine(string name, EffectBlock block) {
-                var myId = idx++;
-                dock.Call(myId, new Reactor(name, new InitEffect("Init", block)));
-                return SpokeHandle.Of(myId, myId => dock.Drop(myId));
             }
         }
     }
