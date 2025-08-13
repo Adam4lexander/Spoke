@@ -60,8 +60,8 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        SpokeRoot<SpokeEngine> root;
-        SpokeHandle sceneTeardown, appTeardown;
+        static RootContainer container = new RootContainer();
+        SpokeHandle root, sceneTeardown, appTeardown;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
             DoInit();
@@ -80,7 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = SpokeRoot.Create(new SpokeEngine($"{GetType().Name}:Init", Init, FlushMode.Immediate, new UnitySpokeLogger(this)));
+            root = container.Engine($"{GetType().Name}", Init);
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -92,8 +92,36 @@ namespace Spoke {
             // it will be serialized as disabled on each reload.
             if (Application.isPlaying) enabled = false;
             isEnabled.Set(false);
-            root?.Dispose();
+            root.Dispose();
             isAwake.Set(false);
+        }
+        class InitEffect : Epoch {
+            EffectBlock block;
+            public InitEffect(string name, EffectBlock block) {
+                Name = name;
+                this.block = block;
+            }
+            protected override ExecBlock Init(EpochBuilder s) {
+                Action<ITrigger> addDynamicTrigger = _ => {
+                    throw new InvalidOperationException("Cannot call D() from Init");
+                };
+                block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
+                return null;
+            }
+        }
+        class RootContainer {
+            Dock dock;
+            long idx;
+            public RootContainer() {
+                SpokeRoot.Create(new SpokeEngine("root", s => {
+                    dock = s.Dock();
+                }));
+            }
+            public SpokeHandle Engine(string name, EffectBlock block) {
+                var myId = idx++;
+                dock.Call(myId, new SpokeEngine(name, new InitEffect("Init", block)));
+                return SpokeHandle.Of(myId, myId => dock.Drop(myId));
+            }
         }
     }
     // ============================== SpokeSingleton ============================================================
