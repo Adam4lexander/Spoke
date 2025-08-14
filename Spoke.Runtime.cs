@@ -10,6 +10,7 @@
 // > PackedTreeCoords128
 // > SpokeHandle
 // > SpokeLogger
+// > SpokeIntrospect
 // > FlushLogger
 // > SpokePool
 // > ReadOnlyList
@@ -42,7 +43,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); List<object> GetExports(); }
+        internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); List<object> GetExports(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -111,6 +112,8 @@ namespace Spoke {
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
             return storeIn;
         }
+        Epoch Friend.GetParent() => parent;
+        SpokeEngine Friend.GetEngine() => engine;
         List<object> Friend.GetExports() {
             var result = new List<object>();
             var startIndex = attachEvents.Count - 1;
@@ -473,6 +476,16 @@ namespace Spoke {
         internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
         internal static ISpokeLogger DefaultLogger = new ConsoleSpokeLogger();
     }
+    // ============================== SpokeIntrospect ============================================================
+    public static class SpokeIntrospect {
+        public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
+            storeIn = storeIn ?? new List<Epoch>();
+            if (epoch is Dock.Friend d) return d.GetChildren(storeIn);
+            return (epoch as Epoch.Friend).GetChildren(storeIn);
+        }
+        public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Friend).GetParent();
+        public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Friend).GetEngine();
+    }
     // ============================== FlushLogger ============================================================
     public struct FlushLogger {
         StringBuilder sb;
@@ -514,8 +527,7 @@ namespace Spoke {
         }
         void Traverse(int depth, Epoch node, Action<int, Epoch> action) {
             action?.Invoke(depth, node);
-            if (node is Dock.Friend d) foreach (var child in d.GetChildren()) Traverse(depth + 1, child, action);
-            if (node is Epoch.Friend e) foreach (var child in e.GetChildren()) Traverse(depth + 1, child, action);
+            foreach (var child in SpokeIntrospect.GetChildren(node)) Traverse(depth + 1, child, action);
         }
     }
     // ============================== SpokePool ============================================================
