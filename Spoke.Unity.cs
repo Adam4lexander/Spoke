@@ -69,7 +69,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (root == null) DoInit(); // Domain reload may not run Awake
+            if (root == default) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -92,6 +92,7 @@ namespace Spoke {
             if (Application.isPlaying) enabled = false;
             isEnabled.Set(false);
             root.Dispose();
+            root = default;
             isAwake.Set(false);
         }
     }
