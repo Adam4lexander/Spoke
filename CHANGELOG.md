@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.2 - 2025-08-14
+
+This release focuses on `FlushEngine` (previously SpokeEngine), and the choice to have a global engine for all behaviours, or each behaviour having its own. In past releases, every `SpokeBehaviour` had its own `FlushEngine`. This lets an engine flush, and during its flush trigger another to engine flush, resulting in a nested flush. This is powerful, but dangerous if not careful. The default now is a single global `FlushEngine` at the root of all `SpokeBehaviour` engines, so only one can flush at a time.
+
+Nested flushing is still possible by creating seperate trees with `SpokeRoot.Create(new FlushEngine(...))`. But this is now an advanced opt-in feature, not the default.
+
+Another important change is `s.Export` and `s.Import`. Example:
+
+```cs
+s.Effect(s => {
+    s.Export(new SomeResource());
+    s.Effect(s => {
+        var resource = s.Import<SomeResource>();
+    });
+});
+```
+
+Exported objects are visible on the lexical scope. All descendants and later siblings can import it.
+
+Changelist:
+
+- `SpokeEngine` renamed to `FlushEngine`, and the base class `ExecutionEngine` takes the name `SpokeEngine`
+- `FlushEngine.Batch()` is a static method that holds all engines from flushing. It replaces the per-engine batching
+- `FlushEngine.Global` is one engine that all `SpokeBehaviour` will attach to. The implication is only one `SpokeBehaviour` has flush at once
+- `FlushEngine.AddFlushRegion` lets you conveniently attach a nested `FlushEngine` under another. This is what `SpokeBehaviour` is using
+- `s.Export` and `s.Import` replaces `TryGetLexical` and `TryGetContext`
+- Correctly handle Epochs that dispose their own root, or drop themselves from a dock mid-execution
+- Correctly order all `Call`, `OnCleanup` and `Use` resources in a single array. Now they are truly disposed in reverse-declaration order
+
 ## 1.1.1 - 2025-08-04
 
 This update continues to refine the declarative lifecycle tree in `Spoke.Runtime`. The documented behaviour of Spoke and its reactive engine is unchanged. The reactivity APIs in Spoke are stabilizing, even though the runtime changes often.
