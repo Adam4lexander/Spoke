@@ -327,13 +327,14 @@ namespace Spoke {
             public void Log(string msg) => pendingLogs.Add(msg);
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
             Epoch prevExec;
+            bool anyFlushErrors;
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnExec block");
                 if (!HasPending) return null;
                 if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
                 var exec = prevExec = pending.Pop();
                 (exec as Epoch.Friend).Exec(FlushNumber);
-                flushLogger.OnFlushNode(exec);
+                anyFlushErrors |= exec.Fault != null;
                 pending.Take();
                 if (!HasPending) IncrementFlush();
                 return exec;
@@ -348,13 +349,13 @@ namespace Spoke {
                 }
             }
             void IncrementFlush() {
-                if (pendingLogs.Count > 0 || flushLogger.HasErrors) {
+                if (pendingLogs.Count > 0 || anyFlushErrors) {
                     pendingLogs.Add($"Flush: {FlushNumber}");
                     flushLogger.LogFlush(owner.logger, owner, string.Join(",", pendingLogs));
                 }
-                flushLogger.OnFlushStart();
                 pendingLogs.Clear();
                 owner.flushNumber++;
+                anyFlushErrors = false;
                 prevExec = null;
             }
             void NoMischief() {
@@ -519,14 +520,17 @@ namespace Spoke {
             sb = new StringBuilder(),
             execNodes = new HashSet<Epoch>(),
         };
-        public void OnFlushStart() { sb.Clear(); execNodes.Clear(); HasErrors = false; }
-        public void OnFlushNode(Epoch n) { execNodes.Add(n); HasErrors |= n.Fault != null; }
-        public bool HasErrors { get; private set; }
-        public void LogFlush(ISpokeLogger logger, Epoch root, string msg) {
-            sb.AppendLine($"[{(HasErrors ? "FLUSH ERROR" : "FLUSH")}]");
+        public void LogFlush(ISpokeLogger logger, SpokeEngine engine, string msg) {
+            sb.Clear(); execNodes.Clear();
+            var hasErrors = false;
+            foreach (var e in SpokeIntrospect.GetExecutedEpochs(engine)) {
+                execNodes.Add(e);
+                if (e.Fault != null) hasErrors = true;
+            }
+            sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
             foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-            PrintRoot(root);
-            if (HasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
+            PrintRoot(engine);
+            if (hasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
         }
         void PrintErrors() {
             foreach (var c in execNodes)
