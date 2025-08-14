@@ -131,21 +131,21 @@ using Spoke;
 public class MyBehaviour : MonoBehaviour {
 
     State<bool> isEnabled = State.Create(false);
-    SpokeRoot root;
+    SpokeHandle handle;
 
     void Awake() {
         // A SpokeEngine is the execution scheduler for the reactive objects it contains
-        root = SpokeRoot.Create(new SpokeEngine(s => {
+        handle = FlushEngine.Global.AddFlushZone("MyFlushZone", s => {
             s.Phase(isEnabled, s => {
                 // OnEnable logic
                 s.OnCleanup(() => {
                     // OnDisable logic
                 });
             });
-        }));
+        });
     }
 
-    void OnDestroy() => root.Dispose();
+    void OnDestroy() => handle.Dispose();
 
     void OnEnable() => isEnabled.Set(true);
     void OnDisable() => isEnabled.Set(false);
@@ -166,7 +166,7 @@ The reactive model behind Spoke is built around a few simple primitives:
 - **Effect** / **Phase** / **Reaction** - self-cleaning blocks of logic
 - **Memo** - computed reactive value
 - **Dock** - dynamic reactive container
-- **SpokeEngine** - executor of reactive computation
+- **FlushEngine** - executor of reactive computation
 
 ---
 

@@ -44,9 +44,7 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 Let's look at a simple Spoke program:
 
 ```cs
-var engine = SpokeEngine.Create(FlushMode.Immediate);
-
-engine.Effect("root", s => {
+SpokeRoot.Create(new FlushEngine(s => {
     s.Effect("1", s => {
         s.Effect("11", s => {
             s.Effect("111", s => { });
@@ -63,7 +61,7 @@ engine.Effect("root", s => {
             s.Effect("221", s => { });
         });
     });
-});
+}));
 ```
 
 Which constructs the tree structure:
@@ -71,9 +69,9 @@ Which constructs the tree structure:
 ```
 (Tree Structure)            (Execution Order)
 
-SpokeEngine                 1
+FlushEngine                 1
 │
-root                        2
+Root                        2
 ├── 1                       3
 │   ├── 11                  4
 │   │   └── 111             5
@@ -86,16 +84,16 @@ root                        2
         └── 221             12
 ```
 
-First notice that the `SpokeEngine` is an active object in the tree. When nodes attach to the tree, they find the nearest ancestor extending `ExecutionEngine`, and schedule themselves there. The engine decides the tempo of execution. `SpokeEngine` will always flush eagerly, executing all scheduled nodes in one synchronous flush. But other implementations are possible, like eagerly executing nodes up to a frame budget, or running nodes on a separate thread.
+First notice that the `FlushEngine` is an active object in the tree. When nodes attach to the tree, they find the nearest ancestor extending `SpokeEngine`, and schedule themselves there. The engine decides the tempo of execution. `FlushEngine` will always flush eagerly, executing all scheduled nodes in one synchronous flush. But other implementations are possible, like eagerly executing nodes up to a frame budget, or running nodes on a separate thread.
 
-The second column shows the order the nodes are flushed. It's in a strict imperative order. They're flushed in the same order as their code is written. This is **the most important invariant of the mental model**. The call-tree doesn't just encode ownership, it encodes causality as well. For a node to exist in the tree, all its older siblings must exist too. Even subclasses of `ExecutionEngine` cannot break this invariant.
+The second column shows the order the nodes are flushed. It's in a strict imperative order. They're flushed in the same order as their code is written. This is **the most important invariant of the mental model**. The call-tree doesn't just encode ownership, it encodes causality as well. For a node to exist in the tree, all its older siblings must exist too. Even subclasses of `SpokeEngine` cannot break this invariant.
 
 This invariant is vital for predictable execution behaviour when arbitrary subtrees are scheduled for remount. For example lets say a reactive signal triggers some of the effects to reschedule:
 
 ```
-SpokeEngine
+FlushEngine
 │
-root
+Root
 ├── 1
 │   ├── 11
 │   │   └── 111*
@@ -117,9 +115,9 @@ The final execution order will be:
 ```
 (Tree Structure)            (Execution Order)
 
-SpokeEngine
+FlushEngine
 │
-root
+Root
 ├── 1
 │   ├── 11
 │   │   └── 111             1
@@ -169,14 +167,15 @@ Node `2` still exists in the tree, it's still 'attached', but its been unmounted
 When a node is mounted, it attaches sub-nodes that are scheduled and mounted later. They're not mounted within the same call-stack frame. This has some subtle consequences to be aware of:
 
 ```cs
-var engine = SpokeEngine.Create(FlushMode.Immediate);
+SpokeRoot.Create(new FlushEngine(s => {
 
-engine.Effect("root", s => {
     var number = 5;
     s.Effect(s => number = 10);
+
     Debug.Log($"number is {number}");                   // Prints: number is 5
+
     s.Effect(s => Debug.Log($"number is {number}"));    // Prints: number is 10
-});
+}));
 ```
 
 Lets step through the construction of the call-tree to understand what's going on. First at the call to `engine.Effect(...)`:
@@ -184,7 +183,7 @@ Lets step through the construction of the call-tree to understand what's going o
 ```
 SpokeEngine
 │
-root*
+Root*
 ```
 
 The Effect (named root) is attached to SpokeEngine. It's scheduled for mount, triggering a flush, but it's not mounted yet.
@@ -192,7 +191,7 @@ The Effect (named root) is attached to SpokeEngine. It's scheduled for mount, tr
 ```
 SpokeEngine
 │
-root            (number=5, print: "number is 5")
+Root            (number=5, print: "number is 5")
 ├── Effect*
 │
 └── Effect*
@@ -203,7 +202,7 @@ Now root is mounted, and its mount function is called. It initializes `number = 
 ```
 SpokeEngine
 │
-root
+Root
 ├── Effect      (number=10)
 │
 └── Effect*
@@ -214,7 +213,7 @@ The first Effect is mounted and sets `number = 10`.
 ```
 SpokeEngine
 │
-root
+Root
 ├── Effect
 │
 └── Effect      (prints: "number is 10")
@@ -232,9 +231,11 @@ This behaviour can take you by surprise if you're not expecting it. But there's 
 
 - `Epoch`: Is the foundational base class in Spoke. Epochs are invoked declaratively, mounted into nodes, and persist as active objects. They maintain state, respond to context, expose behaviour, and may spawn child epochs.
 
-- `ExecutionEngine`: Is a type of `Epoch`, and an abstract class for controlling the tempo of execution of its subtree. When Epochs are attached to the tree, they schedule themselves on their contextual engine to be mounted.
+- `SpokeEngine`: Is a type of `Epoch`, and an abstract class for controlling the tempo of execution of its subtree. When Epochs are attached to the tree, they schedule themselves on their contextual engine to be mounted.
 
-This engine is the foundation that all the `Spoke.Reactive` behaviour is built on. Many of the reactive objects including `Effect`, `Reaction`, `Phase`, `Memo` and `Dock` are each derived from `Epoch`.
+- `Dock`: An `Epoch` that lets you dynamically attach and dispose subtrees at runtime.
+
+This engine is the foundation that all the `Spoke.Reactive` behaviour is built on. Many of the reactive objects including `Effect`, `Reaction`, `Phase` and `Memo` are each derived from `Epoch`.
 
 ---
 
@@ -273,12 +274,10 @@ public class MyCustomEpoch : Epoch {
 You can attach the custom epoch into the call-tree by 'calling' it from a parent epoch:
 
 ```cs
-var engine = SpokeEngine.Create(FlushMode.Immediate);
-
-engine.Effect("root", s => {
+SpokeRoot.Create(new FlushEngine(s => {
     var myEpoch = s.Call(new MyCustomeEpoch()); // Attaches to the tree and returns the epoch instance
     Debug.Log(myEpoch.IsAttached);              // Prints: true
-});
+}));
 ```
 
 This would result in the following tree structure:
@@ -286,7 +285,7 @@ This would result in the following tree structure:
 ```
 Node[SpokeEngine]
 │
-Node[Effect(name = "root")]
+Node[Effect(name = "Root")]
 │
 Node[MyCustomEpoch(name = "My Epoch")]
 ```

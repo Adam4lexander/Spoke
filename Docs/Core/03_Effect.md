@@ -50,8 +50,14 @@ You can create effects yourself without having to use `SpokeBehaviour`:
 // A reactive state we can test with
 var number = State.Create(0);
 
-// Create an engine and define its root effect
-SpokeRoot.Create(new SpokeEngine(s => {
+// Add a flush zone to the global FlushEngine. Only one zone in the engine can flush at a time.
+FlushEngine.Global.AddFlushZone(s => {
+    s.Effect(s => Debug.Log($"number is: {s.D(number)}"));
+});
+
+// Or alternatively create a brand new isolated engine. This can flush inside the flush of another engine.
+// Powerful but dangerous if you're not careful.
+SpokeRoot.Create(new FlushEngine(s => {
     Debug.Log($"number is: {s.D(number)}");
 }));
 ```
@@ -77,9 +83,11 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 var myTrigger = Trigger.Create();
 var myState = State.Create(0);
 
-SpokeRoot.Create(new SpokeEngine(s => {
-    Debug.Log($"myState is {myState.Now}");
-}, myTrigger, myState)); // any number of dependencies in final args
+FlushEngine.Global.AddFlushZone(s => {
+    s.Effect(s => {
+        Debug.Log($"myState is {myState.Now}");
+    }, myTrigger, myState); // any number of dependencies in final args
+});
 
 // Instantiating effect Prints: myState is 0
 
@@ -104,9 +112,11 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 var name = State.Create("Spokey");
 var age = State.Create(0);
 
-SpokeRoot.Create(new SpokeEngine(s => {
-    Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
-}));
+FlushEngine.Global.AddFlushZone(s => {
+    s.Effect(s => {
+        Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
+    });
+});
 
 // Instantiating effect Prints: name: Spokey, age: 0
 
@@ -119,14 +129,16 @@ age.Set(1);         // Prints: name: Reacts, age 1
 If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
 
 ```csharp
-SpokeRoot.Create(new SpokeEngine(s => {
-    // Totally fine
-    if (s.D(condition)) {
-        DoSomething(s.D(foo));
-    } else {
-        SomethingElse(s.D(bar));
-    }
-}));
+FlushEngine.Global.AddFlushZone(s => {
+    s.Effect(s => {
+        // Totally fine
+        if (s.D(condition)) {
+            DoSomething(s.D(foo));
+        } else {
+            SomethingElse(s.D(bar));
+        }
+    });
+});
 ```
 
 - **Advantages**: Better ergonomics, more flexible, more powerful.
@@ -234,7 +246,6 @@ You might have noticed I repeatedly use _s_ as the parameter name in the `Effect
 public class MyBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
-
         s.Effect(s => {
             s.Effect(s => {
                 s.Phase(IsEnabled, s => { });
@@ -317,7 +328,6 @@ public class MyBehaviour : SpokeBehaviour {
     public Trigger OnDamaged = Trigger.Create();
 
     protected override void Init(EffectBuilder s) {
-
         s.Reaction(s => {
             // Play damage effect
         }, onDamaged);

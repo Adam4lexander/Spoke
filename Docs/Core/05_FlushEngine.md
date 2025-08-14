@@ -1,8 +1,8 @@
-# SpokeEngine
+# FlushEngine
 
-The `SpokeEngine` is an implementation of `ExecutionEngine`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `SpokeEngine` specific behaviour that's not part of the base `ExecutionEngine`.
+The `FlushEngine` is an implementation of `SpokeEngine`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `FlushEngine` specific behaviour that's not part of the base `SpokeEngine`.
 
-When epochs are attached to a call-tree, they schedule themselves on the nearest `ExecutionEngine`. Unless you're hacking deep in Spoke, this will be a `SpokeEngine`, and it will be hosted by the root node of the tree.
+When epochs are attached to a call-tree, they schedule themselves on the nearest `SpokeEngine`. Unless you're hacking deep in Spoke, this will be a `FlushEngine`, and it will be hosted by the root node of the tree.
 
 When the engine begins a flush, it will synchronously execute all scheduled epochs until nothing remains to be done. The engine can be configured to flush immediately when an epoch is scheduled, or it can be controlled manually.
 
@@ -10,18 +10,18 @@ When the engine begins a flush, it will synchronously execute all scheduled epoc
 
 ## Usage with SpokeBehaviour
 
-Each `SpokeBehaviour` creates it's own personal `SpokeEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immediate`.
+Each `SpokeBehaviour` creates it's own personal `FlushEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immediate`.
 
 ---
 
 ## Batching
 
-_Batching_ means grouping multiple reactive updates together before the `SpokeEngine` flushes any computations.
+_Batching_ means grouping multiple reactive updates together before the `FlushEngine` flushes any computations.
 Put simply, batching tells the engine: **"Don't flush yet."**
 
 In Spoke, batching happens in two ways:
 
-1. **Explicit Batching** – You call `SpokeEngine.Batch(() => { ... })` to group updates manually.
+1. **Explicit Batching** – You call `FlushEngine.Batch(() => { ... })` to group updates manually.
 2. **Internal Deferral** – The engine automatically defers flushing during certain internal operations (like `Trigger.Invoke`) to ensure safety and consistency.
 
 Both mechanisms cause the engine to **defer a flush**.
@@ -36,14 +36,14 @@ Let's break them down.
 First let's see the problem it's trying to solve:
 
 ```csharp
-var engine = SpokeEngine.Create(FlushMode.Immediate, new UnitySpokeLogger());
-
 var className = State.Create("Warrior");
 var level = State.Create(1);
 
-engine.Effect(s => {
-    Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
-});                       // Prints: class: Warrior, lvl: 1
+FlushEngine.Global.AddFlushZone(s => {
+    s.Effect(s => {
+        Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
+    });
+}); // Prints: class: Warrior, lvl: 1
 
 className.Set("Paladin"); // Prints: class: Paladin, lvl: 1
 level.Set(2);             // Prints: class: Paladin, lvl: 2
@@ -55,7 +55,7 @@ Result: **3 flushes, 3 recomputations, 3 logs.**
 Now let’s say you want to update both values together, and flush only once:
 
 ```csharp
-engine.Batch(() => {
+FlushEngine.Batch(() => {
     className.Set("Paladin");
     level.Set(2);
 });                       // Prints: class: Paladin, lvl: 2
@@ -96,7 +96,7 @@ Why?
 Because we're already **inside a flush**.
 The `Init` method is an `EffectBlock`, which means it only runs **during** a flush.
 And during a flush, **all Effects and Memos are automatically deferred**.
-Every `EffectBlock` is effectively inside its own `SpokeEngine.Batch()`.
+Every `EffectBlock` is effectively inside its own `FlushEngine.Batch()`.
 
 That's why **manual batching only matters outside Spoke** — in external logic, like button handlers or coroutine steps.
 Once a reactive trigger causes the engine to flush, **control will not return** until every computation in the queue has been drained.
