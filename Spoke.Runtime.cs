@@ -42,8 +42,9 @@ namespace Spoke {
     /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
-    public abstract class Epoch : Epoch.Friend {
-        internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(); void SetFault(Exception fault); List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); List<object> GetExports(); }
+    public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
+        internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(long flushNumber); void SetFault(Exception fault); List<object> GetExports(); }
+        internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetExecFlushNumber(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -59,7 +60,7 @@ namespace Spoke {
             }
         }
         List<AttachRecord> attachEvents = new();
-        long siblingCounter;
+        long siblingCounter, execFlushNumber;
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
@@ -100,20 +101,22 @@ namespace Spoke {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
         }
-        void Friend.Exec() {
+        void Friend.Exec(long flushNumber) {
+            execFlushNumber = flushNumber;
             deferAfterOpen.FastHold();
             DetachFrom(execAttachStart);
             try { execBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
             deferAfterOpen.FastRelease();
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
-        List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
+        List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
             return storeIn;
         }
-        Epoch Friend.GetParent() => parent;
-        SpokeEngine Friend.GetEngine() => engine;
+        Epoch Introspect.GetParent() => parent;
+        SpokeEngine Introspect.GetEngine() => engine;
+        long Introspect.GetExecFlushNumber() => execFlushNumber;
         List<object> Friend.GetExports() {
             var result = new List<object>();
             var startIndex = attachEvents.Count - 1;
@@ -128,7 +131,7 @@ namespace Spoke {
         protected abstract ExecBlock Init(EpochBuilder s);
         void ScheduleExec() {
             if (Fault != null) return;
-            if (engine == null) (this as Friend).Exec();
+            if (engine == null) (this as Friend).Exec(0);
             else (engine as SpokeEngine.Friend).Schedule(this);
         }
         internal struct EpochMutations {
@@ -194,8 +197,8 @@ namespace Spoke {
         protected override ExecBlock Init(EpochBuilder s) => block(s);
     }
     // ============================== Dock ============================================================
-    public class Dock : Epoch, Dock.Friend {
-        new internal interface Friend { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
+    public class Dock : Epoch, Dock.Introspect {
+        new internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
         Dictionary<object, ISpokeRoot<DockedEngine>> dynamicChildren = new Dictionary<object, ISpokeRoot<DockedEngine>>();
         List<ISpokeRoot<DockedEngine>> dynamicChildrenList = new List<ISpokeRoot<DockedEngine>>();
         DeferredQueue deferred = new();
@@ -245,7 +248,7 @@ namespace Spoke {
             pending.Enqueue(root);
             deferred.Enqueue(_takeScheduled);
         }
-        List<Epoch> Friend.GetChildren(List<Epoch> storeIn) {
+        List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var r in dynamicChildrenList) storeIn.Add(r.Epoch);
             return storeIn;
@@ -269,14 +272,17 @@ namespace Spoke {
         }
     }
     // ============================== SpokeEngine ============================================================
-    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend {
+    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend, SpokeEngine.Introspect {
         new internal interface Friend { void Schedule(Epoch epoch); }
+        new internal interface Introspect { long GetFlushNumber(); }
         Runtime runtime;
         ISpokeLogger logger;
+        long flushNumber;
         public SpokeEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
+        long Introspect.GetFlushNumber() => flushNumber;
         public void Log(string msg) => runtime.Log(msg);
         protected sealed override ExecBlock Init(EpochBuilder s) {
             runtime = new Runtime(this);
@@ -291,7 +297,7 @@ namespace Spoke {
             SpokeEngine owner;
             protected Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
-            public long FlushNumber { get; private set; }
+            public long FlushNumber => owner.flushNumber;
             List<Action> onHasPending = new();
             List<Action<ExecContext>> onExec = new();
             OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
@@ -326,7 +332,7 @@ namespace Spoke {
                 if (!HasPending) return null;
                 if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
                 var exec = prevExec = pending.Pop();
-                (exec as Epoch.Friend).Exec();
+                (exec as Epoch.Friend).Exec(FlushNumber);
                 flushLogger.OnFlushNode(exec);
                 pending.Take();
                 if (!HasPending) IncrementFlush();
@@ -348,7 +354,7 @@ namespace Spoke {
                 }
                 flushLogger.OnFlushStart();
                 pendingLogs.Clear();
-                FlushNumber++;
+                owner.flushNumber++;
                 prevExec = null;
             }
             void NoMischief() {
@@ -480,11 +486,13 @@ namespace Spoke {
     public static class SpokeIntrospect {
         public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
             storeIn = storeIn ?? new List<Epoch>();
-            if (epoch is Dock.Friend d) return d.GetChildren(storeIn);
-            return (epoch as Epoch.Friend).GetChildren(storeIn);
+            if (epoch is Dock.Introspect d) return d.GetChildren(storeIn);
+            return (epoch as Epoch.Introspect).GetChildren(storeIn);
         }
-        public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Friend).GetParent();
-        public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Friend).GetEngine();
+        public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Introspect).GetParent();
+        public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Introspect).GetEngine();
+        public static long GetExecFlushNumber(Epoch epoch) => (epoch as Epoch.Introspect).GetExecFlushNumber();
+        public static long GetEngineFlushNumber(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetFlushNumber();
     }
     // ============================== FlushLogger ============================================================
     public struct FlushLogger {
