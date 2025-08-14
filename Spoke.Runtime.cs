@@ -484,6 +484,7 @@ namespace Spoke {
     }
     // ============================== SpokeIntrospect ============================================================
     public static class SpokeIntrospect {
+        static SpokePool<List<Epoch>> elPool = SpokePool<List<Epoch>>.Create(l => l.Clear());
         public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
             storeIn = storeIn ?? new List<Epoch>();
             if (epoch is Dock.Introspect d) return d.GetChildren(storeIn);
@@ -493,6 +494,22 @@ namespace Spoke {
         public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Introspect).GetEngine();
         public static long GetExecFlushNumber(Epoch epoch) => (epoch as Epoch.Introspect).GetExecFlushNumber();
         public static long GetEngineFlushNumber(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetFlushNumber();
+        public static List<Epoch> GetExecutedEpochs(SpokeEngine engine, List<Epoch> storeIn = null) {
+            storeIn = storeIn ?? new List<Epoch>();
+            var children = GetChildren(engine, elPool.Get());
+            foreach (var child in children) GetExecutedEpochsRecurs(engine, child, storeIn);
+            elPool.Return(children);
+            return storeIn;
+        }
+        static void GetExecutedEpochsRecurs(SpokeEngine engine, Epoch epoch, List<Epoch> storeIn) {
+            if ((epoch as Epoch.Introspect).GetEngine() != engine) return;
+            var engineFlushNumber = (engine as SpokeEngine.Introspect).GetFlushNumber();
+            var epochExecFlushNumber = (epoch as Epoch.Introspect).GetExecFlushNumber();
+            if (engineFlushNumber <= epochExecFlushNumber) storeIn.Add(epoch);
+            var children = GetChildren(epoch, elPool.Get());
+            foreach (var child in children) GetExecutedEpochsRecurs(engine, child, storeIn);
+            elPool.Return(children);
+        }
     }
     // ============================== FlushLogger ============================================================
     public struct FlushLogger {
