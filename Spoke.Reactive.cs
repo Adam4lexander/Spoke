@@ -209,7 +209,7 @@ namespace Spoke {
             this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
-        protected override ExecBlock Init(EpochBuilder s) {
+        protected override TickBlock Init(EpochBuilder s) {
             var mountBlock = base.Init(s);
             AddStaticTrigger(mountWhen);
             return mountBlock;
@@ -288,12 +288,12 @@ namespace Spoke {
             return SpokeHandle.Of(id, id => dock.Drop(id));
         }
         protected override Epoch Bootstrap(EngineBuilder s) {
-            flushCommand = () => s.ScheduleExec();
+            flushCommand = () => s.RequestTick();
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
             });
-            s.OnExec(s => {
+            s.OnTick(s => {
                 if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
                 var startFlush = s.FlushNumber;
@@ -321,7 +321,7 @@ namespace Spoke {
         class ZoneInit : Epoch {
             EffectBlock block;
             public ZoneInit(EffectBlock block) { this.block = block; }
-            protected override ExecBlock Init(EpochBuilder s) {
+            protected override TickBlock Init(EpochBuilder s) {
                 Action<ITrigger> addDynamicTrigger = _ => {
                     throw new InvalidOperationException("Cannot call D() from flush zone initializer");
                 };
@@ -361,8 +361,8 @@ namespace Spoke {
             Name = name;
             this.triggers = triggers;
         }
-        protected override ExecBlock Init(EpochBuilder s) {
-            tracker = new DependencyTracker(s.ScheduleExec);
+        protected override TickBlock Init(EpochBuilder s) {
+            tracker = new DependencyTracker(s.RequestTick);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             return s => {
@@ -424,7 +424,7 @@ public static class FlushLogger {
     public static void LogFlush(ISpokeLogger logger, SpokeEngine engine, string msg) {
         sb.Clear(); execNodes.Clear();
         var hasErrors = false;
-        foreach (var e in SpokeIntrospect.GetExecutedEpochs(engine)) {
+        foreach (var e in SpokeIntrospect.GetTickedEpochs(engine)) {
             execNodes.Add(e);
             if (e.Fault != null) hasErrors = true;
         }
