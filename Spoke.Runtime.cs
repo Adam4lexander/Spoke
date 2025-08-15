@@ -175,10 +175,6 @@ namespace Spoke {
     public struct EpochBuilder {
         Epoch.EpochMutations s;
         internal EpochBuilder(Epoch.EpochMutations s) { this.s = s; }
-        public void Log(string msg) {
-            var engine = s.Import<SpokeEngine>();
-            engine.Log(msg);
-        }
         public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
@@ -274,15 +270,10 @@ namespace Spoke {
         new internal interface Friend { void Schedule(Epoch epoch); }
         new internal interface Introspect { long GetWaveTick(); long GetTickCount(); }
         Runtime runtime;
-        ISpokeLogger logger;
         long waveTick, tickCount;
-        public SpokeEngine(ISpokeLogger logger = null) {
-            this.logger = logger ?? SpokeError.DefaultLogger;
-        }
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
         long Introspect.GetWaveTick() => waveTick;
         long Introspect.GetTickCount() => tickCount;
-        public void Log(string msg) => runtime.Log(msg);
         protected sealed override TickBlock Init(EpochBuilder s) {
             runtime = new Runtime(this);
             var root = Bootstrap(new EngineBuilder(s, runtime));
@@ -323,9 +314,6 @@ namespace Spoke {
                 (Next as Epoch.Friend).Detach();
                 while (pending.Has) pending.Pop();
             }
-            public void Log(string msg) {
-                FlushLogger.LogFlush(owner.logger, owner, msg);
-            }
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
             Epoch prevTicked;
             public Epoch RunNext() {
@@ -334,7 +322,6 @@ namespace Spoke {
                 if (prevTicked != null && prevTicked.CompareTo(Next) > 0) owner.waveTick = TickCount;
                 var ticked = prevTicked = pending.Pop();
                 (ticked as Epoch.Friend).Tick(TickCount);
-                if (ticked.Fault != null) FlushLogger.LogFlush(owner.logger, owner, "");
                 pending.Take();
                 return ticked;
             }

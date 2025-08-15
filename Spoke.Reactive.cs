@@ -18,6 +18,7 @@ using Spoke;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using static UnityEngine.UI.GridLayoutGroup;
 
 namespace Spoke {
 
@@ -180,7 +181,6 @@ namespace Spoke {
             this.addDynamicTrigger = addDynamicTrigger;
             this.s = s;
         }
-        public void Log(string msg) => s.Log(msg);
         public T D<T>(ISignal<T> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
@@ -268,14 +268,16 @@ namespace Spoke {
         static SpokeRoot<FlushEngine> globalRoot = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
         public static FlushEngine Global = globalRoot.Epoch;
         public FlushMode FlushMode = FlushMode.Immediate;
+        ISpokeLogger logger;
         Action flushCommand;
         Epoch epoch;
         Dock dock;
         long idCounter;
-        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
+        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
             Name = name;
             this.epoch = epoch;
             FlushMode = flushMode;
+            this.logger = logger ?? SpokeError.DefaultLogger;
         }
         public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
         public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, (Epoch)null, flushMode, logger) { }
@@ -301,6 +303,7 @@ namespace Spoke {
                     while (s.HasPending) {
                         if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                         var next = s.RunNext();
+                        if (next.Fault != null) FlushLogger.LogFlush(logger, this, "");
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
