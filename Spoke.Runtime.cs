@@ -11,14 +11,12 @@
 // > SpokeHandle
 // > SpokeLogger
 // > SpokeIntrospect
-// > FlushLogger
 // > SpokePool
 // > ReadOnlyList
 // > DeferredQueue
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Spoke {
 
@@ -44,7 +42,7 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
         internal interface Friend { void Init(Epoch parent); void Detach(); void Exec(long flushNumber); void SetFault(Exception fault); List<object> GetExports(); }
-        internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetExecFlushNumber(); }
+        internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetLastTick(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -60,7 +58,7 @@ namespace Spoke {
             }
         }
         List<AttachRecord> attachEvents = new();
-        long siblingCounter, execFlushNumber;
+        long siblingCounter, execFlushNumber = -1;
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, execAttachStart = -1, detachFrom = int.MaxValue;
@@ -116,7 +114,7 @@ namespace Spoke {
         }
         Epoch Introspect.GetParent() => parent;
         SpokeEngine Introspect.GetEngine() => engine;
-        long Introspect.GetExecFlushNumber() => execFlushNumber;
+        long Introspect.GetLastTick() => execFlushNumber;
         List<object> Friend.GetExports() {
             var result = new List<object>();
             var startIndex = attachEvents.Count - 1;
@@ -274,15 +272,16 @@ namespace Spoke {
     // ============================== SpokeEngine ============================================================
     public abstract class SpokeEngine : Epoch, SpokeEngine.Friend, SpokeEngine.Introspect {
         new internal interface Friend { void Schedule(Epoch epoch); }
-        new internal interface Introspect { long GetFlushNumber(); }
+        new internal interface Introspect { long GetWaveTick(); long GetTickCount(); }
         Runtime runtime;
         ISpokeLogger logger;
-        long flushNumber;
+        long waveTick, tickCount;
         public SpokeEngine(ISpokeLogger logger = null) {
             this.logger = logger ?? SpokeError.DefaultLogger;
         }
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
-        long Introspect.GetFlushNumber() => flushNumber;
+        long Introspect.GetWaveTick() => waveTick;
+        long Introspect.GetTickCount() => tickCount;
         public void Log(string msg) => runtime.Log(msg);
         protected sealed override ExecBlock Init(EpochBuilder s) {
             runtime = new Runtime(this);
@@ -297,12 +296,11 @@ namespace Spoke {
             SpokeEngine owner;
             protected Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
-            public long FlushNumber => owner.flushNumber;
+            public long WaveCount => owner.waveTick;
+            public long TickCount => owner.tickCount;
             List<Action> onHasPending = new();
             List<Action<ExecContext>> onExec = new();
             OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
-            FlushLogger flushLogger = FlushLogger.Create();
-            List<string> pendingLogs = new List<string>();
             bool isRunning, isSealed;
             public Runtime(SpokeEngine owner) {
                 this.owner = owner;
@@ -314,6 +312,7 @@ namespace Spoke {
                 foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
             }
             public void TriggerExec(EpochBuilder s) {
+                owner.tickCount++;
                 isRunning = true;
                 foreach (var fn in onExec) try { fn?.Invoke(new ExecContext(s, this)); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
                 isRunning = false;
@@ -324,19 +323,19 @@ namespace Spoke {
                 (Next as Epoch.Friend).Detach();
                 while (pending.Has) pending.Pop();
             }
-            public void Log(string msg) => pendingLogs.Add(msg);
+            public void Log(string msg) {
+                FlushLogger.LogFlush(owner.logger, owner, msg);
+            }
             public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
             Epoch prevExec;
-            bool anyFlushErrors;
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnExec block");
                 if (!HasPending) return null;
-                if (prevExec != null && prevExec.CompareTo(Next) > 0) IncrementFlush();
+                if (prevExec != null && prevExec.CompareTo(Next) > 0) owner.waveTick = TickCount;
                 var exec = prevExec = pending.Pop();
-                (exec as Epoch.Friend).Exec(FlushNumber);
-                anyFlushErrors |= exec.Fault != null;
+                (exec as Epoch.Friend).Exec(TickCount);
+                if (exec.Fault != null) FlushLogger.LogFlush(owner.logger, owner, "");
                 pending.Take();
-                if (!HasPending) IncrementFlush();
                 return exec;
             }
             public void Schedule(Epoch epoch) {
@@ -347,16 +346,6 @@ namespace Spoke {
                     pending.Take();
                     if (!prevHasPending && HasPending) TriggerHasPending();
                 }
-            }
-            void IncrementFlush() {
-                if (pendingLogs.Count > 0 || anyFlushErrors) {
-                    pendingLogs.Add($"Flush: {FlushNumber}");
-                    flushLogger.LogFlush(owner.logger, owner, string.Join(",", pendingLogs));
-                }
-                pendingLogs.Clear();
-                owner.flushNumber++;
-                anyFlushErrors = false;
-                prevExec = null;
             }
             void NoMischief() {
                 if (isSealed) throw new InvalidOperationException("Cannot mutate engine after it's sealed");
@@ -382,7 +371,7 @@ namespace Spoke {
         SpokeEngine.Runtime r;
         internal ExecContext(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
-        public long FlushNumber => r.FlushNumber;
+        public long FlushNumber => r.WaveCount;
         public void Break() => r.Break();
         public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();
@@ -493,70 +482,26 @@ namespace Spoke {
         }
         public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Introspect).GetParent();
         public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Introspect).GetEngine();
-        public static long GetExecFlushNumber(Epoch epoch) => (epoch as Epoch.Introspect).GetExecFlushNumber();
-        public static long GetEngineFlushNumber(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetFlushNumber();
+        public static long GetLastTick(Epoch epoch) => (epoch as Epoch.Introspect).GetLastTick();
+        public static long GetTickCount(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetTickCount();
+        public static long GetWaveTick(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetWaveTick();
         public static List<Epoch> GetExecutedEpochs(SpokeEngine engine, List<Epoch> storeIn = null) {
             storeIn = storeIn ?? new List<Epoch>();
-            var children = GetChildren(engine, elPool.Get());
-            foreach (var child in children) GetExecutedEpochsRecurs(engine, child, storeIn);
-            elPool.Return(children);
+            Traverse(engine, (depth, epoch) => {
+                if (epoch == engine) return true;
+                if (GetEngine(epoch) != engine) return false;
+                if (GetWaveTick(engine) <= GetLastTick(epoch)) storeIn.Add(epoch);
+                return true;
+            });
             return storeIn;
         }
-        static void GetExecutedEpochsRecurs(SpokeEngine engine, Epoch epoch, List<Epoch> storeIn) {
-            if ((epoch as Epoch.Introspect).GetEngine() != engine) return;
-            var engineFlushNumber = (engine as SpokeEngine.Introspect).GetFlushNumber();
-            var epochExecFlushNumber = (epoch as Epoch.Introspect).GetExecFlushNumber();
-            if (engineFlushNumber <= epochExecFlushNumber) storeIn.Add(epoch);
+        public static void Traverse(Epoch epoch, Func<int, Epoch, bool> fn) => TraverseRecurs(0, epoch, fn);
+        static void TraverseRecurs(int depth, Epoch epoch, Func<int, Epoch, bool> fn) {
+            var shouldContinue = fn?.Invoke(depth, epoch) ?? false;
+            if (!shouldContinue) return;
             var children = GetChildren(epoch, elPool.Get());
-            foreach (var child in children) GetExecutedEpochsRecurs(engine, child, storeIn);
+            foreach (var c in children) TraverseRecurs(depth + 1, c, fn);
             elPool.Return(children);
-        }
-    }
-    // ============================== FlushLogger ============================================================
-    public struct FlushLogger {
-        StringBuilder sb;
-        HashSet<Epoch> execNodes;
-        public static FlushLogger Create() => new FlushLogger {
-            sb = new StringBuilder(),
-            execNodes = new HashSet<Epoch>(),
-        };
-        public void LogFlush(ISpokeLogger logger, SpokeEngine engine, string msg) {
-            sb.Clear(); execNodes.Clear();
-            var hasErrors = false;
-            foreach (var e in SpokeIntrospect.GetExecutedEpochs(engine)) {
-                execNodes.Add(e);
-                if (e.Fault != null) hasErrors = true;
-            }
-            sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
-            foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-            PrintRoot(engine);
-            if (hasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
-        }
-        void PrintErrors() {
-            foreach (var c in execNodes)
-                if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
-        }
-        void PrintRoot(Epoch root) {
-            var that = this;
-            sb.AppendLine();
-            Traverse(0, root, (depth, x) => {
-                for (int i = 0; i < depth; i++) that.sb.Append("    ");
-                that.sb.Append($"{that.NodeLabel(x)} {that.FaultStatus(x)}\n");
-            });
-        }
-        string NodeLabel(Epoch node) {
-            var prefix = execNodes.Contains(node) ? "(*)-" : "";
-            return $"|--{prefix}{node} ";
-        }
-        string FaultStatus(Epoch node) {
-            if (node.Fault != null)
-                if (execNodes.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
-                else return "[Faulted]";
-            return "";
-        }
-        void Traverse(int depth, Epoch node, Action<int, Epoch> action) {
-            action?.Invoke(depth, node);
-            foreach (var child in SpokeIntrospect.GetChildren(node)) Traverse(depth + 1, child, action);
         }
     }
     // ============================== SpokePool ============================================================

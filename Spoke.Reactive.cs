@@ -12,9 +12,12 @@
 // > FlushStack
 // > Computation
 // > DependencyTracker
+// > FlushLogger
 
+using Spoke;
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Spoke {
 
@@ -297,7 +300,7 @@ namespace Spoke {
                 try {
                     while (s.HasPending) {
                         if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                        s.RunNext();
+                        var next = s.RunNext();
                     }
                 } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
             });
@@ -412,5 +415,44 @@ namespace Spoke {
             staticHandles.Clear(); dynamicHandles.Clear();
         }
         Action ScheduleFromIndex(int index) => () => { if (index < depIndex) schedule(); };
+    }
+}
+// ============================== FlushLogger ============================================================
+public static class FlushLogger {
+    static StringBuilder sb = new();
+    static HashSet<Epoch> execNodes = new();
+    public static void LogFlush(ISpokeLogger logger, SpokeEngine engine, string msg) {
+        sb.Clear(); execNodes.Clear();
+        var hasErrors = false;
+        foreach (var e in SpokeIntrospect.GetExecutedEpochs(engine)) {
+            execNodes.Add(e);
+            if (e.Fault != null) hasErrors = true;
+        }
+        sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
+        foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
+        PrintRoot(engine);
+        if (hasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
+    }
+    static void PrintErrors() {
+        foreach (var c in execNodes)
+            if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
+    }
+    static void PrintRoot(Epoch root) {
+        sb.AppendLine();
+        SpokeIntrospect.Traverse(root, (depth, x) => {
+            for (int i = 0; i < depth; i++) sb.Append("    ");
+            sb.Append($"{NodeLabel(x)} {FaultStatus(x)}\n");
+            return true;
+        });
+    }
+    static string NodeLabel(Epoch node) {
+        var prefix = execNodes.Contains(node) ? "(*)-" : "";
+        return $"|--{prefix}{node} ";
+    }
+    static string FaultStatus(Epoch node) {
+        if (node.Fault != null)
+            if (execNodes.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
+            else return "[Faulted]";
+        return "";
     }
 }
