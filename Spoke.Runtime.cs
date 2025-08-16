@@ -66,7 +66,7 @@ namespace Spoke {
         SpokeEngine engine;
         TickBlock tickBlock;
         DeferredQueue deferAfterOpen = new();
-        ControlStack.Frame controlFrame;
+        ControlStack.Handle controlHandle;
         Action _requestTick, _detach;
         protected string Name = null;
         public Exception Fault { get; private set; }
@@ -91,7 +91,7 @@ namespace Spoke {
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             engine = (parent as SpokeEngine) ?? parent?.engine;
             deferAfterOpen.FastHold();
-            controlFrame = (ControlStack.Local as ControlStack.Friend).Push(ControlStack.FrameKind.Init, this);
+            controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Init, this));
             tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
             tickAttachStart = attachEvents.Count;
             (ControlStack.Local as ControlStack.Friend).Pop();
@@ -106,7 +106,7 @@ namespace Spoke {
         void Friend.Tick() {
             tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
             deferAfterOpen.FastHold();
-            controlFrame = (ControlStack.Local as ControlStack.Friend).Push(ControlStack.FrameKind.Tick, this);
+            controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
             DetachFrom(tickAttachStart);
             try { tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
             (ControlStack.Local as ControlStack.Friend).Pop();
@@ -174,7 +174,7 @@ namespace Spoke {
             }
             public void RequestTick() => owner?.deferAfterOpen.Enqueue(owner._requestTick);
             void NoMischief() {
-                if (!owner.controlFrame.IsValid) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
+                if (!owner.controlHandle.IsActive) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
         }
     }
@@ -373,26 +373,34 @@ namespace Spoke {
     // ============================== ControlStack ============================================================
     public class ControlStack : ControlStack.Friend {
         public static ControlStack Local { get; } = new ControlStack();
-        internal interface Friend { Frame Push(FrameKind type, Epoch epoch); void Pop(); }
-        public enum FrameKind : byte { Init, Tick }
+        internal interface Friend { Handle Push(Frame frame); void Pop(); }
+        public enum FrameKind : byte { None, Init, Tick }
         public readonly struct Frame {
-            public readonly ControlStack Stack;
-            public readonly int Index;
             public readonly Epoch Epoch;
             public readonly FrameKind Type;
+            public Frame(FrameKind type, Epoch epoch) { Type = type; Epoch = epoch; }
+        }
+        internal readonly struct Handle {
+            public readonly ControlStack Stack;
+            public readonly int Index;
             readonly long version;
-            public bool IsValid => Stack != null && Index < Stack.frames.Count && version == Stack.frames[Index].version;
-            internal Frame(ControlStack stack, int index, long version, FrameKind type, Epoch epoch) { Stack = stack; Index = index; this.version = version; Type = type; Epoch = epoch; }
+            public Frame Frame => IsActive ? Stack.frames[Index] : default;
+            public bool IsActive => Stack != null && Index < Stack.frames.Count && version == Stack.versions[Index];
+            public Handle(ControlStack stack, int index, long version) { Stack = stack; Index = index; this.version = version; }
         }
         long versionCounter;
         List<Frame> frames = new List<Frame>();
+        List<long> versions = new List<long>();
         public ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(frames);
-        Frame Friend.Push(FrameKind type, Epoch epoch) {
-            var frame = new Frame(this, frames.Count, versionCounter++, type, epoch);
+        Handle Friend.Push(Frame frame) {
             frames.Add(frame);
-            return frame;
+            versions.Add(versionCounter++);
+            return new Handle(this, frames.Count-1, versions[versions.Count-1]);
         }
-        void Friend.Pop() => frames.RemoveAt(frames.Count - 1);
+        void Friend.Pop() { 
+            frames.RemoveAt(frames.Count-1); 
+            versions.RemoveAt(versions.Count-1);
+        }
     }
     // ============================== OrderedWorkSet ============================================================
     internal class OrderedWorkSet<T> {
