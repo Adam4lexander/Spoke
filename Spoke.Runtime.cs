@@ -65,9 +65,8 @@ namespace Spoke {
         int attachIndex, tickAttachStart = -1, detachFrom = int.MaxValue;
         SpokeEngine engine;
         TickBlock tickBlock;
-        DeferredQueue deferAfterOpen = new();
         ControlStack.Handle controlHandle;
-        Action _requestTick, _detach;
+        Action _tick, _detach;
         protected string Name = null;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
@@ -85,32 +84,28 @@ namespace Spoke {
             detachFrom = int.MaxValue;
         }
         void Friend.Init(Epoch parent) {
-            _requestTick = RequestTick; _detach = Detach;
+            _tick = (this as Friend).Tick; _detach = Detach;
             this.parent = parent;
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             engine = (parent as SpokeEngine) ?? parent?.engine;
-            deferAfterOpen.FastHold();
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Init, this));
             tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
             tickAttachStart = attachEvents.Count;
             (ControlStack.Local as ControlStack.Friend).Pop();
-            deferAfterOpen.FastRelease();
             RequestTick();
         }
-        void Friend.Detach() => deferAfterOpen.Enqueue(_detach);
+        void Friend.Detach() => controlHandle.OnPop(_detach);
         void Detach() {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
         }
         void Friend.Tick() {
             tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
-            deferAfterOpen.FastHold();
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
             DetachFrom(tickAttachStart);
             try { tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
             (ControlStack.Local as ControlStack.Friend).Pop();
-            deferAfterOpen.FastRelease();
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
@@ -135,7 +130,7 @@ namespace Spoke {
         protected abstract TickBlock Init(EpochBuilder s);
         void RequestTick() {
             if (Fault != null) return;
-            if (engine == null) (this as Friend).Tick();
+            if (engine == null) controlHandle.OnPop(_tick);
             else (engine as SpokeEngine.Friend).Schedule(this);
         }
         internal struct EpochMutations {
@@ -172,7 +167,7 @@ namespace Spoke {
             public void OnCleanup(Action fn) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Cleanup, fn));
             }
-            public void RequestTick() => owner?.deferAfterOpen.Enqueue(owner._requestTick);
+            public void RequestTick() => owner.RequestTick();
             void NoMischief() {
                 if (!owner.controlHandle.IsActive) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
@@ -387,19 +382,27 @@ namespace Spoke {
             public Frame Frame => IsActive ? Stack.frames[Index] : default;
             public bool IsActive => Stack != null && Index < Stack.frames.Count && version == Stack.versions[Index];
             public Handle(ControlStack stack, int index, long version) { Stack = stack; Index = index; this.version = version; }
+            public void OnPop(Action fn) { if (!IsActive) fn?.Invoke(); else Stack.deferOnPop[Index].Add(fn); }
         }
         long versionCounter;
+        SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
         List<long> versions = new List<long>();
+        List<List<Action>> deferOnPop = new List<List<Action>>();
         public ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(frames);
         Handle Friend.Push(Frame frame) {
             frames.Add(frame);
             versions.Add(versionCounter++);
+            deferOnPop.Add(fnlPool.Get());
             return new Handle(this, frames.Count-1, versions[versions.Count-1]);
         }
         void Friend.Pop() { 
             frames.RemoveAt(frames.Count-1); 
             versions.RemoveAt(versions.Count-1);
+            var onPop = deferOnPop[deferOnPop.Count-1];
+            deferOnPop.RemoveAt(deferOnPop.Count-1);
+            foreach (var fn in onPop) fn?.Invoke();
+            fnlPool.Return(onPop);
         }
     }
     // ============================== OrderedWorkSet ============================================================
