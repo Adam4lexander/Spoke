@@ -5,6 +5,7 @@
 // > LambdaEpoch
 // > Dock
 // > SpokeEngine
+// > ControlStack
 // > OrderedWorkSet
 // > TreeCoords
 // > PackedTreeCoords128
@@ -41,7 +42,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { void Init(Epoch parent); void Detach(); void Tick(long waveNumber); void SetFault(Exception fault); List<object> GetExports(); }
+        internal interface Friend { void Init(Epoch parent); void Detach(); void Tick(); void SetFault(Exception fault); List<object> GetExports(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetLastTick(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -65,6 +66,7 @@ namespace Spoke {
         SpokeEngine engine;
         TickBlock tickBlock;
         DeferredQueue deferAfterOpen = new();
+        ControlStack.Frame controlFrame;
         Action _requestTick, _detach;
         protected string Name = null;
         public Exception Fault { get; private set; }
@@ -87,10 +89,12 @@ namespace Spoke {
             this.parent = parent;
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
-            engine = (this.parent as SpokeEngine) ?? this.parent?.engine;
+            engine = (parent as SpokeEngine) ?? parent?.engine;
             deferAfterOpen.FastHold();
+            controlFrame = (ControlStack.Local as ControlStack.Friend).Push(ControlStack.FrameKind.Init, this);
             tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
             tickAttachStart = attachEvents.Count;
+            (ControlStack.Local as ControlStack.Friend).Pop();
             deferAfterOpen.FastRelease();
             RequestTick();
         }
@@ -99,11 +103,13 @@ namespace Spoke {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
         }
-        void Friend.Tick(long waveNumber) {
-            tickWaveNumber = waveNumber;
+        void Friend.Tick() {
+            tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
             deferAfterOpen.FastHold();
+            controlFrame = (ControlStack.Local as ControlStack.Friend).Push(ControlStack.FrameKind.Tick, this);
             DetachFrom(tickAttachStart);
             try { tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
+            (ControlStack.Local as ControlStack.Friend).Pop();
             deferAfterOpen.FastRelease();
         }
         void Friend.SetFault(Exception fault) => Fault = fault;
@@ -129,7 +135,7 @@ namespace Spoke {
         protected abstract TickBlock Init(EpochBuilder s);
         void RequestTick() {
             if (Fault != null) return;
-            if (engine == null) (this as Friend).Tick(0);
+            if (engine == null) (this as Friend).Tick();
             else (engine as SpokeEngine.Friend).Schedule(this);
         }
         internal struct EpochMutations {
@@ -168,7 +174,7 @@ namespace Spoke {
             }
             public void RequestTick() => owner?.deferAfterOpen.Enqueue(owner._requestTick);
             void NoMischief() {
-                if (!owner.deferAfterOpen.IsHolding) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
+                if (!owner.controlFrame.IsValid) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
         }
     }
@@ -321,7 +327,7 @@ namespace Spoke {
                 if (!HasPending) return null;
                 if (prevTicked != null && prevTicked.CompareTo(Next) > 0) owner.waveTick = TickCount;
                 var ticked = prevTicked = pending.Pop();
-                (ticked as Epoch.Friend).Tick(TickCount);
+                (ticked as Epoch.Friend).Tick();
                 pending.Take();
                 return ticked;
             }
@@ -363,6 +369,30 @@ namespace Spoke {
         public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();
         public void RequestTick() => s.RequestTick();
+    }
+    // ============================== ControlStack ============================================================
+    public class ControlStack : ControlStack.Friend {
+        public static ControlStack Local { get; } = new ControlStack();
+        internal interface Friend { Frame Push(FrameKind type, Epoch epoch); void Pop(); }
+        public enum FrameKind : byte { Init, Tick }
+        public readonly struct Frame {
+            public readonly ControlStack Stack;
+            public readonly int Index;
+            public readonly Epoch Epoch;
+            public readonly FrameKind Type;
+            readonly long version;
+            public bool IsValid => Stack != null && Index < Stack.frames.Count && version == Stack.frames[Index].version;
+            internal Frame(ControlStack stack, int index, long version, FrameKind type, Epoch epoch) { Stack = stack; Index = index; this.version = version; Type = type; Epoch = epoch; }
+        }
+        long versionCounter;
+        List<Frame> frames = new List<Frame>();
+        public ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(frames);
+        Frame Friend.Push(FrameKind type, Epoch epoch) {
+            var frame = new Frame(this, frames.Count, versionCounter++, type, epoch);
+            frames.Add(frame);
+            return frame;
+        }
+        void Friend.Pop() => frames.RemoveAt(frames.Count - 1);
     }
     // ============================== OrderedWorkSet ============================================================
     internal class OrderedWorkSet<T> {
