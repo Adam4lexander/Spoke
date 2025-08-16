@@ -295,14 +295,25 @@ namespace Spoke {
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
             });
+            var tickedSet = new HashSet<Epoch>();
             s.OnTick(s => {
                 if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
-                var startFlush = s.FlushNumber;
+                var passCount = 0;
+                var anyFaults = false;
+                Epoch prev = null;
                 while (s.HasPending) {
-                    if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    try { var next = s.RunNext(); } catch { FlushLogger.LogFlush(logger, this, ""); }
+                    if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    try {
+                        var next = s.PeekNext();
+                        tickedSet.Add(next);
+                        if (prev != null && prev.CompareTo(next) > 0) passCount++;
+                        prev = next;
+                        s.RunNext();
+                    } catch { anyFaults |= true; }
                 }
+                if (anyFaults) FlushLogger.LogFlush(logger, this, tickedSet, "");
+                tickedSet.Clear();
             });
             dock = new Dock("Zones");
             s.OnCleanup(() => dock = null);
@@ -420,39 +431,31 @@ namespace Spoke {
 // ============================== FlushLogger ============================================================
 public static class FlushLogger {
     static StringBuilder sb = new();
-    static HashSet<Epoch> execNodes = new();
-    public static void LogFlush(ISpokeLogger logger, SpokeEngine engine, string msg) {
-        sb.Clear(); execNodes.Clear();
+    public static void LogFlush(ISpokeLogger logger, Epoch root, HashSet<Epoch> ticked, string msg) {
+        sb.Clear();
         var hasErrors = false;
-        foreach (var e in SpokeIntrospect.GetTickedEpochs(engine)) {
-            execNodes.Add(e);
-            if (e.Fault != null) hasErrors = true;
-        }
+        foreach (var e in ticked) if (e.Fault != null) hasErrors |= true;
         sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
         foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-        PrintRoot(engine);
-        if (hasErrors) { PrintErrors(); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
+        PrintRoot(root, ticked);
+        if (hasErrors) { PrintErrors(ticked); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
     }
-    static void PrintErrors() {
-        foreach (var c in execNodes)
-            if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c)} ---\n{c.Fault}");
+    static void PrintErrors(HashSet<Epoch> ticked) {
+        foreach (var c in ticked)
+            if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c, ticked.Contains(c))} ---\n{c.Fault}");
     }
-    static void PrintRoot(Epoch root) {
+    static void PrintRoot(Epoch root, HashSet<Epoch> ticked) {
         sb.AppendLine();
         SpokeIntrospect.Traverse(root, (depth, x) => {
             for (int i = 0; i < depth; i++) sb.Append("    ");
-            sb.Append($"{NodeLabel(x)} {FaultStatus(x)}\n");
+            sb.Append($"{NodeLabel(x, ticked.Contains(x))}");
+            if (x.Fault != null) sb.Append($" [Faulted: {x.Fault.GetType().Name}]");
+            sb.Append("\n");
             return true;
         });
     }
-    static string NodeLabel(Epoch node) {
-        var prefix = execNodes.Contains(node) ? "(*)-" : "";
+    static string NodeLabel(Epoch node, bool wasTicked) {
+        var prefix = wasTicked ? "(*)-" : "";
         return $"|--{prefix}{node} ";
-    }
-    static string FaultStatus(Epoch node) {
-        if (node.Fault != null)
-            if (execNodes.Contains(node)) return $"[Faulted: {node.Fault.GetType().Name}]";
-            else return "[Faulted]";
-        return "";
     }
 }

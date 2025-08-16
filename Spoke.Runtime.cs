@@ -44,7 +44,7 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
         internal interface Friend { void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); }
-        internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetLastTick(); }
+        internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
             public readonly Kind Type;
@@ -60,7 +60,7 @@ namespace Spoke {
             }
         }
         List<AttachRecord> attachEvents = new();
-        long siblingCounter, tickWaveNumber = -1;
+        long siblingCounter;
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, tickAttachStart = -1, detachFrom = int.MaxValue;
@@ -106,7 +106,6 @@ namespace Spoke {
             RequestTick();
         }
         void Friend.Tick() {
-            tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
             DetachFrom(tickAttachStart);
             try { 
@@ -130,8 +129,6 @@ namespace Spoke {
             return storeIn;
         }
         Epoch Introspect.GetParent() => parent;
-        SpokeEngine Introspect.GetEngine() => engine;
-        long Introspect.GetLastTick() => tickWaveNumber;
         List<object> Friend.GetExports() {
             var result = new List<object>();
             var startIndex = attachEvents.Count - 1;
@@ -283,16 +280,11 @@ namespace Spoke {
         }
     }
     // ============================== SpokeEngine ============================================================
-    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend, SpokeEngine.Introspect {
+    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend {
         new internal interface Friend { void Schedule(Epoch epoch); }
-        new internal interface Introspect { long GetWaveTick(); long GetTickCount(); }
-        Runtime runtime;
-        long waveTick, tickCount;
+        Runtime runtime = new();
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
-        long Introspect.GetWaveTick() => waveTick;
-        long Introspect.GetTickCount() => tickCount;
         protected sealed override TickBlock Init(EpochBuilder s) {
-            runtime = new Runtime(this);
             var root = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
             s.Export(this);
@@ -301,18 +293,12 @@ namespace Spoke {
         }
         protected abstract Epoch Bootstrap(EngineBuilder s);
         internal class Runtime {
-            SpokeEngine owner;
-            protected Epoch Next => pending.Peek();
+            public Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
-            public long WaveCount => owner.waveTick;
-            public long TickCount => owner.tickCount;
             List<Action> onHasPending = new();
             List<Action<TickContext>> onTick = new();
             OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
             bool isRunning, isSealed;
-            public Runtime(SpokeEngine owner) {
-                this.owner = owner;
-            }
             public void Seal() => isSealed = true;
             public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
             public void OnTick(Action<TickContext> fn) { NoMischief(); onTick.Add(fn); }
@@ -320,7 +306,6 @@ namespace Spoke {
                 foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
             }
             public void TriggerTick(EpochBuilder s) {
-                owner.tickCount++;
                 isRunning = true;
                 try { foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this)); } finally { isRunning = false; }
             }
@@ -330,12 +315,10 @@ namespace Spoke {
                 (Next as Epoch.Friend).Detach();
                 while (pending.Has) pending.Pop();
             }
-            Epoch prevTicked;
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnTick block");
                 if (!HasPending) return null;
-                if (prevTicked != null && prevTicked.CompareTo(Next) > 0) owner.waveTick = TickCount;
-                var ticked = prevTicked = pending.Pop();
+                var ticked = pending.Pop();
                 (ticked as Epoch.Friend).Tick();
                 pending.Take();
                 return ticked;
@@ -373,8 +356,8 @@ namespace Spoke {
         SpokeEngine.Runtime r;
         internal TickContext(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
-        public long FlushNumber => r.WaveCount;
         public void Break() => r.Break();
+        public Epoch PeekNext() => r.Next;
         public Epoch RunNext() => r.RunNext();
         public void RequestTick() => s.RequestTick();
     }
@@ -532,20 +515,6 @@ namespace Spoke {
             return (epoch as Epoch.Introspect).GetChildren(storeIn);
         }
         public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Introspect).GetParent();
-        public static SpokeEngine GetEngine(Epoch epoch) => (epoch as Epoch.Introspect).GetEngine();
-        public static long GetLastTick(Epoch epoch) => (epoch as Epoch.Introspect).GetLastTick();
-        public static long GetTickCount(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetTickCount();
-        public static long GetWaveTick(SpokeEngine engine) => (engine as SpokeEngine.Introspect).GetWaveTick();
-        public static List<Epoch> GetTickedEpochs(SpokeEngine engine, List<Epoch> storeIn = null) {
-            storeIn = storeIn ?? new List<Epoch>();
-            Traverse(engine, (depth, epoch) => {
-                if (epoch == engine) return true;
-                if (GetEngine(epoch) != engine) return false;
-                if (GetWaveTick(engine) <= GetLastTick(epoch)) storeIn.Add(epoch);
-                return true;
-            });
-            return storeIn;
-        }
         public static void Traverse(Epoch epoch, Func<int, Epoch, bool> fn) => TraverseRecurs(0, epoch, fn);
         static void TraverseRecurs(int depth, Epoch epoch, Func<int, Epoch, bool> fn) {
             var shouldContinue = fn?.Invoke(depth, epoch) ?? false;
