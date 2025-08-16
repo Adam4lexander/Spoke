@@ -6,6 +6,7 @@
 // > Dock
 // > SpokeEngine
 // > ControlStack
+// > SpokeException
 // > OrderedWorkSet
 // > TreeCoords
 // > PackedTreeCoords128
@@ -42,7 +43,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { void Init(Epoch parent); void Detach(); void Tick(); void SetFault(Exception fault); List<object> GetExports(); }
+        internal interface Friend { void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); SpokeEngine GetEngine(); long GetLastTick(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -84,30 +85,45 @@ namespace Spoke {
             detachFrom = int.MaxValue;
         }
         void Friend.Init(Epoch parent) {
+            // Attach
             _tick = (this as Friend).Tick; _detach = Detach;
             this.parent = parent;
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             engine = (parent as SpokeEngine) ?? parent?.engine;
+            // Run Init
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Init, this));
-            tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
-            tickAttachStart = attachEvents.Count;
-            (ControlStack.Local as ControlStack.Friend).Pop();
+            try {
+                tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
+                tickAttachStart = attachEvents.Count;
+            } catch (Exception e) {
+                Fault = e;
+                if (e is SpokeException) throw;
+                throw new SpokeException("Uncaught Exception in Init", ControlStack.Local, e);
+            } finally {
+                (ControlStack.Local as ControlStack.Friend).Pop();
+            }
             RequestTick();
+        }
+        void Friend.Tick() {
+            tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
+            controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
+            DetachFrom(tickAttachStart);
+            try { 
+                tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); 
+            } catch (Exception e) { 
+                Fault = e;
+                if (e is SpokeException) throw;
+                throw new SpokeException("Uncaught Exception in Tick", ControlStack.Local, e);
+            } finally {
+                (ControlStack.Local as ControlStack.Friend).Pop();
+            }
         }
         void Friend.Detach() => controlHandle.OnPop(_detach);
         void Detach() {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
         }
-        void Friend.Tick() {
-            tickWaveNumber = engine != null ? SpokeIntrospect.GetTickCount(engine) : 0;
-            controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
-            DetachFrom(tickAttachStart);
-            try { tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); } catch (Exception e) { Fault = e; }
-            (ControlStack.Local as ControlStack.Friend).Pop();
-        }
-        void Friend.SetFault(Exception fault) => Fault = fault;
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
@@ -306,8 +322,7 @@ namespace Spoke {
             public void TriggerTick(EpochBuilder s) {
                 owner.tickCount++;
                 isRunning = true;
-                foreach (var fn in onTick) try { fn?.Invoke(new TickContext(s, this)); } catch (Exception e) { SpokeError.Log("Error invoking OnTick", e); }
-                isRunning = false;
+                try { foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this)); } finally { isRunning = false; }
             }
             public void Break() {
                 if (!isRunning) throw new Exception("Break() must be called from within an OnTick block");
@@ -315,7 +330,6 @@ namespace Spoke {
                 (Next as Epoch.Friend).Detach();
                 while (pending.Has) pending.Pop();
             }
-            public void SetFault(Exception fault) => (owner as Epoch.Friend).SetFault(fault);
             Epoch prevTicked;
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnTick block");
@@ -361,7 +375,6 @@ namespace Spoke {
         public bool HasPending => r.HasPending;
         public long FlushNumber => r.WaveCount;
         public void Break() => r.Break();
-        public void SetFault(Exception fault) => r.SetFault(fault);
         public Epoch RunNext() => r.RunNext();
         public void RequestTick() => s.RequestTick();
     }
@@ -403,6 +416,16 @@ namespace Spoke {
             deferOnPop.RemoveAt(deferOnPop.Count-1);
             foreach (var fn in onPop) fn?.Invoke();
             fnlPool.Return(onPop);
+        }
+    }
+    // ============================== SpokeException ============================================================
+    // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of
+    // stack trace, and a weakref to the epoch.
+    public sealed class SpokeException : Exception {
+        List<ControlStack.Frame> stackSnapshot = new List<ControlStack.Frame>();
+        public ReadOnlyList<ControlStack.Frame> StackSnapshot => new ReadOnlyList<ControlStack.Frame>();
+        public SpokeException(string msg, ControlStack stack, Exception inner) : base(msg, inner) {
+            foreach (var frame in stack.Frames) stackSnapshot.Add(frame);
         }
     }
     // ============================== OrderedWorkSet ============================================================

@@ -299,13 +299,10 @@ namespace Spoke {
                 if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
                 var startFlush = s.FlushNumber;
-                try {
-                    while (s.HasPending) {
-                        if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                        var next = s.RunNext();
-                        if (next.Fault != null) FlushLogger.LogFlush(logger, this, "");
-                    }
-                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
+                while (s.HasPending) {
+                    if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    try { var next = s.RunNext(); } catch { FlushLogger.LogFlush(logger, this, ""); }
+                }
             });
             dock = new Dock("Zones");
             s.OnCleanup(() => dock = null);
