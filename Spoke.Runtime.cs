@@ -18,6 +18,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
+using UnityEditor.Profiling.Memory.Experimental;
 
 namespace Spoke {
 
@@ -126,13 +128,12 @@ namespace Spoke {
                 tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
                 tickAttachStart = attachEvents.Count;
             } catch (Exception e) {
-                if (!(e is SpokeException se)) {
-                    Fault = e;
-                    throw new SpokeException("Uncaught Exception in Init", ControlStack.Local, e);
+                if (e is SpokeException se) {
+                    if (!se.SkipMarkFaulted) Fault = se;
+                    se.SkipMarkFaulted = false;
+                    throw;
                 }
-                if (!se.SkipMarkFaulted) Fault = se;
-                se.SkipMarkFaulted = false;
-                throw;
+                throw Fault = new SpokeException("Uncaught Exception in Init", ControlStack.Local, e);
             } finally {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
@@ -144,13 +145,12 @@ namespace Spoke {
             try { 
                 tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); 
             } catch (Exception e) {
-                if (!(e is SpokeException se)) {
-                    Fault = e;
-                    throw new SpokeException("Uncaught Exception in Tick", ControlStack.Local, e);
+                if (e is SpokeException se) {
+                    if (!se.SkipMarkFaulted) Fault = se;
+                    se.SkipMarkFaulted = false;
+                    throw;
                 }
-                if (!se.SkipMarkFaulted) Fault = se;
-                se.SkipMarkFaulted = false;
-                throw;
+                throw Fault = new SpokeException("Uncaught Exception in Tick", ControlStack.Local, e);
             } finally {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
@@ -439,6 +439,33 @@ namespace Spoke {
             fnlPool.Return(onPopSelf);
         }
     }
+    public static class ControlStackTrace {
+        public static string FormatCurrent(bool includePath = false) => Format(ControlStack.Local.Frames, includePath);
+        public static string Format(ReadOnlyList<ControlStack.Frame> frames, bool includePath = false) {
+            if (frames.Count == 0) return "(empty)";
+            var sb = new StringBuilder();
+            var width = frames.Count.ToString().Length;
+            for (int i = frames.Count-1; i >= 0; i--) AppendLine(sb, frames[i], includePath, i, width);
+            return sb.ToString();
+        }
+        static void AppendLine(StringBuilder sb, ControlStack.Frame f, bool includePath, int lineNo, int width) {
+            var e = f.Epoch;
+            var name = e?.ToString() ?? "<null>";
+            var typeName = e != null ? e.GetType().Name : "?";
+            var fault = e?.Fault != null ? " [FAULTED]" : "";
+            var path = includePath && e != null ? NamePath(e) : null;
+            sb.Append(lineNo.ToString().PadLeft(width));
+            sb.Append($": {f.Type} {name} <{typeName}>{fault}");
+            if (path != null) sb.Append($"\n    \\_ {path}");
+            sb.Append("\n");
+        }
+        static string NamePath(Epoch e) {
+            var parts = new List<string>(8);
+            for (var x = e; x != null; x = SpokeIntrospect.GetParent(x)) parts.Add(x.ToString());
+            parts.Reverse();
+            return string.Join(" > ", parts);
+        }
+    }
     // ============================== SpokeException ============================================================
     // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of
     // stack trace, and a weakref to the epoch.
@@ -448,6 +475,20 @@ namespace Spoke {
         public ReadOnlyList<ControlStack.Frame> StackSnapshot => new ReadOnlyList<ControlStack.Frame>(stackSnapshot);
         public SpokeException(string msg, ControlStack stack, Exception inner) : base(msg, inner) {
             foreach (var frame in stack.Frames) stackSnapshot.Add(frame);
+        }
+        string DotNetTop() {
+            var s = base.ToString();
+            const string marker = "End of inner exception stack trace";
+            var pos = s.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (pos < 0) return s.TrimEnd();
+            var newline = s.IndexOf('\n', pos);
+            var cutAt = newline >= 0 ? newline : pos + marker.Length;
+            return s.Substring(0, cutAt).TrimEnd();
+        }
+        public override string ToString() {
+            var dotnetTop = DotNetTop();
+            var spokeStack = ControlStackTrace.Format(StackSnapshot, includePath: false);
+            return dotnetTop + "\n\n" + spokeStack;
         }
     }
     // ============================== OrderedWorkStack ============================================================

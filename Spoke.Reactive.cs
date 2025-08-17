@@ -311,7 +311,10 @@ namespace Spoke {
                         if (prev != null && prev.CompareTo(next) > 0) passCount++;
                         prev = next;
                         s.RunNext();
-                    } catch { anyFaults |= true; }
+                    } catch (Exception e) {
+                        logger.Error(e.ToString());
+                        anyFaults |= true; 
+                    }
                 }
                 if (anyFaults) FlushLogger.LogFlush(logger, this, tickedSet, "");
                 tickedSet.Clear();
@@ -477,7 +480,7 @@ public static class FlushLogger {
         SpokeIntrospect.Traverse(root, (depth, x) => {
             for (int i = 0; i < depth; i++) sb.Append("    ");
             sb.Append($"{NodeLabel(x, ticked.Contains(x))}");
-            if (x.Fault != null) sb.Append($" [Faulted: {x.Fault.GetType().Name}]");
+            if (x.Fault != null) sb.Append($" [Faulted: {x.Fault.InnerException.GetType().Name}]");
             sb.Append("\n");
             return true;
         });
