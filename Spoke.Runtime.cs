@@ -97,9 +97,13 @@ namespace Spoke {
                 tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
                 tickAttachStart = attachEvents.Count;
             } catch (Exception e) {
-                Fault = e;
-                if (e is SpokeException) throw;
-                throw new SpokeException("Uncaught Exception in Init", ControlStack.Local, e);
+                if (!(e is SpokeException se)) {
+                    Fault = e;
+                    throw new SpokeException("Uncaught Exception in Init", ControlStack.Local, e);
+                }
+                if (!se.SkipMarkFaulted) Fault = se;
+                se.SkipMarkFaulted = false;
+                throw;
             } finally {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
@@ -110,10 +114,14 @@ namespace Spoke {
             DetachFrom(tickAttachStart);
             try { 
                 tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this))); 
-            } catch (Exception e) { 
-                Fault = e;
-                if (e is SpokeException) throw;
-                throw new SpokeException("Uncaught Exception in Tick", ControlStack.Local, e);
+            } catch (Exception e) {
+                if (!(e is SpokeException se)) {
+                    Fault = e;
+                    throw new SpokeException("Uncaught Exception in Tick", ControlStack.Local, e);
+                }
+                if (!se.SkipMarkFaulted) Fault = se;
+                se.SkipMarkFaulted = false;
+                throw;
             } finally {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
@@ -221,10 +229,14 @@ namespace Spoke {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
             deferred.FastHold();
-            var root = SpokeRoot.Create(new DockedEngine(this, epoch, siblingCounter++));
-            dynamicChildren.Add(key, root);
-            dynamicChildrenList.Add(root);
-            deferred.FastRelease();
+            try {
+                var root = SpokeRoot.Create(new DockedEngine(this, epoch, siblingCounter++));
+                // TODO: An exception wont cause the root to be added to the dynamic children set
+                dynamicChildren.Add(key, root);
+                dynamicChildrenList.Add(root);
+            } finally {
+                deferred.FastRelease();
+            }
             return epoch;
         }
         public void Drop(object key) {
@@ -246,10 +258,17 @@ namespace Spoke {
             return s => {
                 if (!pending.Has) return;
                 deferred.FastHold();
-                var hasMore = pending.Peek().Tick();
-                if (!hasMore) pending.Pop();
-                deferred.FastRelease();
-                if (pending.Has) s.RequestTick();
+                bool hasMore = false;
+                try {
+                    pending.Peek().Tick();
+                } catch (SpokeException se) {
+                    se.SkipMarkFaulted = true;
+                    throw;
+                } finally {
+                    if (!hasMore) pending.Pop();
+                    deferred.FastRelease();
+                    if (pending.Has) s.RequestTick();
+                }
             };
         }
         void Schedule(DockedEngine root) {
@@ -319,8 +338,7 @@ namespace Spoke {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnTick block");
                 if (!HasPending) return null;
                 var ticked = pending.Pop();
-                (ticked as Epoch.Friend).Tick();
-                pending.Take();
+                try { (ticked as Epoch.Friend).Tick(); } finally { pending.Take(); }
                 return ticked;
             }
             public void Schedule(Epoch epoch) {
@@ -406,6 +424,7 @@ namespace Spoke {
     // stack trace, and a weakref to the epoch.
     public sealed class SpokeException : Exception {
         List<ControlStack.Frame> stackSnapshot = new List<ControlStack.Frame>();
+        public bool SkipMarkFaulted;
         public ReadOnlyList<ControlStack.Frame> StackSnapshot => new ReadOnlyList<ControlStack.Frame>();
         public SpokeException(string msg, ControlStack stack, Exception inner) : base(msg, inner) {
             foreach (var frame in stack.Frames) stackSnapshot.Add(frame);
