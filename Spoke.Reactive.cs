@@ -296,28 +296,25 @@ namespace Spoke {
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
             });
-            var tickedSet = new HashSet<Epoch>();
+            var faultedSet = new HashSet<Epoch>();
             s.OnTick(s => {
                 if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
                 var passCount = 0;
-                var anyFaults = false;
                 Epoch prev = null;
                 while (s.HasPending) {
                     if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                     try {
                         var next = s.PeekNext();
-                        tickedSet.Add(next);
                         if (prev != null && prev.CompareTo(next) > 0) passCount++;
                         prev = next;
                         s.RunNext();
-                    } catch (Exception e) {
-                        logger.Error(e.ToString());
-                        anyFaults |= true; 
+                    } catch (SpokeException se) {
+                        faultedSet.Add(se.StackSnapshot[se.StackSnapshot.Count - 1].Epoch);
                     }
                 }
-                if (anyFaults) FlushLogger.LogFlush(logger, this, tickedSet, "");
-                tickedSet.Clear();
+                if (faultedSet.Count > 0) FlushLogger.LogFlush(logger, this, faultedSet, $"Faults occurred during flush");
+                faultedSet.Clear();
             });
             dock = new Dock("Zones");
             s.OnCleanup(() => dock = null);
@@ -462,31 +459,30 @@ namespace Spoke {
 // ============================== FlushLogger ============================================================
 public static class FlushLogger {
     static StringBuilder sb = new();
-    public static void LogFlush(ISpokeLogger logger, Epoch root, HashSet<Epoch> ticked, string msg) {
+    public static void LogFlush(ISpokeLogger logger, Epoch root, HashSet<Epoch> faulted, string msg) {
         sb.Clear();
-        var hasErrors = false;
-        foreach (var e in ticked) if (e.Fault != null) hasErrors |= true;
+        var hasErrors = faulted.Count > 0;
         sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
         foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-        PrintRoot(root, ticked);
-        if (hasErrors) { PrintErrors(ticked); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
+        PrintRoot(root, faulted);
+        if (hasErrors) { PrintErrors(faulted); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
     }
     static void PrintErrors(HashSet<Epoch> ticked) {
         foreach (var c in ticked)
             if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c, ticked.Contains(c))} ---\n{c.Fault}");
     }
-    static void PrintRoot(Epoch root, HashSet<Epoch> ticked) {
+    static void PrintRoot(Epoch root, HashSet<Epoch> faulted) {
         sb.AppendLine();
         SpokeIntrospect.Traverse(root, (depth, x) => {
             for (int i = 0; i < depth; i++) sb.Append("    ");
-            sb.Append($"{NodeLabel(x, ticked.Contains(x))}");
-            if (x.Fault != null) sb.Append($" [Faulted: {x.Fault.InnerException.GetType().Name}]");
+            sb.Append($"{NodeLabel(x, faulted.Contains(x))}");
+            if (x.Fault != null) sb.Append($"[Faulted{(faulted.Contains(x) ? ": " + x.Fault.InnerException.GetType().Name : "")}]");
             sb.Append("\n");
             return true;
         });
     }
-    static string NodeLabel(Epoch node, bool wasTicked) {
-        var prefix = wasTicked ? "(*)-" : "";
+    static string NodeLabel(Epoch node, bool wasFaulted) {
+        var prefix = wasFaulted ? "(*)-" : "";
         return $"|--{prefix}{node} ";
     }
 }
