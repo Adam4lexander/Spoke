@@ -265,8 +265,8 @@ namespace Spoke {
     // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
     public class FlushEngine : SpokeEngine {
-        static SpokeRoot<FlushEngine> globalRoot = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
-        public static FlushEngine Global = globalRoot.Epoch;
+        static SpokeTree<FlushEngine> globalRoot = SpokeTree.CreateAndStart(new FlushEngine("Global FlushEngine"));
+        public static FlushEngine Global = globalRoot.Root;
         public FlushMode FlushMode = FlushMode.Immediate;
         ISpokeLogger logger;
         Action flushCommand;

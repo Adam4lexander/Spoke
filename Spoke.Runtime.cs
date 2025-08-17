@@ -1,6 +1,6 @@
 // Spoke.Runtime.cs
 // -----------------------------
-// > SpokeRoot
+// > SpokeTree
 // > Epoch
 // > LambdaEpoch
 // > Dock
@@ -25,16 +25,38 @@ namespace Spoke {
     public delegate TickBlock InitBlock(EpochBuilder s);
     public delegate void TickBlock(EpochBuilder s);
 
-    // ============================== SpokeRoot ============================================================
+    // ============================== SpokeTree ============================================================
     /// <summary>
-    /// The SpokeRoot hosts the root Engine of the tree. It lets you instantiate a tree, or dispose it.
+    /// The SpokeTree hosts the root Engine of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
-    public interface ISpokeRoot<out T> : IDisposable where T : SpokeEngine { T Epoch { get; } }
-    public static class SpokeRoot { public static SpokeRoot<T> Create<T>(T epoch) where T : SpokeEngine => new SpokeRoot<T>(epoch); }
-    public class SpokeRoot<T> : ISpokeRoot<T> where T : SpokeEngine {
-        public T Epoch { get; private set; }
-        public SpokeRoot(T epoch) : base() { Epoch = epoch; (epoch as Epoch.Friend).Init(null); }
-        public void Dispose() => (Epoch as Epoch.Friend).Detach();
+    public interface ISpokeTree<out T> : IDisposable where T : SpokeEngine { T Root { get; } void Start(); bool IsAlive { get; } }
+    public static class SpokeTree { 
+        public static SpokeTree<T> Create<T>(T root) where T : SpokeEngine => new SpokeTree<T>(root);
+        public static SpokeTree<T> CreateAndStart<T>(T root) where T : SpokeEngine {
+            var tree = Create(root);
+            try { 
+                tree.Start(); 
+            } catch (Exception e) {
+                SpokeError.Log($"Failed to start SpokeTree: {root}, will dispose", e);
+                tree.Dispose(); 
+            }
+            return tree;
+        }
+    }
+    public class SpokeTree<T> : ISpokeTree<T> where T : SpokeEngine {
+        public T Root { get; private set; }
+        public bool IsAlive { get; private set; }
+        public SpokeTree(T root) { Root = root; }
+        public void Start() {
+            if ((Root as Epoch.Friend).IsInit()) throw new InvalidOperationException($"Cannot start engine {Root}, it's already started");
+            IsAlive = true;
+            (Root as Epoch.Friend).Init(null);
+        }
+        public void Dispose() {
+            if (!IsAlive) return;
+            (Root as Epoch.Friend).Detach();
+            IsAlive = false;
+        }
     }
     // ============================== Epoch ============================================================
     /// <summary>
@@ -43,7 +65,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); }
+        internal interface Friend { bool IsInit(); void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -64,6 +86,7 @@ namespace Spoke {
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, tickAttachStart = -1, detachFrom = int.MaxValue;
+        bool isInit;
         SpokeEngine engine;
         TickBlock tickBlock;
         ControlStack.Handle controlHandle;
@@ -84,8 +107,10 @@ namespace Spoke {
             tickAttachStart = Math.Min(tickAttachStart, attachEvents.Count);
             detachFrom = int.MaxValue;
         }
+        bool Friend.IsInit() => isInit;
         void Friend.Init(Epoch parent) {
             // Attach
+            isInit = true;
             _tick = (this as Friend).Tick; _detach = Detach;
             this.parent = parent;
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
@@ -215,8 +240,7 @@ namespace Spoke {
     // ============================== Dock ============================================================
     public class Dock : Epoch, Dock.Introspect {
         new internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
-        Dictionary<object, ISpokeRoot<DockedEngine>> dynamicChildren = new Dictionary<object, ISpokeRoot<DockedEngine>>();
-        List<ISpokeRoot<DockedEngine>> dynamicChildrenList = new List<ISpokeRoot<DockedEngine>>();
+        Dictionary<object, ISpokeTree<DockedEngine>> dynamicChildren = new Dictionary<object, ISpokeTree<DockedEngine>>();
         DeferredQueue deferred = new();
         bool isDetaching;
         long siblingCounter;
@@ -229,20 +253,13 @@ namespace Spoke {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
             deferred.FastHold();
-            try {
-                var root = SpokeRoot.Create(new DockedEngine(this, epoch, siblingCounter++));
-                // TODO: An exception wont cause the root to be added to the dynamic children set
-                dynamicChildren.Add(key, root);
-                dynamicChildrenList.Add(root);
-            } finally {
-                deferred.FastRelease();
-            }
+            dynamicChildren.Add(key, SpokeTree.Create(new DockedEngine(this, epoch, siblingCounter++)));
+            try { dynamicChildren[key].Start(); } finally { deferred.FastRelease(); }
             return epoch;
         }
         public void Drop(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
-            var index = dynamicChildrenList.IndexOf(child);
-            if (index >= 0) { child.Dispose(); dynamicChildrenList.RemoveAt(index); }
+            child.Dispose();
             dynamicChildren.Remove(key);
         }
         protected override TickBlock Init(EpochBuilder s) {
@@ -250,9 +267,8 @@ namespace Spoke {
             _takeScheduled = () => { pending.Take(); s.RequestTick(); };
             s.OnCleanup(() => {
                 isDetaching = true;
-                for (int i = dynamicChildrenList.Count - 1; i >= 0; i--)
-                    try { dynamicChildrenList[i].Dispose(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup dynamic child of '{this}': {dynamicChildrenList[i]}", e); }
-                dynamicChildrenList.Clear();
+                var orderedChildren = GetOrderedChildren(new());
+                for (int i = orderedChildren.Count - 1; i >= 0; i--) orderedChildren[i].Dispose();
                 dynamicChildren.Clear();
             });
             return s => {
@@ -275,9 +291,14 @@ namespace Spoke {
             pending.Enqueue(root);
             deferred.Enqueue(_takeScheduled);
         }
+        List<ISpokeTree<DockedEngine>> GetOrderedChildren(List<ISpokeTree<DockedEngine>> storeIn) {
+            foreach (var r in dynamicChildren) storeIn.Add(r.Value);
+            storeIn.Sort((a, b) => a.Root.CompareTo(b.Root));
+            return storeIn;
+        }
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
-            foreach (var r in dynamicChildrenList) storeIn.Add(r.Epoch);
+            foreach (var c in GetOrderedChildren(new())) storeIn.Add(c.Root);
             return storeIn;
         }
         class DockedEngine : SpokeEngine, IComparable<DockedEngine> {
