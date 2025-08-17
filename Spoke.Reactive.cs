@@ -10,6 +10,7 @@
 // > Memo
 // > FlushEngine
 // > FlushStack
+// > MicrotaskQueue
 // > Computation
 // > DependencyTracker
 // > FlushLogger
@@ -343,8 +344,8 @@ namespace Spoke {
     }
     // ============================== FlushStack ============================================================
     internal static class FlushStack {
-        static SpokePool<DeferredQueue> dqPool = SpokePool<DeferredQueue>.Create(dq => { });
-        static Stack<DeferredQueue> dqStack = new Stack<DeferredQueue>();
+        static SpokePool<MicrotaskQueue> dqPool = SpokePool<MicrotaskQueue>.Create(dq => { });
+        static Stack<MicrotaskQueue> dqStack = new Stack<MicrotaskQueue>();
         public static void Hold() {
             if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) {
                 dqStack.Push(dqPool.Get());
@@ -362,6 +363,33 @@ namespace Spoke {
             if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) throw new InvalidOperationException("[FlushStack] Cannot release");
             dqStack.Peek().FastRelease();
             if (!dqStack.Peek().IsHolding) dqPool.Return(dqStack.Pop());
+        }
+    }
+    // ============================== MicrotaskQueue ============================================================
+    internal class MicrotaskQueue {
+        long holdIdx;
+        HashSet<long> holdKeys = new HashSet<long>();
+        Queue<Action> queue = new Queue<Action>();
+        Action<long> _release;
+        long holdCount;
+        public bool IsDraining { get; private set; }
+        public bool IsHolding => holdCount > 0;
+        public MicrotaskQueue() { _release = Release; }
+        public SpokeHandle Hold() {
+            if (holdKeys.Add(holdIdx)) FastHold();
+            return SpokeHandle.Of(holdIdx++, _release);
+        }
+        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
+        public void FastHold() => holdCount++;
+        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
+        public void Enqueue(Action action) {
+            queue.Enqueue(action);
+            if (holdCount == 0 && !IsDraining) Drain();
+        }
+        void Drain() {
+            IsDraining = true;
+            while (queue.Count > 0) queue.Dequeue()();
+            IsDraining = false;
         }
     }
     // ============================== Computation ============================================================

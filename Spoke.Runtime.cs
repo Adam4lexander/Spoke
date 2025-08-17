@@ -7,7 +7,7 @@
 // > SpokeEngine
 // > ControlStack
 // > SpokeException
-// > OrderedWorkSet
+// > OrderedWorkStack
 // > TreeCoords
 // > PackedTreeCoords128
 // > SpokeHandle
@@ -15,7 +15,6 @@
 // > SpokeIntrospect
 // > SpokePool
 // > ReadOnlyList
-// > DeferredQueue
 
 using System;
 using System.Collections.Generic;
@@ -245,7 +244,7 @@ namespace Spoke {
         bool isDetaching;
         long siblingCounter;
         List<object> scope = new();
-        OrderedWorkSet<DockedEngine> pending = new((a, b) => b.CompareTo(a));
+        OrderedWorkStack<DockedEngine> pending = new((a, b) => b.CompareTo(a));
         Action<DockedEngine> schedule;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
@@ -333,7 +332,7 @@ namespace Spoke {
             SpokeEngine owner;
             List<Action> onHasPending = new();
             List<Action<TickContext>> onTick = new();
-            OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
+            OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
             bool isRunning, isSealed;
             Action _triggerHasPending;
             public Runtime(SpokeEngine owner) {
@@ -446,15 +445,15 @@ namespace Spoke {
     public sealed class SpokeException : Exception {
         List<ControlStack.Frame> stackSnapshot = new List<ControlStack.Frame>();
         public bool SkipMarkFaulted;
-        public ReadOnlyList<ControlStack.Frame> StackSnapshot => new ReadOnlyList<ControlStack.Frame>();
+        public ReadOnlyList<ControlStack.Frame> StackSnapshot => new ReadOnlyList<ControlStack.Frame>(stackSnapshot);
         public SpokeException(string msg, ControlStack stack, Exception inner) : base(msg, inner) {
             foreach (var frame in stack.Frames) stackSnapshot.Add(frame);
         }
     }
-    // ============================== OrderedWorkSet ============================================================
-    internal class OrderedWorkSet<T> {
+    // ============================== OrderedWorkStack ============================================================
+    internal class OrderedWorkStack<T> {
         List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
-        public OrderedWorkSet(Comparison<T> comp) { this.comp = comp; }
+        public OrderedWorkStack(Comparison<T> comp) { this.comp = comp; }
         public bool Has => list.Count > 0 || incoming.Count > 0;
         public void Enqueue(T t) { incoming.Add(t); }
         public void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }
@@ -578,32 +577,5 @@ namespace Spoke {
         public List<T>.Enumerator GetEnumerator() => list.GetEnumerator();
         public int Count => list?.Count ?? 0;
         public T this[int index] => list[index];
-    }
-    // ============================== DeferredQueue ============================================================
-    internal class DeferredQueue {
-        long holdIdx;
-        HashSet<long> holdKeys = new HashSet<long>();
-        Queue<Action> queue = new Queue<Action>();
-        Action<long> _release;
-        long holdCount;
-        public bool IsDraining { get; private set; }
-        public bool IsHolding => holdCount > 0;
-        public DeferredQueue() { _release = Release; }
-        public SpokeHandle Hold() {
-            if (holdKeys.Add(holdIdx)) FastHold();
-            return SpokeHandle.Of(holdIdx++, _release);
-        }
-        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
-        public void FastHold() => holdCount++;
-        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
-        public void Enqueue(Action action) {
-            queue.Enqueue(action);
-            if (holdCount == 0 && !IsDraining) Drain();
-        }
-        void Drain() {
-            IsDraining = true;
-            while (queue.Count > 0) queue.Dequeue()();
-            IsDraining = false;
-        }
     }
 }
