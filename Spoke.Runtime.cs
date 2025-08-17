@@ -65,7 +65,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { bool IsInit(); void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); }
+        internal interface Friend { bool IsInit(); void Init(Epoch parent); void Tick(); void Detach(); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -90,7 +90,7 @@ namespace Spoke {
         SpokeEngine engine;
         TickBlock tickBlock;
         ControlStack.Handle controlHandle;
-        Action _tick, _detach;
+        Action _detach, _requestTick;
         protected string Name = null;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
@@ -111,7 +111,12 @@ namespace Spoke {
         void Friend.Init(Epoch parent) {
             // Attach
             isInit = true;
-            _tick = (this as Friend).Tick; _detach = Detach;
+            _detach = Detach;
+            _requestTick = () => {
+                if (Fault != null) return;
+                if (engine == null) (this as Epoch.Friend).Tick();
+                else (engine as SpokeEngine.Friend).Schedule(this);
+            };
             this.parent = parent;
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
@@ -132,7 +137,7 @@ namespace Spoke {
             } finally {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
-            RequestTick();
+            controlHandle.OnPopSelf(_requestTick);
         }
         void Friend.Tick() {
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Tick, this));
@@ -151,7 +156,8 @@ namespace Spoke {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
         }
-        void Friend.Detach() => controlHandle.OnPop(_detach);
+        void Friend.Detach() => controlHandle.OnPopSelf(_detach);
+        ControlStack.Handle Friend.GetControlHandle() => controlHandle;
         void Detach() {
             if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
             else DetachFrom(0);
@@ -174,11 +180,6 @@ namespace Spoke {
             return result;
         }
         protected abstract TickBlock Init(EpochBuilder s);
-        void RequestTick() {
-            if (Fault != null) return;
-            if (engine == null) controlHandle.OnPop(_tick);
-            else (engine as SpokeEngine.Friend).Schedule(this);
-        }
         internal struct EpochMutations {
             Epoch owner;
             public EpochMutations(Epoch owner) => this.owner = owner;
@@ -213,7 +214,7 @@ namespace Spoke {
             public void OnCleanup(Action fn) {
                 NoMischief(); owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Cleanup, fn));
             }
-            public void RequestTick() => owner.RequestTick();
+            public void RequestTick() => owner.controlHandle.OnPopSelf(owner._requestTick);
             void NoMischief() {
                 if (!owner.controlHandle.IsActive) throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
             }
@@ -241,20 +242,18 @@ namespace Spoke {
     public class Dock : Epoch, Dock.Introspect {
         new internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
         Dictionary<object, ISpokeTree<DockedEngine>> dynamicChildren = new Dictionary<object, ISpokeTree<DockedEngine>>();
-        DeferredQueue deferred = new();
         bool isDetaching;
         long siblingCounter;
         List<object> scope = new();
         OrderedWorkSet<DockedEngine> pending = new((a, b) => b.CompareTo(a));
-        Action _takeScheduled;
+        Action<DockedEngine> schedule;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
         public T Call<T>(object key, T epoch) where T : Epoch {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
-            deferred.FastHold();
             dynamicChildren.Add(key, SpokeTree.Create(new DockedEngine(this, epoch, siblingCounter++)));
-            try { dynamicChildren[key].Start(); } finally { deferred.FastRelease(); }
+            dynamicChildren[key].Start();
             return epoch;
         }
         public void Drop(object key) {
@@ -264,7 +263,7 @@ namespace Spoke {
         }
         protected override TickBlock Init(EpochBuilder s) {
             scope = (this as Epoch.Friend).GetExports();
-            _takeScheduled = () => { pending.Take(); s.RequestTick(); };
+            schedule = (engine) => { pending.Enqueue(engine); s.RequestTick(); };
             s.OnCleanup(() => {
                 isDetaching = true;
                 var orderedChildren = GetOrderedChildren(new());
@@ -273,23 +272,18 @@ namespace Spoke {
             });
             return s => {
                 if (!pending.Has) return;
-                deferred.FastHold();
+                pending.Take();
                 bool hasMore = false;
                 try {
-                    pending.Peek().Tick();
+                    hasMore = pending.Peek().Tick();
                 } catch (SpokeException se) {
                     se.SkipMarkFaulted = true;
                     throw;
                 } finally {
                     if (!hasMore) pending.Pop();
-                    deferred.FastRelease();
                     if (pending.Has) s.RequestTick();
                 }
             };
-        }
-        void Schedule(DockedEngine root) {
-            pending.Enqueue(root);
-            deferred.Enqueue(_takeScheduled);
         }
         List<ISpokeTree<DockedEngine>> GetOrderedChildren(List<ISpokeTree<DockedEngine>> storeIn) {
             foreach (var r in dynamicChildren) storeIn.Add(r.Value);
@@ -309,7 +303,7 @@ namespace Spoke {
             protected override Epoch Bootstrap(EngineBuilder s) {
                 tickCommand = () => { s.RequestTick(); return s.HasPending; };
                 s.OnCleanup(() => tickCommand = null);
-                s.OnHasPending(() => dock.Schedule(this));
+                s.OnHasPending(() => dock.schedule(this));
                 s.OnTick(s => s.RunNext());
                 return new LambdaEpoch("Portal", s => {
                     for (int i = dock.scope.Count - 1; i >= 0; i--) s.Export(dock.scope[i]);
@@ -322,9 +316,10 @@ namespace Spoke {
     // ============================== SpokeEngine ============================================================
     public abstract class SpokeEngine : Epoch, SpokeEngine.Friend {
         new internal interface Friend { void Schedule(Epoch epoch); }
-        Runtime runtime = new();
+        Runtime runtime;
         void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
         protected sealed override TickBlock Init(EpochBuilder s) {
+            runtime = new(this);
             var root = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
             s.Export(this);
@@ -335,16 +330,21 @@ namespace Spoke {
         internal class Runtime {
             public Epoch Next => pending.Peek();
             public bool HasPending => Next != null;
+            SpokeEngine owner;
             List<Action> onHasPending = new();
             List<Action<TickContext>> onTick = new();
             OrderedWorkSet<Epoch> pending = new((a, b) => b.CompareTo(a));
             bool isRunning, isSealed;
+            Action _triggerHasPending;
+            public Runtime(SpokeEngine owner) {
+                this.owner = owner;
+                _triggerHasPending = () => {
+                    foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
+                };
+            }
             public void Seal() => isSealed = true;
             public void OnHasPending(Action fn) { NoMischief(); onHasPending.Add(fn); }
             public void OnTick(Action<TickContext> fn) { NoMischief(); onTick.Add(fn); }
-            public void TriggerHasPending() {
-                foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
-            }
             public void TriggerTick(EpochBuilder s) {
                 isRunning = true;
                 try { foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this)); } finally { isRunning = false; }
@@ -368,7 +368,7 @@ namespace Spoke {
                 if (!isRunning) {
                     var prevHasPending = HasPending;
                     pending.Take();
-                    if (!prevHasPending && HasPending) TriggerHasPending();
+                    if (!prevHasPending && HasPending) (owner as Epoch.Friend).GetControlHandle().OnPopSelf(_triggerHasPending);
                 }
             }
             void NoMischief() {
@@ -417,27 +417,27 @@ namespace Spoke {
             public Frame Frame => IsActive ? Stack.frames[Index] : default;
             public bool IsActive => Stack != null && Index < Stack.frames.Count && version == Stack.versions[Index];
             public Handle(ControlStack stack, int index, long version) { Stack = stack; Index = index; this.version = version; }
-            public void OnPop(Action fn) { if (!IsActive) fn?.Invoke(); else Stack.deferOnPop[Index].Add(fn); }
+            public void OnPopSelf(Action fn) { if (!IsActive) fn?.Invoke(); else Stack.onPopSelfFrames[Index].Add(fn); }
         }
         long versionCounter;
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
         List<long> versions = new List<long>();
-        List<List<Action>> deferOnPop = new List<List<Action>>();
+        List<List<Action>> onPopSelfFrames = new List<List<Action>>();
         public ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(frames);
         Handle Friend.Push(Frame frame) {
             frames.Add(frame);
             versions.Add(versionCounter++);
-            deferOnPop.Add(fnlPool.Get());
+            onPopSelfFrames.Add(fnlPool.Get());
             return new Handle(this, frames.Count-1, versions[versions.Count-1]);
         }
         void Friend.Pop() { 
             frames.RemoveAt(frames.Count-1); 
             versions.RemoveAt(versions.Count-1);
-            var onPop = deferOnPop[deferOnPop.Count-1];
-            deferOnPop.RemoveAt(deferOnPop.Count-1);
-            foreach (var fn in onPop) fn?.Invoke();
-            fnlPool.Return(onPop);
+            var onPopSelf = onPopSelfFrames[onPopSelfFrames.Count-1];
+            onPopSelfFrames.RemoveAt(onPopSelfFrames.Count-1);
+            foreach (var fn in onPopSelf) fn?.Invoke();
+            fnlPool.Return(onPopSelf);
         }
     }
     // ============================== SpokeException ============================================================
@@ -455,7 +455,7 @@ namespace Spoke {
     internal class OrderedWorkSet<T> {
         List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
         public OrderedWorkSet(Comparison<T> comp) { this.comp = comp; }
-        public bool Has => list.Count > 0;
+        public bool Has => list.Count > 0 || incoming.Count > 0;
         public void Enqueue(T t) { incoming.Add(t); }
         public void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }
         public T Pop() { var x = list[^1]; list.RemoveAt(list.Count - 1); set.Remove(x); return x; }
