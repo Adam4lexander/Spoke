@@ -541,7 +541,7 @@ namespace Spoke {
             if (coords == null || coords.Count > 16) return Invalid;
             ulong hi = 0, lo = 0;
             for (int i = 0; i < coords.Count; i++) {
-                long val = coords[i];
+                var val = coords[i];
                 if (val < 0 || val > 255) return Invalid;
                 if (i < 8) hi |= ((ulong)val << ((7 - i) * 8));
                 else lo |= ((ulong)val << ((15 - i) * 8));
