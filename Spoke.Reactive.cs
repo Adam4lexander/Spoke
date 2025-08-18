@@ -19,7 +19,6 @@ using Spoke;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using static UnityEngine.UI.GridLayoutGroup;
 
 namespace Spoke {
 
@@ -187,6 +186,7 @@ namespace Spoke {
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public T Export<T>(T obj) => s.Export(obj);
+        public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
@@ -266,31 +266,30 @@ namespace Spoke {
     // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
     public class FlushEngine : SpokeEngine {
-        static SpokeTree<FlushEngine> globalRoot = SpokeTree.CreateAndStart(new FlushEngine("Global FlushEngine"));
-        public static FlushEngine Global = globalRoot.Root;
+        public static FlushEngine Global { get; } = new FlushEngine("Global FlushEngine");
+        static IDisposable globalRoot = new SpokeTree("Global Tree", Global).Bootstrap();
         public FlushMode FlushMode = FlushMode.Immediate;
-        ISpokeLogger logger;
         Action flushCommand;
         Epoch epoch;
         Dock dock;
         long idCounter;
-        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
+        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate) {
             Name = name;
             this.epoch = epoch;
             FlushMode = flushMode;
-            this.logger = logger ?? SpokeError.DefaultLogger;
         }
-        public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
-        public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, (Epoch)null, flushMode, logger) { }
-        public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("FlushEngine", block, flushMode, logger) { }
-        public SpokeHandle AddFlushZone(EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) => AddFlushZone("FlushZone", init, flushMode, logger);
-        public SpokeHandle AddFlushZone(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
+        public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this(name, new Effect("Root", block), flushMode) { }
+        public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate) : this(name, (Epoch)null, flushMode) { }
+        public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this("FlushEngine", block, flushMode) { }
+        public SpokeHandle AddFlushZone(EffectBlock init, FlushMode flushMode = FlushMode.Immediate, params object[] services) => AddFlushZone("FlushZone", init, flushMode);
+        public SpokeHandle AddFlushZone(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, params object[] services) {
             var id = idCounter++;
-            var subEngine = new FlushEngine(name, new ZoneInit(init), flushMode, logger);
+            var subEngine = new FlushEngine(name, new ZoneInit(init), flushMode);
             dock.Call(id, subEngine);
             return SpokeHandle.Of(id, id => dock.Drop(id));
         }
         protected override Epoch Bootstrap(EngineBuilder s) {
+            if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
             flushCommand = () => s.RequestTick();
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
