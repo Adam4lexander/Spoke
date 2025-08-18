@@ -62,7 +62,7 @@ namespace Spoke {
             bootstrapBlock(s);
             return epoch;
         }
-        public class Handle : IDisposable, Handle.Friend {
+        public class Handle : IDisposable, Handle.Friend, Epoch.Scheduler {
             internal interface Friend { void PrependServices(IEnumerable<object> services); }
             SpokeTree owner;
             Action detachAll;
@@ -76,12 +76,13 @@ namespace Spoke {
                 next.AddRange(owner.services);
                 owner.services = next.ToArray();
             }
+            void Epoch.Scheduler.Schedule(Epoch epoch) => (epoch as Epoch.Friend).Tick();
             public void Bootstrap(Action<EngineBuilder> block) {
                 NoMischief();
                 if (owner.bootstrapBlock != null) throw new Exception($"{owner.GetType().Name} already bootstrapped");
                 if (block == null) throw new Exception($"{owner.GetType().Name} must be passed a bootstrap function");
                 owner.bootstrapBlock = block;
-                (owner as Epoch.Friend).Attach(null, owner.services);
+                (owner as Epoch.Friend).Attach(null, default, this, owner.services);
             }
             public void Dispose() { NoMischief(); (owner as Epoch.Friend).GetControlHandle().OnPopSelf(detachAll); }
             void NoMischief() { if (owner.handle != this) throw new Exception("Stop right there Maverick"); }
@@ -94,7 +95,8 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { void Attach(Epoch parent, IEnumerable<object> services = null); void Tick(); void DetachFrom(int i); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
+        internal interface Scheduler { void Schedule(Epoch epoch); }
+        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void DetachFrom(int i); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -114,7 +116,7 @@ namespace Spoke {
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int tickAttachStart = -1;
-        SpokeEngine engine;
+        Scheduler scheduler;
         TickBlock tickBlock;
         ControlStack.Handle controlHandle;
         Action _requestTick;
@@ -131,15 +133,11 @@ namespace Spoke {
             tickAttachStart = Math.Min(tickAttachStart, attachEvents.Count);
         }
         void Friend.DetachFrom(int i) => DetachFrom(i);
-        void Friend.Attach(Epoch parent, IEnumerable<object> services) {
-            _requestTick = () => {
-                if (Fault != null) return;
-                if (engine == null) (this as Epoch.Friend).Tick();
-                else (engine as SpokeEngine.Friend).Schedule(this);
-            };
+        void Friend.Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services) {
+            _requestTick = () => { if (Fault == null) scheduler.Schedule(this); };
             this.parent = parent;
-            Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.attachEvents.Count - 1);
-            engine = (parent as SpokeEngine) ?? parent?.engine;
+            Coords = coords;
+            this.scheduler = scheduler;
             Init(services);
         }
         void Init(IEnumerable<object> services) {
@@ -208,7 +206,8 @@ namespace Spoke {
                 NoMischief();
                 if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
                 owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Call, epoch));
-                (epoch as Friend).Attach(owner);
+                if (owner is Scheduler sc) (epoch as Friend).Attach(owner, default, sc, null);
+                else (epoch as Friend).Attach(owner, owner.Coords.Extend(owner.attachEvents.Count - 1), owner.scheduler, null);
                 return epoch;
             }
             public T Export<T>(T obj) {
@@ -342,10 +341,9 @@ namespace Spoke {
         }
     }
     // ============================== SpokeEngine ============================================================
-    public abstract class SpokeEngine : Epoch, SpokeEngine.Friend {
-        new internal interface Friend { void Schedule(Epoch epoch); }
+    public abstract class SpokeEngine : Epoch, Epoch.Scheduler {
         Runtime runtime;
-        void Friend.Schedule(Epoch epoch) => runtime.Schedule(epoch);
+        void Epoch.Scheduler.Schedule(Epoch epoch) => runtime.Schedule(epoch);
         protected sealed override TickBlock Init(EpochBuilder s) {
             runtime = new(this);
             var root = Bootstrap(new EngineBuilder(s, runtime));
