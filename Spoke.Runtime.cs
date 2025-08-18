@@ -77,7 +77,7 @@ namespace Spoke {
                 if (owner.bootstrapBlock != null) throw new Exception($"{owner.GetType().Name} already bootstrapped");
                 if (block == null) throw new Exception($"{owner.GetType().Name} must be passed a bootstrap function");
                 owner.bootstrapBlock = block;
-                (owner as Epoch.Friend).Init(null, owner.services);
+                (owner as Epoch.Friend).Attach(null, owner.services);
             }
             public void Dispose() { NoMischief(); (owner as Epoch.Friend).Detach(); }
             void NoMischief() { if (owner.handle != this) throw new Exception("Stop right there Maverick"); }
@@ -90,7 +90,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { bool IsInit(); void Init(Epoch parent, IEnumerable<object> services = null); void Tick(); void Detach(); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
+        internal interface Friend { void Attach(Epoch parent, IEnumerable<object> services = null); void Tick(); void Detach(); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -111,7 +111,6 @@ namespace Spoke {
         public TreeCoords Coords { get; private set; }
         Epoch parent;
         int attachIndex, tickAttachStart = -1, detachFrom = int.MaxValue;
-        bool isInit;
         SpokeEngine engine;
         TickBlock tickBlock;
         ControlStack.Handle controlHandle;
@@ -132,10 +131,7 @@ namespace Spoke {
             tickAttachStart = Math.Min(tickAttachStart, attachEvents.Count);
             detachFrom = int.MaxValue;
         }
-        bool Friend.IsInit() => isInit;
-        void Friend.Init(Epoch parent, IEnumerable<object> services) {
-            // Attach
-            isInit = true;
+        void Friend.Attach(Epoch parent, IEnumerable<object> services) {
             _detach = Detach;
             _requestTick = () => {
                 if (Fault != null) return;
@@ -146,7 +142,9 @@ namespace Spoke {
             Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             engine = (parent as SpokeEngine) ?? parent?.engine;
-            // Run Init
+            Init(services);
+        }
+        void Init(IEnumerable<object> services) {
             controlHandle = (ControlStack.Local as ControlStack.Friend).Push(new ControlStack.Frame(ControlStack.FrameKind.Init, this));
             try {
                 if (services != null) foreach (var x in services) attachEvents.Add(new AttachRecord(AttachRecord.Kind.Export, x));
@@ -217,7 +215,7 @@ namespace Spoke {
                 NoMischief();
                 if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
                 owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Call, epoch));
-                (epoch as Friend).Init(owner);
+                (epoch as Friend).Attach(owner);
                 return epoch;
             }
             public T Export<T>(T obj) {
@@ -386,12 +384,6 @@ namespace Spoke {
                 isRunning = true;
                 try { foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this)); } finally { isRunning = false; }
             }
-            public void Break() {
-                if (!isRunning) throw new Exception("Break() must be called from within an OnTick block");
-                if (!HasPending) return;
-                (Next as Epoch.Friend).Detach();
-                while (pending.Has) pending.Pop();
-            }
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnTick block");
                 if (!HasPending) return null;
@@ -433,7 +425,6 @@ namespace Spoke {
         SpokeEngine.Runtime r;
         internal TickContext(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
         public bool HasPending => r.HasPending;
-        public void Break() => r.Break();
         public Epoch PeekNext() => r.Next;
         public Epoch RunNext() => r.RunNext();
         public void RequestTick() => s.RequestTick();
