@@ -96,7 +96,7 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
         internal interface Scheduler { void Schedule(Epoch epoch); }
-        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void DetachFrom(int i); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
+        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void DetachFrom(int i); ControlStack.Handle GetControlHandle(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -181,17 +181,6 @@ namespace Spoke {
             return storeIn;
         }
         Epoch Introspect.GetParent() => parent;
-        List<object> Friend.GetExports() {
-            var result = new List<object>();
-            var startIndex = attachEvents.Count - 1;
-            for (var anc = this; anc != null; startIndex = anc.Coords.Top, anc = anc.parent) {
-                for (var i = startIndex; i >= 0; i--) {
-                    var evt = anc.attachEvents[i];
-                    if (evt.Type == AttachRecord.Kind.Export) result.Add(evt.AsObj);
-                }
-            }
-            return result;
-        }
         protected abstract TickBlock Init(EpochBuilder s);
         internal struct EpochMutations {
             Epoch owner;
@@ -264,80 +253,66 @@ namespace Spoke {
     // ============================== Dock ============================================================
     public class Dock : Epoch, Dock.Introspect {
         new internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
-        Dictionary<object, DockedTree> dynamicChildren = new();
+        Dictionary<object, DockedScheduler> dynamicChildren = new();
         bool isDetaching;
         long siblingCounter;
-        List<object> scope = new();
-        OrderedWorkStack<DockedTree> pending = new((a, b) => b.CompareTo(a));
-        Action<DockedTree> schedule;
+        OrderedWorkStack<DockedScheduler> pending = new((a, b) => b.CompareTo(a));
+        Action<DockedScheduler> schedule;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
         public T Call<T>(object key, T epoch) where T : Epoch {
-            Mount(key, new SpokeTree(epoch));
-            return epoch;
-        }
-        public void Mount(object key, SpokeTree tree) {
             if (isDetaching) throw new Exception("Cannot Call while detaching");
             Drop(key);
-            dynamicChildren.Add(key, new DockedTree(this, tree, siblingCounter++));
+            dynamicChildren.Add(key, new DockedScheduler(this, siblingCounter++, epoch));
             dynamicChildren[key].Bootstrap();
+            return epoch;
         }
         public void Drop(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
-            child.Dispose();
+            (child.Epoch as Epoch.Friend).DetachFrom(0);
             dynamicChildren.Remove(key);
         }
         protected override TickBlock Init(EpochBuilder s) {
-            scope = (this as Epoch.Friend).GetExports();
             schedule = (engine) => { pending.Enqueue(engine); s.RequestTick(); };
             s.OnCleanup(() => {
                 isDetaching = true;
-                var orderedChildren = GetOrderedChildren(new());
-                for (int i = orderedChildren.Count - 1; i >= 0; i--) orderedChildren[i].Dispose();
+                var orderedChildren = (this as Introspect).GetChildren();
+                for (int i = orderedChildren.Count - 1; i >= 0; i--) (orderedChildren[i] as Epoch.Friend).DetachFrom(0);
                 dynamicChildren.Clear();
             });
             return s => {
                 if (!pending.Has) return;
                 pending.Take();
-                bool hasMore = false;
                 try {
-                    hasMore = pending.Peek().Tick();
+                    (pending.Pop().Epoch as Epoch.Friend).Tick();
                 } catch (SpokeException se) {
                     se.SkipMarkFaulted = true;
                     throw;
                 } finally {
-                    if (!hasMore) pending.Pop();
                     if (pending.Has) s.RequestTick();
                 }
             };
         }
-        List<DockedTree> GetOrderedChildren(List<DockedTree> storeIn) {
-            foreach (var r in dynamicChildren) storeIn.Add(r.Value);
-            storeIn.Sort((a, b) => a.CompareTo(b));
-            return storeIn;
-        }
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
-            foreach (var c in GetOrderedChildren(new())) storeIn.Add(c.Tree);
+            var docked = new List<DockedScheduler>();
+            foreach (var child in dynamicChildren) docked.Add(child.Value);
+            docked.Sort();
+            foreach (var x in docked) storeIn.Add(x.Epoch);
             return storeIn;
         }
-        class DockedTree : IComparable<DockedTree> {
-            Dock dock; long idx; Func<bool> tickCommand; SpokeTree.Handle handle;
-            public SpokeTree Tree { get; private set; }
-            public DockedTree(Dock dock, SpokeTree tree, long idx) { this.dock = dock; this.Tree = tree; this.idx = idx; }
-            public int CompareTo(DockedTree other) => idx.CompareTo(other.idx);
-            public bool Tick() => tickCommand?.Invoke() ?? false;
-            public void Bootstrap() {
-                handle = Tree.Claim();
-                (handle as SpokeTree.Handle.Friend).PrependServices(dock.scope);
-                handle.Bootstrap(s => {
-                    tickCommand = () => { s.RequestTick(); return s.HasPending; };
-                    s.OnCleanup(() => tickCommand = null);
-                    s.OnHasPending(() => dock.schedule(this));
-                    s.OnTick(s => s.RunNext());
-                });
+        class DockedScheduler : Epoch.Scheduler, IComparable<DockedScheduler> {
+            Dock dock; long idx; 
+            public Epoch Epoch { get; }
+            public DockedScheduler(Dock dock, long idx, Epoch epoch) {
+                this.dock = dock; this.idx = idx; this.Epoch = epoch;
             }
-            public void Dispose() => handle?.Dispose();
+            public int CompareTo(DockedScheduler other) {
+                var cmp1 = idx.CompareTo(other.idx);
+                return cmp1 != 0 ? cmp1 : Epoch.CompareTo(other.Epoch);
+            }
+            public void Bootstrap() => (Epoch as Epoch.Friend).Attach(dock, default, this, null);
+            void Epoch.Scheduler.Schedule(Epoch epoch) => dock.schedule(this);
         }
     }
     // ============================== SpokeEngine ============================================================
