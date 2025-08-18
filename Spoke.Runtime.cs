@@ -195,7 +195,7 @@ namespace Spoke {
                 NoMischief();
                 if (epoch.parent != null) throw new InvalidOperationException("Tried to attach an epoch which was already attached");
                 owner.attachEvents.Add(new AttachRecord(AttachRecord.Kind.Call, epoch));
-                if (owner is Scheduler sc) (epoch as Friend).Attach(owner, default, sc, null);
+                if (owner is Scheduler sc) (epoch as Friend).Attach(owner, owner.Coords.Extend(owner.attachEvents.Count - 1), sc, null);
                 else (epoch as Friend).Attach(owner, owner.Coords.Extend(owner.attachEvents.Count - 1), owner.scheduler, null);
                 return epoch;
             }
