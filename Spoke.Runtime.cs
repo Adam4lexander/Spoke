@@ -65,7 +65,11 @@ namespace Spoke {
         public class Handle : IDisposable, Handle.Friend {
             internal interface Friend { void PrependServices(IEnumerable<object> services); }
             SpokeTree owner;
-            internal Handle(SpokeTree owner) { this.owner = owner; }
+            Action detachAll;
+            internal Handle(SpokeTree owner) { 
+                this.owner = owner;
+                detachAll = () => (owner as Epoch.Friend).DetachFrom(0);
+            }
             void Friend.PrependServices(IEnumerable<object> services) {
                 var next = new List<object>();
                 next.AddRange(services);
@@ -79,7 +83,7 @@ namespace Spoke {
                 owner.bootstrapBlock = block;
                 (owner as Epoch.Friend).Attach(null, owner.services);
             }
-            public void Dispose() { NoMischief(); (owner as Epoch.Friend).Detach(); }
+            public void Dispose() { NoMischief(); (owner as Epoch.Friend).GetControlHandle().OnPopSelf(detachAll); }
             void NoMischief() { if (owner.handle != this) throw new Exception("Stop right there Maverick"); }
         }
     }
@@ -90,7 +94,7 @@ namespace Spoke {
     /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        internal interface Friend { void Attach(Epoch parent, IEnumerable<object> services = null); void Tick(); void Detach(); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
+        internal interface Friend { void Attach(Epoch parent, IEnumerable<object> services = null); void Tick(); void DetachFrom(int i); List<object> GetExports(); ControlStack.Handle GetControlHandle(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -103,44 +107,38 @@ namespace Spoke {
                 if (Type == Kind.Cleanup) try { (AsObj as Action)?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{that}'", e); }
                 if (Type == Kind.Handle) Handle.Dispose();
                 if (Type == Kind.Use) try { (AsObj as IDisposable).Dispose(); } catch (Exception e) { SpokeError.Log($"Dispose failed in '{that}'", e); }
-                if (Type == Kind.Call) try { (AsObj as Epoch).DetachFrom(0); that.siblingCounter--; } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
+                if (Type == Kind.Call) try { (AsObj as Epoch).DetachFrom(0); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
             }
         }
         List<AttachRecord> attachEvents = new();
-        long siblingCounter;
         public TreeCoords Coords { get; private set; }
         Epoch parent;
-        int attachIndex, tickAttachStart = -1, detachFrom = int.MaxValue;
+        int tickAttachStart = -1;
         SpokeEngine engine;
         TickBlock tickBlock;
         ControlStack.Handle controlHandle;
-        Action _detach, _requestTick;
+        Action _requestTick;
         protected string Name = null;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => Coords.CompareTo(other.Coords);
         void DetachFrom(int i) {
             if (i < 0 || i >= attachEvents.Count) return;
-            var isReentrant = detachFrom < int.MaxValue;
-            detachFrom = Math.Min(detachFrom, i);
-            if (isReentrant) return;
-            while (attachEvents.Count > detachFrom) {
+            while (attachEvents.Count > i) {
                 attachEvents[attachEvents.Count - 1].Detach(this);
                 attachEvents.RemoveAt(attachEvents.Count - 1);
             }
             tickAttachStart = Math.Min(tickAttachStart, attachEvents.Count);
-            detachFrom = int.MaxValue;
         }
+        void Friend.DetachFrom(int i) => DetachFrom(i);
         void Friend.Attach(Epoch parent, IEnumerable<object> services) {
-            _detach = Detach;
             _requestTick = () => {
                 if (Fault != null) return;
                 if (engine == null) (this as Epoch.Friend).Tick();
                 else (engine as SpokeEngine.Friend).Schedule(this);
             };
             this.parent = parent;
-            Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.siblingCounter++);
-            attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
+            Coords = (parent == null || parent is SpokeEngine) ? default : parent.Coords.Extend(parent.attachEvents.Count - 1);
             engine = (parent as SpokeEngine) ?? parent?.engine;
             Init(services);
         }
@@ -178,12 +176,7 @@ namespace Spoke {
                 (ControlStack.Local as ControlStack.Friend).Pop();
             }
         }
-        void Friend.Detach() => controlHandle.OnPopSelf(_detach);
         ControlStack.Handle Friend.GetControlHandle() => controlHandle;
-        void Detach() {
-            if (parent != null && attachIndex >= 0) parent.DetachFrom(attachIndex);
-            else DetachFrom(0);
-        }
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
@@ -193,7 +186,7 @@ namespace Spoke {
         List<object> Friend.GetExports() {
             var result = new List<object>();
             var startIndex = attachEvents.Count - 1;
-            for (var anc = this; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+            for (var anc = this; anc != null; startIndex = anc.Coords.Top, anc = anc.parent) {
                 for (var i = startIndex; i >= 0; i--) {
                     var evt = anc.attachEvents[i];
                     if (evt.Type == AttachRecord.Kind.Export) result.Add(evt.AsObj);
@@ -226,7 +219,7 @@ namespace Spoke {
             public bool TryImport<T>(out T obj) {
                 obj = default(T);
                 var startIndex = owner.attachEvents.Count - 1;
-                for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+                for (var anc = owner; anc != null; startIndex = anc.Coords.Top, anc = anc.parent) {
                     for (var i = startIndex; i >= 0; i--) {
                         var evt = anc.attachEvents[i];
                         if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) {
@@ -538,10 +531,11 @@ namespace Spoke {
     /// execution order. This struct is the slow but robust fallback in case it doesn't fit into PackedTree128
     /// </summary>
     public struct TreeCoords : IComparable<TreeCoords> {
-        List<long> coords;
+        List<int> coords;
         PackedTreeCoords128 packed;
-        public TreeCoords Extend(long idx) {
-            var next = new TreeCoords { coords = new List<long>() };
+        public int Top => (coords == null || coords.Count == 0) ? 0 : coords[coords.Count - 1];
+        public TreeCoords Extend(int idx) {
+            var next = new TreeCoords { coords = new List<int>() };
             if (coords != null) next.coords.AddRange(coords);
             next.coords.Add(idx);
             next.packed = PackedTreeCoords128.Pack(next.coords);
@@ -570,7 +564,7 @@ namespace Spoke {
         public PackedTreeCoords128(ulong hi, ulong lo, byte depth) { this.hi = hi; this.lo = lo; this.depth = depth; }
         public static PackedTreeCoords128 Invalid => new PackedTreeCoords128(0, 0, byte.MaxValue);
         public bool IsValid => depth < byte.MaxValue;
-        public static PackedTreeCoords128 Pack(List<long> coords) {
+        public static PackedTreeCoords128 Pack(List<int> coords) {
             if (coords == null || coords.Count > 16) return Invalid;
             ulong hi = 0, lo = 0;
             for (int i = 0; i < coords.Count; i++) {
