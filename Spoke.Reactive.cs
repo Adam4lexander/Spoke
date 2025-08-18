@@ -266,13 +266,9 @@ namespace Spoke {
     // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
     public class FlushEngine : SpokeEngine {
-        public static FlushEngine Global { get; } = new FlushEngine("Global FlushEngine");
-        static IDisposable globalRoot = new SpokeTree("Global Tree", Global).Bootstrap();
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
         Epoch epoch;
-        Dock dock;
-        long idCounter;
         public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate) {
             Name = name;
             this.epoch = epoch;
@@ -281,13 +277,6 @@ namespace Spoke {
         public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this(name, new Effect("Root", block), flushMode) { }
         public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate) : this(name, (Epoch)null, flushMode) { }
         public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this("FlushEngine", block, flushMode) { }
-        public SpokeHandle AddFlushZone(EffectBlock init, FlushMode flushMode = FlushMode.Immediate, params object[] services) => AddFlushZone("FlushZone", init, flushMode);
-        public SpokeHandle AddFlushZone(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, params object[] services) {
-            var id = idCounter++;
-            var subEngine = new FlushEngine(name, new ZoneInit(init), flushMode);
-            dock.Call(id, subEngine);
-            return SpokeHandle.Of(id, id => dock.Drop(id));
-        }
         protected override Epoch Bootstrap(EngineBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
             flushCommand = () => s.RequestTick();
@@ -315,30 +304,12 @@ namespace Spoke {
                 if (faultedSet.Count > 0) FlushLogger.LogFlush(logger, this, faultedSet, $"Faults occurred during flush");
                 faultedSet.Clear();
             });
-            dock = new Dock("Zones");
-            s.OnCleanup(() => dock = null);
-            if (epoch == null) return dock;
-            return new LambdaEpoch("Roots", s => {
-                if (epoch != null) s.Call(epoch);
-                s.Call(dock);
-                return null;
-            });
+            return epoch;
         }
         public void Flush() => flushCommand?.Invoke();
         public static void Batch(Action action) {
             FlushStack.Hold();
             try { action(); } finally { FlushStack.Release(); }
-        }
-        class ZoneInit : Epoch {
-            EffectBlock block;
-            public ZoneInit(EffectBlock block) { this.block = block; }
-            protected override TickBlock Init(EpochBuilder s) {
-                Action<ITrigger> addDynamicTrigger = _ => {
-                    throw new InvalidOperationException("Cannot call D() from flush zone initializer");
-                };
-                block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
-                return null;
-            }
         }
     }
     // ============================== FlushStack ============================================================

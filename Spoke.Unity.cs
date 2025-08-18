@@ -60,7 +60,8 @@ namespace Spoke {
         public ISignal<bool> IsAwake => isAwake;
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
-        SpokeHandle root, sceneTeardown, appTeardown;
+        SpokeHandle sceneTeardown, appTeardown;
+        SpokeTree root;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
             DoInit();
@@ -69,7 +70,7 @@ namespace Spoke {
             DoTeardown();
         }
         protected virtual void OnEnable() {
-            if (root == default) DoInit(); // Domain reload may not run Awake
+            if (root == null) DoInit(); // Domain reload may not run Awake
             isEnabled.Set(true);
         }
         protected virtual void OnDisable() {
@@ -79,7 +80,8 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = FlushEngine.Global.AddFlushZone($"{GetType().Name}", Init, FlushMode.Immediate, new UnitySpokeLogger(this));
+            root = new SpokeTree($"{GetType().Name}:Tree", new FlushEngine($"{GetType().Name}:FlushEngine", Init, FlushMode.Immediate), new UnitySpokeLogger(this));
+            root.Bootstrap();
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
@@ -91,7 +93,7 @@ namespace Spoke {
             // it will be serialized as disabled on each reload.
             if (Application.isPlaying) enabled = false;
             isEnabled.Set(false);
-            root.Dispose();
+            root?.Dispose();
             root = default;
             isAwake.Set(false);
         }
