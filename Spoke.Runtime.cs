@@ -29,63 +29,35 @@ namespace Spoke {
     /// <summary>
     /// The SpokeTree hosts the root Engine of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
-    public sealed class SpokeTree : SpokeEngine {
+    public sealed class SpokeTree : SpokeEngine, IDisposable {
         Epoch epoch;
         object[] services;
-        Action<EngineBuilder> bootstrapBlock;
-        Handle handle;
+        RootScheduler scheduler;
+        Action detachAll;
         public SpokeTree(Epoch epoch, params object[] services) : this("SpokeTree", epoch, services) { }
         public SpokeTree(string name, Epoch epoch, params object[] services) {
             Name = name;
             this.epoch = epoch;
             this.services = services;
+            detachAll = () => (this as Epoch.Friend).DetachFrom(0);
         }
-        public Handle Claim() {
-            if (handle != null) throw new Exception($"{GetType().Name} has already been claimed");
-            return handle = new Handle(this);
-        }
-        public IDisposable Bootstrap() {
-            Claim();
-            try {
-                handle.Bootstrap(s => {
-                    s.OnHasPending(() => s.RequestTick());
-                    s.OnTick(s => { while (s.HasPending) s.RunNext(); });
-                });
-            } catch (Exception e) {
-                SpokeError.Log($"Failed to start {GetType().Name}: {this}, will dispose", e);
-                handle.Dispose();
-            }
-            return handle;
+        public SpokeTree Bootstrap() {
+            if (scheduler != null) throw new Exception($"{GetType().Name} already bootstrapped");
+            scheduler = new RootScheduler();
+            (this as Epoch.Friend).Attach(null, default, scheduler, services);
+            return this;
         }
         protected override Epoch Bootstrap(EngineBuilder s) {
-            if (bootstrapBlock == null) throw new Exception($"{GetType().Name} cannot be attached with Call()");
-            bootstrapBlock(s);
+            if (scheduler == null) throw new Exception($"{GetType().Name} cannot be attached with Call()");
+            s.OnHasPending(() => s.RequestTick());
+            s.OnTick(s => { while (s.HasPending) s.RunNext(); });
             return epoch;
         }
-        public class Handle : IDisposable, Handle.Friend, Epoch.Scheduler {
-            internal interface Friend { void PrependServices(IEnumerable<object> services); }
-            SpokeTree owner;
-            Action detachAll;
-            internal Handle(SpokeTree owner) { 
-                this.owner = owner;
-                detachAll = () => (owner as Epoch.Friend).DetachFrom(0);
+        public void Dispose() => (this as Epoch.Friend).GetControlHandle().OnPopSelf(detachAll);
+        class RootScheduler : Epoch.Scheduler {
+            void Epoch.Scheduler.Schedule(Epoch epoch) {
+                (epoch as Epoch.Friend).Tick();
             }
-            void Friend.PrependServices(IEnumerable<object> services) {
-                var next = new List<object>();
-                next.AddRange(services);
-                next.AddRange(owner.services);
-                owner.services = next.ToArray();
-            }
-            void Epoch.Scheduler.Schedule(Epoch epoch) => (epoch as Epoch.Friend).Tick();
-            public void Bootstrap(Action<EngineBuilder> block) {
-                NoMischief();
-                if (owner.bootstrapBlock != null) throw new Exception($"{owner.GetType().Name} already bootstrapped");
-                if (block == null) throw new Exception($"{owner.GetType().Name} must be passed a bootstrap function");
-                owner.bootstrapBlock = block;
-                (owner as Epoch.Friend).Attach(null, default, this, owner.services);
-            }
-            public void Dispose() { NoMischief(); (owner as Epoch.Friend).GetControlHandle().OnPopSelf(detachAll); }
-            void NoMischief() { if (owner.handle != this) throw new Exception("Stop right there Maverick"); }
         }
     }
     // ============================== Epoch ============================================================
