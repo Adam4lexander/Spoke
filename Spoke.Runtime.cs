@@ -233,7 +233,6 @@ namespace Spoke {
             runtime = new(this);
             var root = Bootstrap(new EngineBuilder(s, runtime));
             runtime.Seal();
-            s.Export(this);
             s.Call(root);
             return s => runtime.TriggerTick(s);
         }
