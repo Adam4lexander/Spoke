@@ -44,7 +44,7 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 Let's look at a simple Spoke program:
 
 ```cs
-SpokeRoot.Create(new FlushEngine(s => {
+SpokeRuntime.SpawnTree(new FlushEngine(s => {
     s.Effect("1", s => {
         s.Effect("11", s => {
             s.Effect("111", s => { });
@@ -167,7 +167,7 @@ Node `2` still exists in the tree, it's still 'attached', but its been unmounted
 When a node is mounted, it attaches sub-nodes that are scheduled and mounted later. They're not mounted within the same call-stack frame. This has some subtle consequences to be aware of:
 
 ```cs
-SpokeRoot.Create(new FlushEngine(s => {
+SpokeRuntime.SpawnTree(new FlushEngine(s => {
 
     var number = 5;
     s.Effect(s => number = 10);
@@ -274,7 +274,7 @@ public class MyCustomEpoch : Epoch {
 You can attach the custom epoch into the call-tree by 'calling' it from a parent epoch:
 
 ```cs
-SpokeRoot.Create(new FlushEngine(s => {
+SpokeRuntime.SpawnTree(new FlushEngine(s => {
     var myEpoch = s.Call(new MyCustomeEpoch()); // Attaches to the tree and returns the epoch instance
     Debug.Log(myEpoch.IsAttached);              // Prints: true
 }));
