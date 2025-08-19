@@ -344,22 +344,16 @@ namespace Spoke {
         void Friend.Release() { holdCount--; if (holdCount == 0) TryFlush(); }
         void Schedule(SpokeTreeImpl tree) {
             var isBootstrap = frames.Count > 0 && frames[frames.Count - 1].Type == FrameKind.Bootstrap;
-            if (isBootstrap && tree.Layer <= layer) TickTree(tree);
+            if (isBootstrap && tree.Layer <= layer) { TickTree(tree); }
             else { scheduledTrees.Enqueue(tree); TryFlush(); }
         }
         void TryFlush() {
             if (holdCount > 0 || !scheduledTrees.Has) return;
-            scheduledTrees.Take();
-            if (scheduledTrees.Peek().Layer < layer) Flush(scheduledTrees.Peek().Layer);
-        }
-        void Flush(int layer) {
-            var storeLayer = this.layer; this.layer = layer;
-            while (scheduledTrees.Has) {
+            do {
                 scheduledTrees.Take();
-                if (scheduledTrees.Peek().Layer > layer) break;
+                if (scheduledTrees.Peek().Layer >= layer) return;
                 TickTree(scheduledTrees.Pop());
-            }
-            this.layer = storeLayer;
+            } while (scheduledTrees.Has);
         }
         void TickTree(SpokeTreeImpl tree) {
             var storeLayer = layer; layer = tree.Layer;
