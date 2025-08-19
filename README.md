@@ -123,7 +123,7 @@ public class MyBehaviour : SpokeBehaviour {
 
 ## ⚙️ Prefer manual control?
 
-You can also create a `SpokeEngine` manually in any `MonoBehaviour`:
+You can also create a `FlushEngine` manually in any `MonoBehaviour`:
 
 ```csharp
 using Spoke;
@@ -131,21 +131,21 @@ using Spoke;
 public class MyBehaviour : MonoBehaviour {
 
     State<bool> isEnabled = State.Create(false);
-    SpokeHandle handle;
+    SpokeTree<FlushEngine> tree;
 
     void Awake() {
-        // A SpokeEngine is the execution scheduler for the reactive objects it contains
-        handle = FlushEngine.Global.AddFlushZone("MyFlushZone", s => {
+        // A FlushEngine is the execution scheduler for the reactive objects it contains
+        tree = SpokeRuntime.SpawnTree(new FlushEngine(s => {
             s.Phase(isEnabled, s => {
                 // OnEnable logic
                 s.OnCleanup(() => {
                     // OnDisable logic
                 });
             });
-        });
+        }));
     }
 
-    void OnDestroy() => handle.Dispose();
+    void OnDestroy() => tree.Dispose();
 
     void OnEnable() => isEnabled.Set(true);
     void OnDisable() => isEnabled.Set(false);

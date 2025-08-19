@@ -39,7 +39,7 @@ First let's see the problem it's trying to solve:
 var className = State.Create("Warrior");
 var level = State.Create(1);
 
-FlushEngine.Global.AddFlushZone(s => {
+SpokeRuntime.SpawnTree(new FlushEngine(s => {
     s.Effect(s => {
         Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
     });
@@ -55,7 +55,7 @@ Result: **3 flushes, 3 recomputations, 3 logs.**
 Now let’s say you want to update both values together, and flush only once:
 
 ```csharp
-FlushEngine.Batch(() => {
+SpokeRuntime.Batch(() => {
     className.Set("Paladin");
     level.Set(2);
 });                       // Prints: class: Paladin, lvl: 2
