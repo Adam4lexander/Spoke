@@ -61,7 +61,7 @@ namespace Spoke {
         public ISignal<bool> IsEnabled => isEnabled;
         public ISignal<bool> IsStarted => isStarted;
         SpokeHandle sceneTeardown, appTeardown;
-        SpokeTree root;
+        SpokeTree<SpokeEngine> root;
         protected abstract void Init(EffectBuilder s);
         protected virtual void Awake() {
             DoInit();
@@ -80,8 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = new SpokeTree($"{GetType().Name}:Tree", new FlushEngine($"{GetType().Name}:FlushEngine", Init, FlushMode.Immediate), new UnitySpokeLogger(this));
-            root.Bootstrap();
+            root = SpokeRuntime.SpawnTree(new FlushEngine($"{GetType().Name}:FlushEngine", Init, FlushMode.Immediate), new UnitySpokeLogger(this));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);

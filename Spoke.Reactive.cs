@@ -9,8 +9,6 @@
 // > Effect<T>
 // > Memo
 // > FlushEngine
-// > FlushStack
-// > MicrotaskQueue
 // > Computation
 // > DependencyTracker
 // > FlushLogger
@@ -50,18 +48,18 @@ namespace Spoke {
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
         Action<long> _Unsub;
+        Action _Flush;
         long idCount = 0;
         bool isFlushing;
-        public Trigger() { _Unsub = Unsub; }
+        public Trigger() { _Unsub = Unsub; _Flush = Flush; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(Subscription.Create(idCount++, action));
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(Subscription.Create(idCount++, action));
         public override void Invoke() => Invoke(default(T));
-        public void Invoke(T param) { events.Enqueue(param); Flush(); }
+        public void Invoke(T param) { events.Enqueue(param); SpokeRuntime.Batch(_Flush); }
         public override void Unsubscribe(Action action) => Unsub(action);
         public void Unsubscribe(Action<T> action) => Unsub(action);
         void Flush() {
             if (isFlushing) return;
-            FlushStack.Hold();
             isFlushing = true;
             while (events.Count > 0) {
                 var evt = events.Dequeue();
@@ -73,7 +71,6 @@ namespace Spoke {
                 subListPool.Return(subList);
             }
             isFlushing = false;
-            FlushStack.Release();
         }
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
@@ -286,7 +283,6 @@ namespace Spoke {
             });
             var faultedSet = new HashSet<Epoch>();
             s.OnTick(s => {
-                if (!FlushStack.TryAllowFlush(flushCommand)) return;
                 const long maxPasses = 1000;
                 var passCount = 0;
                 Epoch prev = null;
@@ -294,7 +290,7 @@ namespace Spoke {
                     if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                     try {
                         var next = s.PeekNext();
-                        if (prev != null && prev.CompareTo(next) > 0) passCount++;
+                        if (prev != null && prev.CompareTo(next) >= 0) passCount++;
                         prev = next;
                         s.RunNext();
                     } catch (SpokeException se) {
@@ -307,60 +303,6 @@ namespace Spoke {
             return epoch;
         }
         public void Flush() => flushCommand?.Invoke();
-        public static void Batch(Action action) {
-            FlushStack.Hold();
-            try { action(); } finally { FlushStack.Release(); }
-        }
-    }
-    // ============================== FlushStack ============================================================
-    internal static class FlushStack {
-        static SpokePool<MicrotaskQueue> dqPool = SpokePool<MicrotaskQueue>.Create(dq => { });
-        static Stack<MicrotaskQueue> dqStack = new Stack<MicrotaskQueue>();
-        public static void Hold() {
-            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) {
-                dqStack.Push(dqPool.Get());
-            }
-            dqStack.Peek().FastHold();
-        }
-        public static bool TryAllowFlush(Action deferOnHold) {
-            if (dqStack.Count == 0 || dqStack.Peek().IsDraining) {
-                return true;
-            }
-            dqStack.Peek().Enqueue(deferOnHold);
-            return false;
-        }
-        public static void Release() {
-            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) throw new InvalidOperationException("[FlushStack] Cannot release");
-            dqStack.Peek().FastRelease();
-            if (!dqStack.Peek().IsHolding) dqPool.Return(dqStack.Pop());
-        }
-    }
-    // ============================== MicrotaskQueue ============================================================
-    internal class MicrotaskQueue {
-        long holdIdx;
-        HashSet<long> holdKeys = new HashSet<long>();
-        Queue<Action> queue = new Queue<Action>();
-        Action<long> _release;
-        long holdCount;
-        public bool IsDraining { get; private set; }
-        public bool IsHolding => holdCount > 0;
-        public MicrotaskQueue() { _release = Release; }
-        public SpokeHandle Hold() {
-            if (holdKeys.Add(holdIdx)) FastHold();
-            return SpokeHandle.Of(holdIdx++, _release);
-        }
-        void Release(long key) { if (holdKeys.Remove(key)) FastRelease(); }
-        public void FastHold() => holdCount++;
-        public void FastRelease() { if (--holdCount == 0 && !IsDraining) Drain(); }
-        public void Enqueue(Action action) {
-            queue.Enqueue(action);
-            if (holdCount == 0 && !IsDraining) Drain();
-        }
-        void Drain() {
-            IsDraining = true;
-            while (queue.Count > 0) queue.Dequeue()();
-            IsDraining = false;
-        }
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
