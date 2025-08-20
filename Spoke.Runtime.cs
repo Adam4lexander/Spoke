@@ -71,8 +71,7 @@ namespace Spoke {
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => Coords.CompareTo(other.Coords);
         void DetachFrom(int i) {
-            if (i < 0 || i >= attachEvents.Count) return;
-            while (attachEvents.Count > i) {
+            while (attachEvents.Count > Math.Max(i, 0)) {
                 attachEvents[attachEvents.Count - 1].Detach(this);
                 attachEvents.RemoveAt(attachEvents.Count - 1);
             }
@@ -301,7 +300,6 @@ namespace Spoke {
         EpochBuilder s;
         SpokeEngine.Runtime r;
         internal EngineBuilder(EpochBuilder s, SpokeEngine.Runtime es) { this.s = s; this.r = es; }
-        public bool HasPending => r.HasPending;
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Export<T>(T obj) => s.Export(obj);
