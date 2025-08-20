@@ -224,11 +224,19 @@ namespace Spoke {
             (child as Epoch.Friend).Detach();
             dynamicChildren.Remove(key);
         }
-        protected override TickBlock Init(EpochBuilder s) { s.OnCleanup(() => isDetaching = true); return null; }
+        protected override TickBlock Init(EpochBuilder s) {
+            s.OnCleanup(() => {
+                isDetaching = true;
+                var children = (this as Introspect).GetChildren();
+                for (int i = children.Count - 1; i >= 0; i--) (children[i] as Epoch.Friend).Detach();
+                dynamicChildren.Clear();
+            });
+            return null;
+        }
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var child in dynamicChildren) storeIn.Add(child.Value);
-            storeIn.Sort();
+            storeIn.Sort((a, b) => a.CompareTo(b));
             return storeIn;
         }
     }
