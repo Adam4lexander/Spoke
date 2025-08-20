@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.3 - 2025-08-20
+
+Many big changes in `Spoke.Runtime`, although the `Spoke.Reactive` APIs are unchanged. This release adds better logging, a virtual Spoke stack trace, and introspection abilities. The global flush engine from the previous release has been removed. I found a way to make nested flushes safe and predictable.
+
+Nested flushes are very useful in the context of Unity. If one `SpokeBehaviour` instantiates another, its intuitive that the new behaviour will flush immediately to initialize itself. Therefore this release adds some rules where a nested flush is allowed:
+
+- Trees are divided by priority layers, where higher priorities can flush nested in lower priorities. The layer is decided by calling `SpokeRuntime.SpawnTree` or `SpokeRuntime.SpawnEagerTree`.
+- When a `SpokeTree` is created during the flush of another, it's allowed to flush once, inside the existing flush. But only if it's on an equal or higher priority layer.
+- In all other cases trees are deferred and flushed in the order they were created. Each tree is assigned a timestamp at creation time.
+
+These rules enforce a strict, one-way decision when a nested flush can occur. If A can be nested in B, then B cannot be nested in A.
+
+Changelist:
+
+- `SpokeRuntime` is the global orchestrator for Spoke trees. It's a static class which exposes capability to spawn trees and batching updates.
+- A virtual stack is implemented and exposed in `SpokeRuntime`. Spoke produces stack frames when epochs are initialized and ticked.
+- Improved logging will print a virtual stack trace in tree-form. So execution flow across the tree structure is apparent.
+- `SpokeIntrospect` provides functions for traversing the epoch tree, which could be used in visualizations.
+- `FlushLogger` has been removed and replaced with error logging that shows the Spoke stack.
+- `SpokeException` is propagated up the Spoke tree, with a snapshot of the Spoke stack at the point of failure.
+- Removed `FlushEngine.Batch` (Now in SpokeRuntime), `FlushEngine.Global` and `FlushEngine.AddFlushRegion`.
+
 ## 1.1.2 - 2025-08-14
 
 This release focuses on `FlushEngine` (previously SpokeEngine), and the choice to have a global engine for all behaviours, or each behaviour having its own. In past releases, every `SpokeBehaviour` had its own `FlushEngine`. This lets an engine flush, and during its flush trigger another to engine flush, resulting in a nested flush. This is powerful, but dangerous if not careful. The default now is a single global `FlushEngine` at the root of all `SpokeBehaviour` engines, so only one can flush at a time.
