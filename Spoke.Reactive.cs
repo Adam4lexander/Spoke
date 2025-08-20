@@ -11,12 +11,9 @@
 // > FlushEngine
 // > Computation
 // > DependencyTracker
-// > FlushLogger
 
-using Spoke;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Spoke {
 
@@ -186,6 +183,7 @@ namespace Spoke {
         public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        public void Log(string msg) => s.Log(msg);
     }
     // ============================== Effect ============================================================
     public class Effect : BaseEffect {
@@ -277,16 +275,16 @@ namespace Spoke {
         protected override Epoch Bootstrap(EngineBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
             flushCommand = () => s.RequestTick();
+            var isStopped = false;
             s.OnCleanup(() => flushCommand = null);
             s.OnHasPending(() => {
                 if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
             });
-            var faultedSet = new HashSet<Epoch>();
             s.OnTick(s => {
                 const long maxPasses = 1000;
                 var passCount = 0;
                 Epoch prev = null;
-                while (s.HasPending) {
+                while (!isStopped && s.HasPending) {
                     if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                     try {
                         var next = s.PeekNext();
@@ -294,11 +292,11 @@ namespace Spoke {
                         prev = next;
                         s.RunNext();
                     } catch (SpokeException se) {
-                        faultedSet.Add(se.StackSnapshot[se.StackSnapshot.Count - 1].Epoch);
+                        logger?.Error($"FLUSH ERROR\n->A fault occurred during flush. Stopping.\n\n{se}");
+                        Name = $"{Name} [Stopped]";
+                        isStopped = true;
                     }
                 }
-                if (faultedSet.Count > 0) FlushLogger.LogFlush(logger, this, faultedSet, $"Faults occurred during flush");
-                faultedSet.Clear();
             });
             return epoch;
         }
@@ -366,35 +364,5 @@ namespace Spoke {
             staticHandles.Clear(); dynamicHandles.Clear();
         }
         Action ScheduleFromIndex(int index) => () => { if (index < depIndex) schedule(); };
-    }
-}
-// ============================== FlushLogger ============================================================
-public static class FlushLogger {
-    static StringBuilder sb = new();
-    public static void LogFlush(ISpokeLogger logger, Epoch root, HashSet<Epoch> faulted, string msg) {
-        sb.Clear();
-        var hasErrors = faulted.Count > 0;
-        sb.AppendLine($"[{(hasErrors ? "FLUSH ERROR" : "FLUSH")}]");
-        foreach (var line in msg.Split(',')) sb.AppendLine($"-> {line}");
-        PrintRoot(root, faulted);
-        if (hasErrors) { PrintErrors(faulted); logger?.Error(sb.ToString()); } else logger?.Log(sb.ToString());
-    }
-    static void PrintErrors(HashSet<Epoch> ticked) {
-        foreach (var c in ticked)
-            if (c.Fault != null) sb.AppendLine($"\n\n--- {NodeLabel(c, ticked.Contains(c))} ---\n{c.Fault}");
-    }
-    static void PrintRoot(Epoch root, HashSet<Epoch> faulted) {
-        sb.AppendLine();
-        SpokeIntrospect.Traverse(root, (depth, x) => {
-            for (int i = 0; i < depth; i++) sb.Append("    ");
-            sb.Append($"{NodeLabel(x, faulted.Contains(x))}");
-            if (x.Fault != null) sb.Append($"[Faulted{(faulted.Contains(x) ? ": " + x.Fault.InnerException.GetType().Name : "")}]");
-            sb.Append("\n");
-            return true;
-        });
-    }
-    static string NodeLabel(Epoch node, bool wasFaulted) {
-        var prefix = wasFaulted ? "(*)-" : "";
-        return $"|--{prefix}{node} ";
     }
 }

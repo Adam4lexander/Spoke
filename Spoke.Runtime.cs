@@ -6,13 +6,13 @@
 // > Dock
 // > SpokeEngine
 // > SpokeRuntime
+// > SpokeIntrospect
 // > SpokeException
 // > OrderedWorkStack
 // > TreeCoords
 // > PackedTreeCoords128
 // > SpokeHandle
 // > SpokeLogger
-// > SpokeIntrospect
 // > SpokePool
 // > ReadOnlyList
 
@@ -41,7 +41,7 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
         internal interface Scheduler { void Schedule(Epoch epoch); }
-        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void DetachFrom(int i); SpokeRuntime.Handle GetControlHandle(); Scheduler GetScheduler(); }
+        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void Detach(); SpokeRuntime.Handle GetControlHandle(); Scheduler GetScheduler(); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -54,7 +54,7 @@ namespace Spoke {
                 if (Type == Kind.Cleanup) try { (AsObj as Action)?.Invoke(); } catch (Exception e) { SpokeError.Log($"Cleanup failed in '{that}'", e); }
                 if (Type == Kind.Handle) Handle.Dispose();
                 if (Type == Kind.Use) try { (AsObj as IDisposable).Dispose(); } catch (Exception e) { SpokeError.Log($"Dispose failed in '{that}'", e); }
-                if (Type == Kind.Call) try { (AsObj as Epoch).DetachFrom(0); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
+                if (Type == Kind.Call) try { (AsObj as Epoch.Friend).Detach(); } catch (Exception e) { SpokeError.Log($"Failed to cleanup child of '{that}': {AsObj}", e); }
             }
         }
         List<AttachRecord> attachEvents = new();
@@ -65,6 +65,7 @@ namespace Spoke {
         TickBlock tickBlock;
         SpokeRuntime.Handle controlHandle;
         Action _requestTick;
+        bool isDetached;
         protected string Name = null;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
@@ -77,7 +78,7 @@ namespace Spoke {
             }
             tickAttachStart = Math.Min(tickAttachStart, attachEvents.Count);
         }
-        void Friend.DetachFrom(int i) => DetachFrom(i);
+        void Friend.Detach() { DetachFrom(0); isDetached = true; }
         void Friend.Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services) {
             _requestTick = () => { if (Fault == null) scheduler.Schedule(this); };
             this.parent = parent;
@@ -105,6 +106,7 @@ namespace Spoke {
             controlHandle.OnPopSelf(_requestTick);
         }
         void Friend.Tick() {
+            if (isDetached) return;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
             DetachFrom(tickAttachStart);
             try {
@@ -188,6 +190,11 @@ namespace Spoke {
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void RequestTick() => s.RequestTick();
+        public void Log(string msg) => s.Call(new LambdaEpoch($"Log: {msg}", s => {
+            if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
+            logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
+            return null;
+        }));
     }
     // ============================== LambdaEpoch ============================================================
     public class LambdaEpoch : Epoch {
@@ -214,7 +221,7 @@ namespace Spoke {
         }
         public void Drop(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
-            (child as Epoch.Friend).DetachFrom(0);
+            (child as Epoch.Friend).Detach();
             dynamicChildren.Remove(key);
         }
         protected override TickBlock Init(EpochBuilder s) { s.OnCleanup(() => isDetaching = true); return null; }
@@ -239,7 +246,7 @@ namespace Spoke {
         protected abstract Epoch Bootstrap(EngineBuilder s);
         internal class Runtime {
             public Epoch Next => pending.Peek();
-            public bool HasPending => Next != null;
+            public bool HasPending => pending.Has;
             SpokeEngine owner;
             List<Action> onHasPending = new();
             List<Action<TickContext>> onTick = new();
@@ -262,15 +269,17 @@ namespace Spoke {
             public Epoch RunNext() {
                 if (!isRunning) throw new Exception("RunNext() must be called from within an OnTick block");
                 if (!HasPending) return null;
+                pending.Take();
                 var ticked = pending.Pop();
-                try { (ticked as Epoch.Friend).Tick(); } finally { pending.Take(); }
+                (ticked as Epoch.Friend).Tick();
+                pending.Take();
                 return ticked;
             }
             public void Schedule(Epoch epoch) {
                 if (epoch.Fault != null) return;
+                var prevHasPending = HasPending;
                 pending.Enqueue(epoch);
                 if (!isRunning) {
-                    var prevHasPending = HasPending;
                     pending.Take();
                     if (!prevHasPending && HasPending) (owner as Epoch.Friend).GetControlHandle().OnPopSelf(_triggerHasPending);
                 }
@@ -309,7 +318,6 @@ namespace Spoke {
         internal interface Friend { Handle Push(Frame frame); void Pop(); void Hold(); void Release(); }
         internal static SpokeRuntime Local { get; } = new SpokeRuntime();
         public static ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(Local.frames);
-        public static string GetPrettyPrinted() => SpokeTrace.Format(Frames);
         public static void Batch(Action fn) {
             (Local as SpokeRuntime.Friend).Hold();
             try { fn(); } finally { (Local as SpokeRuntime.Friend).Release(); }
@@ -343,8 +351,7 @@ namespace Spoke {
         void Friend.Release() { holdCount--; if (holdCount == 0) TryFlush(); }
         void Schedule(SpokeTreeImpl tree) {
             var isBootstrap = frames.Count > 0 && frames[frames.Count - 1].Type == FrameKind.Bootstrap;
-            if (isBootstrap && tree.Layer <= layer) { TickTree(tree); }
-            else { scheduledTrees.Enqueue(tree); TryFlush(); }
+            if (isBootstrap && tree.Layer <= layer) { TickTree(tree); } else { scheduledTrees.Enqueue(tree); TryFlush(); }
         }
         void TryFlush() {
             if (holdCount > 0 || !scheduledTrees.Has) return;
@@ -364,6 +371,10 @@ namespace Spoke {
             public readonly Epoch Epoch;
             public readonly FrameKind Type;
             public Frame(FrameKind type, Epoch epoch) { Type = type; Epoch = epoch; }
+            public override string ToString() {
+                if (Type == FrameKind.None) return "<null>";
+                return $"{Type} {Epoch} <{Epoch.GetType().Name}>{(Epoch.Fault != null ? $"[Faulted: {Epoch.Fault.InnerException.GetType().Name}]" : "")}";
+            }
         }
         internal readonly struct Handle {
             public readonly SpokeRuntime Stack;
@@ -378,11 +389,11 @@ namespace Spoke {
         class SpokeTreeImpl<T> : SpokeTreeImpl, SpokeTree<T> where T : SpokeEngine {
             public T Root { get; private set; }
             public bool IsStarted => TimeStamp >= 0;
-            Action detachAll;
+            Action detach;
             public SpokeTreeImpl(T root, int layer, params object[] services) {
                 Root = root;
                 Layer = layer;
-                detachAll = () => (Root as Epoch.Friend).DetachFrom(0);
+                detach = () => (Root as Epoch.Friend).Detach();
                 if (Root == null) throw new Exception("[SpokeTree] must be given a root engine");
                 if (TimeStamp >= 0) throw new Exception("[SpokeTree] already bootstrapped");
                 (Local as SpokeRuntime.Friend).Push(new(FrameKind.Bootstrap, Root));
@@ -391,7 +402,7 @@ namespace Spoke {
                     (Root as Epoch.Friend).Attach(null, default, this, services);
                 } catch (Exception e) { SpokeError.Log("[SpokeTree] uncaught error in Bootstrap", e); } finally { (Local as Friend).Pop(); }
             }
-            public void Dispose() => (Root as Epoch.Friend).GetControlHandle().OnPopSelf(detachAll);
+            public void Dispose() => (Root as Epoch.Friend).GetControlHandle().OnPopSelf(detach);
             public override void DoTick() => (Root as Epoch.Friend).Tick();
         }
         abstract class SpokeTreeImpl : IComparable<SpokeTreeImpl>, Epoch.Scheduler {
@@ -402,30 +413,53 @@ namespace Spoke {
             public abstract void DoTick();
         }
     }
-    public static class SpokeTrace {
-        public static string Format(ReadOnlyList<SpokeRuntime.Frame> frames, bool includePath = false) {
+    // ============================== SpokeIntrospect ============================================================
+    public static class SpokeIntrospect {
+        static SpokePool<List<Epoch>> elPool = SpokePool<List<Epoch>>.Create(l => l.Clear());
+        public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
+            storeIn = storeIn ?? new List<Epoch>();
+            if (epoch is Dock.Introspect d) return d.GetChildren(storeIn);
+            return (epoch as Epoch.Introspect).GetChildren(storeIn);
+        }
+        public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Introspect).GetParent();
+        internal static string TreeTrace(ReadOnlyList<SpokeRuntime.Frame> frames) {
+            if (frames.Count == 0) return "(empty)";
+            var sb = new StringBuilder();
+            var es = new List<Epoch>(); foreach (var f in frames) es.Add(f.Epoch);
+            var roots = new List<Epoch>(); foreach (var e in es) if (!roots.Contains(e) && GetParent(e) == null) roots.Add(e);
+            sb.Append("<------------ Spoke Frame Trace ------------>\n").Append(StackTrace(frames)).Append("\n").Append("<------------ Spoke Tree Trace ------------>\n");
+            foreach (var root in roots) sb.Append(DumpTree(root, e => {
+                var label = e.ToString();
+                if (es.Contains(e)) {
+                    var inds = new List<int>();
+                    for (int i = 0; i < es.Count; i++) if (es[i] == e) inds.Add(i);
+                    label = $"({string.Join(",", inds)})-{label}";
+                }
+                if (e.Fault != null) label = $"{label} [Faulted: {e.Fault.InnerException.GetType().Name}]";
+                return label;
+            })).Append("\n");
+            return sb.ToString();
+        }
+        static string StackTrace(ReadOnlyList<SpokeRuntime.Frame> frames) {
             if (frames.Count == 0) return "(empty)";
             var sb = new StringBuilder();
             var width = frames.Count.ToString().Length;
-            for (int i = frames.Count - 1; i >= 0; i--) AppendLine(sb, frames[i], includePath, i, width);
+            for (int i = 0; i < frames.Count; i++) sb.AppendLine($"{i}: {frames[i]}".PadLeft(width));
             return sb.ToString();
         }
-        static void AppendLine(StringBuilder sb, SpokeRuntime.Frame f, bool includePath, int lineNo, int width) {
-            var e = f.Epoch;
-            var name = e?.ToString() ?? "<null>";
-            var typeName = e != null ? e.GetType().Name : "?";
-            var fault = e?.Fault != null ? " [FAULTED]" : "";
-            var path = includePath && e != null ? NamePath(e) : null;
-            sb.Append(lineNo.ToString().PadLeft(width));
-            sb.Append($": {f.Type} {name} <{typeName}>{fault}");
-            if (path != null) sb.Append($"\n    \\_ {path}");
-            sb.Append("\n");
+        static string DumpTree(Epoch root, Func<Epoch, string> eLabel = null) {
+            var sb = new StringBuilder();
+            TraverseRecurs(0, root, (depth, x) => {
+                for (int i = 0; i < depth; i++) sb.Append("    ");
+                sb.Append($"|--{eLabel?.Invoke(x) ?? x.ToString()}\n");
+            });
+            return sb.ToString();
         }
-        static string NamePath(Epoch e) {
-            var parts = new List<string>(8);
-            for (var x = e; x != null; x = SpokeIntrospect.GetParent(x)) parts.Add(x.ToString());
-            parts.Reverse();
-            return string.Join(" > ", parts);
+        static void TraverseRecurs(int depth, Epoch epoch, Action<int, Epoch> fn) {
+            fn(depth, epoch);
+            var children = GetChildren(epoch, elPool.Get());
+            foreach (var c in children) TraverseRecurs(depth + 1, c, fn);
+            elPool.Return(children);
         }
     }
     // ============================== SpokeException ============================================================
@@ -433,25 +467,14 @@ namespace Spoke {
     // stack trace, and a weakref to the epoch.
     public sealed class SpokeException : Exception {
         List<SpokeRuntime.Frame> stackSnapshot = new List<SpokeRuntime.Frame>();
+        string innerTrace;
         public bool SkipMarkFaulted;
-        public ReadOnlyList<SpokeRuntime.Frame> StackSnapshot => new ReadOnlyList<SpokeRuntime.Frame>(stackSnapshot);
-        public SpokeException(string msg, Exception inner) : base(msg, inner) {
+        public ReadOnlyList<SpokeRuntime.Frame> StackSnapshot => new(stackSnapshot);
+        internal SpokeException(string msg, Exception inner) : base(msg, inner) {
             foreach (var frame in SpokeRuntime.Frames) stackSnapshot.Add(frame);
+            innerTrace = inner.ToString();
         }
-        string DotNetTop() {
-            var s = base.ToString();
-            const string marker = "End of inner exception stack trace";
-            var pos = s.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
-            if (pos < 0) return s.TrimEnd();
-            var newline = s.IndexOf('\n', pos);
-            var cutAt = newline >= 0 ? newline : pos + marker.Length;
-            return s.Substring(0, cutAt).TrimEnd();
-        }
-        public override string ToString() {
-            var dotnetTop = DotNetTop();
-            var spokeStack = SpokeTrace.Format(StackSnapshot, includePath: false);
-            return dotnetTop + "\n\n" + spokeStack;
-        }
+        public override string ToString() => $"{SpokeIntrospect.TreeTrace(StackSnapshot)}\n{innerTrace}";
     }
     // ============================== OrderedWorkStack ============================================================
     internal class OrderedWorkStack<T> {
@@ -547,24 +570,6 @@ namespace Spoke {
     public static class SpokeError {
         internal static Action<string, Exception> Log = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
         internal static ISpokeLogger DefaultLogger = new ConsoleSpokeLogger();
-    }
-    // ============================== SpokeIntrospect ============================================================
-    public static class SpokeIntrospect {
-        static SpokePool<List<Epoch>> elPool = SpokePool<List<Epoch>>.Create(l => l.Clear());
-        public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
-            storeIn = storeIn ?? new List<Epoch>();
-            if (epoch is Dock.Introspect d) return d.GetChildren(storeIn);
-            return (epoch as Epoch.Introspect).GetChildren(storeIn);
-        }
-        public static Epoch GetParent(Epoch epoch) => (epoch as Epoch.Introspect).GetParent();
-        public static void Traverse(Epoch epoch, Func<int, Epoch, bool> fn) => TraverseRecurs(0, epoch, fn);
-        static void TraverseRecurs(int depth, Epoch epoch, Func<int, Epoch, bool> fn) {
-            var shouldContinue = fn?.Invoke(depth, epoch) ?? false;
-            if (!shouldContinue) return;
-            var children = GetChildren(epoch, elPool.Get());
-            foreach (var c in children) TraverseRecurs(depth + 1, c, fn);
-            elPool.Return(children);
-        }
     }
     // ============================== SpokePool ============================================================
     public struct SpokePool<T> where T : new() {
