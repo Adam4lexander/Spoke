@@ -260,7 +260,7 @@ namespace Spoke {
     }
     // ============================== FlushEngine ============================================================
     public enum FlushMode { Immediate, Manual }
-    public class FlushEngine : SpokeEngine {
+    public class FlushEngine : Ticker {
         public FlushMode FlushMode = FlushMode.Immediate;
         Action flushCommand;
         Epoch epoch;
@@ -272,7 +272,7 @@ namespace Spoke {
         public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this(name, new Effect("Root", block), flushMode) { }
         public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate) : this(name, (Epoch)null, flushMode) { }
         public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this("FlushEngine", block, flushMode) { }
-        protected override Epoch Bootstrap(EngineBuilder s) {
+        protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
             flushCommand = () => s.RequestTick();
             var isStopped = false;
