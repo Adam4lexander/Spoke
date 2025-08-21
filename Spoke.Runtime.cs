@@ -57,8 +57,21 @@ namespace Spoke {
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
+                const long maxPasses = 1000;
+                var passCount = 0;
+                Epoch prev = null;
                 while (s.HasPending) {
-                    s.RunNext();
+                    if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
+                    try {
+                        var next = s.PeekNext();
+                        if (prev != null && prev.CompareTo(next) >= 0) passCount++;
+                        prev = next;
+                        s.RunNext();
+                    } catch (SpokeException se) {
+                        (this as Epoch.Friend).SetFault(se);
+                        logger?.Error($"FLUSH ERROR\n->A fault occurred during flush. \n\n{se}");
+                        break;
+                    }
                     if (command == CommandKind.Tick) break;
                 }
             });
@@ -109,7 +122,7 @@ namespace Spoke {
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
         internal interface Scheduler { void Schedule(Epoch epoch); }
-        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void Detach(); SpokeRuntime.Handle GetControlHandle(); Scheduler GetScheduler(); }
+        internal interface Friend { void Attach(Epoch parent, TreeCoords coords, Scheduler scheduler, IEnumerable<object> services); void Tick(); void Detach(); SpokeRuntime.Handle GetControlHandle(); Scheduler GetScheduler(); void SetFault(SpokeException fault); }
         internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); Epoch GetParent(); }
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
@@ -191,6 +204,7 @@ namespace Spoke {
         }
         SpokeRuntime.Handle Friend.GetControlHandle() => controlHandle;
         Scheduler Friend.GetScheduler() => scheduler;
+        void Friend.SetFault(SpokeException fault) => Fault = fault;
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
             foreach (var evt in attachEvents) if (evt.Type == AttachRecord.Kind.Call) storeIn.Add(evt.AsObj as Epoch);
