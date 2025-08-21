@@ -80,7 +80,7 @@ namespace Spoke {
             isStarted.Set(true);
         }
         void DoInit() {
-            root = SpokeTree.Spawn(new FlushEngine($"{GetType().Name}:FlushEngine", Init, FlushMode.Immediate), new UnitySpokeLogger(this));
+            root = SpokeTree.Spawn("Tree", new FlushEngine($"{GetType().Name}:FlushEngine", Init, FlushMode.Immediate), new UnitySpokeLogger(this));
             sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);

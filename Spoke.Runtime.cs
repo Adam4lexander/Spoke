@@ -29,11 +29,17 @@ namespace Spoke {
     /// <summary>
     /// The SpokeTree is the root ticker of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
+    public enum FlushPolicy { Default = 0, Eager = -1, Manual = int.MinValue }
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
+        enum CommandKind { None, Tick, Flush }
         public T Root { get; private set; }
-        public SpokeTree(T root, int layer, params object[] services) {
+        CommandKind command;
+        public SpokeTree(string name, T root, FlushPolicy policy, params object[] services) {
+            Name = name;
             Root = root;
-            Layer = layer;
+            FlushPolicy = policy;
+            if (policy != FlushPolicy.Manual) command = CommandKind.Flush;
+            if (FlushPolicy != FlushPolicy.Manual) isPendingEagerTick = true;
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Bootstrap, this));
             TimeStamp = SpokeRuntime.Local.TimeStamp;
             try {
@@ -46,23 +52,52 @@ namespace Spoke {
         }
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            s.OnHasPending(() => s.RequestTick());
+            s.OnHasPending(() => { if (FlushPolicy != FlushPolicy.Manual) s.RequestTick(); });
             s.OnTick(s => {
-                s.RunNext();
-                if (s.HasPending) s.RequestTick();
+                isPendingEagerTick = false;
+                if (command == CommandKind.None) return;
+                while (s.HasPending) {
+                    s.RunNext();
+                    if (command == CommandKind.Tick) break;
+                }
             });
             return Root;
         }
+        public override void Flush() {
+            if (FlushPolicy != FlushPolicy.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely flushed");
+            if ((this as Epoch.Friend).GetControlHandle().IsAlive) throw new Exception("Re-entrant flush detected");
+            command = CommandKind.Flush;
+            (SpokeRuntime.Local as SpokeRuntime.Friend).TickTree(this);
+            command = CommandKind.None;
+        }
+        public override void Tick() {
+            if (FlushPolicy != FlushPolicy.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely ticked");
+            if ((this as Epoch.Friend).GetControlHandle().IsAlive) throw new Exception("Re-entrant flush detected");
+            command = CommandKind.Tick;
+            (SpokeRuntime.Local as SpokeRuntime.Friend).TickTree(this);
+            command = CommandKind.None;
+        }
     }
-    public abstract class SpokeTree : Ticker, IDisposable {
-        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch
-            => new SpokeTree<T>(root, 0, services);
-        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch
-            => new SpokeTree<T>(root, -1, services);
+    public abstract class SpokeTree : Ticker, IDisposable, SpokeTree.Friend {
+        new internal interface Friend { bool IsPendingEagerTick(); }
+        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree", root, FlushPolicy.Default, services);
+        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Default, services);
+        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Default)", root, FlushPolicy.Eager, services);
+        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Eager, services);
+        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Manual)", root, FlushPolicy.Manual, services);
+        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Manual, services);
         protected long TimeStamp = -1;
-        public int Layer { get; protected set; }
-        public int CompareTo(SpokeTree other) => Layer != other.Layer ? Layer.CompareTo(other.Layer) : TimeStamp.CompareTo(other.TimeStamp);
+        public FlushPolicy FlushPolicy { get; protected set; }
+        protected bool isPendingEagerTick;
+        bool Friend.IsPendingEagerTick() => isPendingEagerTick;
+        public int CompareTo(SpokeTree other) {
+            if (FlushPolicy != other.FlushPolicy) return FlushPolicy.CompareTo(other.FlushPolicy);
+            if (isPendingEagerTick == other.isPendingEagerTick) return TimeStamp.CompareTo(other.TimeStamp);
+            return isPendingEagerTick ? -1 : 1;
+        }
         public void Dispose() => (this as Epoch.Friend).GetControlHandle().OnPopSelf((this as Epoch.Friend).Detach);
+        public abstract void Flush();
+        public abstract void Tick();
     }
     // ============================== Epoch ============================================================
     /// <summary>
@@ -352,7 +387,7 @@ namespace Spoke {
     }
     // ============================== SpokeRuntime ============================================================
     public class SpokeRuntime : SpokeRuntime.Friend, Epoch.Scheduler {
-        internal interface Friend { Handle Push(Frame frame); void Pop(); void Hold(); void Release(); }
+        internal interface Friend { Handle Push(Frame frame); void Pop(); void Hold(); void Release(); void TickTree(SpokeTree tree); }
         internal static SpokeRuntime Local { get; } = new SpokeRuntime();
         public static ReadOnlyList<Frame> Frames => new ReadOnlyList<Frame>(Local.frames);
         public static void Batch(Action fn) {
@@ -386,19 +421,21 @@ namespace Spoke {
         void Friend.Release() { holdCount--; if (holdCount == 0) TryFlush(); }
         void Epoch.Scheduler.Schedule(Epoch epoch) {
             if (!(epoch is SpokeTree tree)) throw new Exception("SpokeRuntime can only schedule trees");
-            var isBootstrap = frames.Count > 0 && frames[frames.Count - 1].Type == FrameKind.Bootstrap;
-            if (isBootstrap && tree.Layer <= layer) { TickTree(tree); } else { scheduledTrees.Enqueue(tree); TryFlush(); }
+            scheduledTrees.Enqueue(tree); TryFlush();
         }
         void TryFlush() {
             if (holdCount > 0 || !scheduledTrees.Has) return;
             do {
                 scheduledTrees.Take();
-                if (scheduledTrees.Peek().Layer >= layer) return;
-                TickTree(scheduledTrees.Pop());
+                var top = scheduledTrees.Peek();
+                var isPendingEagerTick = (top as SpokeTree.Friend).IsPendingEagerTick();
+                if (isPendingEagerTick && (int)top.FlushPolicy > layer) return;
+                else if (!isPendingEagerTick && (int)top.FlushPolicy >= layer) return;
+                (this as Friend).TickTree(scheduledTrees.Pop());
             } while (scheduledTrees.Has);
         }
-        void TickTree(SpokeTree tree) {
-            var storeLayer = layer; layer = tree.Layer;
+        void Friend.TickTree(SpokeTree tree) {
+            var storeLayer = layer; layer = Math.Min((int)tree.FlushPolicy, layer);
             try { (tree as Epoch.Friend).Tick(); } catch (Exception e) { SpokeError.Log($"Uncaught Spoke error", e); }
             layer = storeLayer;
         }
