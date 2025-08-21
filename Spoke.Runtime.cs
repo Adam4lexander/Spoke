@@ -448,7 +448,9 @@ namespace Spoke {
             public Frame(FrameKind type, Epoch epoch) { Type = type; Epoch = epoch; }
             public override string ToString() {
                 if (Type == FrameKind.None) return "<null>";
-                return $"{Type} {Epoch} <{Epoch.GetType().Name}>{(Epoch.Fault != null ? $"[Faulted: {Epoch.Fault.InnerException.GetType().Name}]" : "")}";
+                var typeName = Epoch.GetType().Name;
+                typeName = typeName.IndexOf('`') >= 0 ? Epoch.GetType().Name.Substring(0, typeName.IndexOf('`')) : Epoch.GetType().Name;
+                return $"{Type} {Epoch} <{typeName}>{(Epoch.Fault != null ? $"[Faulted: {Epoch.Fault.InnerException.GetType().Name}]" : "")}";
             }
         }
         internal readonly struct Handle {
