@@ -29,18 +29,17 @@ namespace Spoke {
     /// <summary>
     /// The SpokeTree is the root ticker of the tree. It lets you instantiate a tree, or dispose it.
     /// </summary>
-    public enum FlushPolicy { Auto, Manual }
+    public enum FlushMode { Auto, Manual }
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
         enum CommandKind { None, Tick, Flush }
         public T Root { get; private set; }
         CommandKind command;
-        public SpokeTree(string name, T root, FlushPolicy policy, int layer, params object[] services) {
+        public SpokeTree(string name, T root, FlushMode flushMode, int flushLayer, params object[] services) {
             Name = name;
             Root = root;
-            FlushPolicy = policy;
-            FlushLayer = layer;
-            if (policy != FlushPolicy.Manual) command = CommandKind.Flush;
-            if (FlushPolicy != FlushPolicy.Manual) isPendingEagerTick = true;
+            FlushMode = flushMode;
+            FlushLayer = flushLayer;
+            if (flushMode != FlushMode.Manual) { command = CommandKind.Flush; isPendingEagerTick = true; }
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Bootstrap, this));
             TimeStamp = SpokeRuntime.Local.TimeStamp;
             try {
@@ -53,7 +52,7 @@ namespace Spoke {
         }
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            s.OnHasPending(() => { if (FlushPolicy != FlushPolicy.Manual) s.RequestTick(); });
+            s.OnHasPending(() => { if (FlushMode != FlushMode.Manual) s.RequestTick(); });
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
@@ -78,14 +77,14 @@ namespace Spoke {
             return Root;
         }
         public override void Flush() {
-            if (FlushPolicy != FlushPolicy.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely flushed");
+            if (FlushMode != FlushMode.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely flushed");
             if ((this as Epoch.Friend).GetControlHandle().IsAlive) throw new Exception("Re-entrant flush detected");
             command = CommandKind.Flush;
             (SpokeRuntime.Local as SpokeRuntime.Friend).TickTree(this);
             command = CommandKind.None;
         }
         public override void Tick() {
-            if (FlushPolicy != FlushPolicy.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely ticked");
+            if (FlushMode != FlushMode.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely ticked");
             if ((this as Epoch.Friend).GetControlHandle().IsAlive) throw new Exception("Re-entrant flush detected");
             command = CommandKind.Tick;
             (SpokeRuntime.Local as SpokeRuntime.Friend).TickTree(this);
@@ -94,19 +93,19 @@ namespace Spoke {
     }
     public abstract class SpokeTree : Ticker, IDisposable, SpokeTree.Friend {
         new internal interface Friend { bool IsPendingEagerTick(); }
-        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree", root, FlushPolicy.Auto, 0, services);
-        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Auto, 0, services);
-        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Default)", root, FlushPolicy.Auto, -1, services);
-        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Auto, -1, services);
-        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Manual)", root, FlushPolicy.Manual, int.MinValue, services);
-        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushPolicy.Manual, int.MinValue, services);
+        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree", root, FlushMode.Auto, 0, services);
+        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Auto, 0, services);
+        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Default)", root, FlushMode.Auto, -1, services);
+        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Auto, -1, services);
+        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Manual)", root, FlushMode.Manual, int.MinValue, services);
+        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Manual, int.MinValue, services);
         protected long TimeStamp = -1;
-        public FlushPolicy FlushPolicy { get; protected set; }
+        public FlushMode FlushMode { get; protected set; }
         public int FlushLayer { get; protected set; }
         protected bool isPendingEagerTick;
         bool Friend.IsPendingEagerTick() => isPendingEagerTick;
         public int CompareTo(SpokeTree other) {
-            if (FlushPolicy != other.FlushPolicy) return FlushPolicy.CompareTo(other.FlushPolicy);
+            if (FlushMode != other.FlushMode) return FlushMode.CompareTo(other.FlushMode);
             if (isPendingEagerTick == other.isPendingEagerTick) return TimeStamp.CompareTo(other.TimeStamp);
             return isPendingEagerTick ? -1 : 1;
         }

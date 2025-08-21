@@ -8,7 +8,6 @@
 // > Phase
 // > Effect<T>
 // > Memo
-// > FlushEngine
 // > Computation
 // > DependencyTracker
 
@@ -257,50 +256,6 @@ namespace Spoke {
         }
         public U D<U>(ISignal<U> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-    }
-    // ============================== FlushEngine ============================================================
-    public enum FlushMode { Immediate, Manual }
-    public class FlushEngine : Ticker {
-        public FlushMode FlushMode = FlushMode.Immediate;
-        Action flushCommand;
-        Epoch epoch;
-        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate) {
-            Name = name;
-            this.epoch = epoch;
-            FlushMode = flushMode;
-        }
-        public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this(name, new Effect("Root", block), flushMode) { }
-        public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate) : this(name, (Epoch)null, flushMode) { }
-        public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate) : this("FlushEngine", block, flushMode) { }
-        protected override Epoch Bootstrap(TickerBuilder s) {
-            if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            flushCommand = () => s.RequestTick();
-            var isStopped = false;
-            s.OnCleanup(() => flushCommand = null);
-            s.OnHasPending(() => {
-                if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
-            });
-            s.OnTick(s => {
-                const long maxPasses = 1000;
-                var passCount = 0;
-                Epoch prev = null;
-                while (!isStopped && s.HasPending) {
-                    if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                    try {
-                        var next = s.PeekNext();
-                        if (prev != null && prev.CompareTo(next) >= 0) passCount++;
-                        prev = next;
-                        s.RunNext();
-                    } catch (SpokeException se) {
-                        logger?.Error($"FLUSH ERROR\n->A fault occurred during flush. Stopping.\n\n{se}");
-                        Name = $"{Name} [Stopped]";
-                        isStopped = true;
-                    }
-                }
-            });
-            return epoch;
-        }
-        public void Flush() => flushCommand?.Invoke();
     }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
