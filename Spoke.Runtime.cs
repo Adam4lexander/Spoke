@@ -415,7 +415,6 @@ namespace Spoke {
             onPopSelfFrames.RemoveAt(onPopSelfFrames.Count - 1);
             foreach (var fn in onPopSelf) fn?.Invoke();
             fnlPool.Return(onPopSelf);
-            if (frames.Count == 0) TryFlush();
         }
         void Friend.Hold() => holdCount++;
         void Friend.Release() { holdCount--; if (holdCount == 0) TryFlush(); }
@@ -438,6 +437,7 @@ namespace Spoke {
             var storeLayer = layer; layer = Math.Min((int)tree.FlushPolicy, layer);
             try { (tree as Epoch.Friend).Tick(); } catch (Exception e) { SpokeError.Log($"Uncaught Spoke error", e); }
             layer = storeLayer;
+            if (frames.Count == 0) TryFlush();
         }
         public enum FrameKind : byte { None, Init, Tick, Dock, Bootstrap }
         public readonly struct Frame {
