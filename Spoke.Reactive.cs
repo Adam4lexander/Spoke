@@ -17,7 +17,7 @@ using System.Collections.Generic;
 namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
-    public delegate Ref<T> EffectBlock<T>(EffectBuilder s);
+    public delegate IRef<T> EffectBlock<T>(EffectBuilder s);
     public delegate T MemoBlock<T>(MemoBuilder s);
 
     // ============================== Trigger ============================================================
@@ -94,10 +94,10 @@ namespace Spoke {
         }
     }
     // ============================== State ============================================================
-    public interface Ref<out T> {
+    public interface IRef<out T> {
         T Now { get; }
     }
-    public interface ISignal<out T> : Ref<T>, ITrigger<T> { }
+    public interface ISignal<out T> : IRef<T>, ITrigger<T> { }
     public interface IState<T> : ISignal<T> {
         void Set(T value);
         void Update(Func<T, T> setter);
