@@ -50,9 +50,8 @@ You can create effects yourself without having to use `SpokeBehaviour`:
 // A reactive state we can test with
 var number = State.Create(0);
 
-// Spawn a `SpokeTree` by invoking the `SpokeRuntime`. The root epoch should be an engine. The `FlushEngine`
-// is built for reactivity.
-SpokeRuntime.SpawnTree(new FlushEngine(s => {
+// Spawns a `SpokeTree`. The parameter is a subclass of Epoch thats attached under SpokeTree
+SpokeTree.Spawn(new Effect("Init", s => {
     s.Effect(s => {
         Debug.Log($"number is: {s.D(number)}");
     });
@@ -80,7 +79,7 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 var myTrigger = Trigger.Create();
 var myState = State.Create(0);
 
-SpokeRuntime.SpawnTree(new FlushEngine(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         Debug.Log($"myState is {myState.Now}");
     }, myTrigger, myState); // any number of dependencies in final args
@@ -109,7 +108,7 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 var name = State.Create("Spokey");
 var age = State.Create(0);
 
-SpokeRuntime.SpawnTree(new FlushEngine(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
     });
@@ -126,7 +125,7 @@ age.Set(1);         // Prints: name: Reacts, age 1
 If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
 
 ```csharp
-SpokeRuntime.SpawnTree(new FlushEngine(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         // Totally fine
         if (s.D(condition)) {
