@@ -33,7 +33,9 @@ namespace Spoke {
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
         enum CommandKind { None, Tick, Flush }
         public T Root { get; private set; }
+        public bool HasPending => ports.HasPending;
         CommandKind command;
+        TickerPorts ports;
         public SpokeTree(string name, T root, FlushMode flushMode, int flushLayer, params object[] services) {
             Name = name;
             Root = root;
@@ -52,8 +54,8 @@ namespace Spoke {
         }
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            var ports = s.Ports;
-            s.OnHasPending(() => { if (FlushMode != FlushMode.Manual) ports.RequestTick(); });
+            ports = s.Ports;
+            if (FlushMode == FlushMode.Manual) ports.Stop();
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
@@ -148,6 +150,7 @@ namespace Spoke {
         Action _requestTick;
         bool isDetached;
         protected string Name = null;
+        protected virtual bool AutoArmTickAfterInit => true;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => tickCursor.CompareTo(other.tickCursor);
@@ -186,7 +189,7 @@ namespace Spoke {
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             }
-            controlHandle.OnPopSelf(_requestTick);
+            if (AutoArmTickAfterInit) controlHandle.OnPopSelf(_requestTick);
         }
         void Friend.Tick() {
             if (isDetached) return;
@@ -331,45 +334,48 @@ namespace Spoke {
     }
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
-        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); }
+        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsStopped(bool value); }
         OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
-        List<Action> onHasPending = new();
         List<Action<TickContext>> onTick = new();
-        Action _triggerHasPending;
-        public bool HasPending => pending.Has;
-        public Epoch Next => pending.Peek();
+        Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
+        bool isStopped;
+        protected override sealed bool AutoArmTickAfterInit => false;
         protected sealed override TickBlock Init(EpochBuilder s) {
-            _triggerHasPending = () => {
-                foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
-            };
+            requestTick = () => s.Ports.RequestTick();
+            s.OnCleanup(() => requestTick = null);
             var root = Bootstrap(new TickerBuilder(s, new(this)));
             s.Call(root);
             return s => {
+                if (isStopped) return;
                 foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this));
             };
         }
         Epoch Friend.TickNext() {
             if (!isTicking) throw new Exception("TickNext() must be called from within an OnTick block");
-            if (!HasPending) return null;
+            if (!pending.Has) return null;
             var ticked = pending.Pop();
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
         void Friend.Schedule(Epoch epoch) {
             if (epoch.Fault != null) return;
-            var prevHasPending = HasPending;
+            var prevHasPending = pending.Has;
             pending.Enqueue(epoch);
-            if (!isTicking) {
-                if (!prevHasPending && HasPending) (this as Epoch.Friend).GetControlHandle().OnPopSelf(_triggerHasPending);
-            }
+            if (!isTicking && !prevHasPending && pending.Has) requestTick?.Invoke();
+        }
+        void Friend.SetIsStopped(bool value) {
+            if (isStopped == value) return;
+            isStopped = value;
+            if (value == false) requestTick?.Invoke();
         }
         protected abstract Epoch Bootstrap(TickerBuilder s);
         internal struct Mutator {
             public Ticker Ticker { get; }
+            public bool HasPending => Ticker?.pending.Has ?? false;
+            public Epoch Next => Ticker?.pending.Peek();
             public Mutator(Ticker ticker) => Ticker = ticker;
-            public void OnHasPending(Action fn) { NoMischief(); Ticker.onHasPending.Add(fn); }
             public void OnTick(Action<TickContext> fn) { NoMischief(); Ticker.onTick.Add(fn); }
             void NoMischief() {
                 var isSealed = Ticker.controlHandle.IsTop == false || Ticker.controlHandle.Frame.Type != SpokeRuntime.FrameKind.Init;
@@ -387,17 +393,16 @@ namespace Spoke {
         public T Import<T>() => s.Import<T>();
         public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void OnHasPending(Action fn) => r.OnHasPending(fn);
         public void OnTick(Action<TickContext> fn) => r.OnTick(fn);
-        public TickerPorts Ports => new(s, r.Ticker);
+        public TickerPorts Ports => new(r);
     }
     public struct TickerPorts {
-        EpochBuilder s;
-        Ticker t;
-        internal TickerPorts(EpochBuilder s, Ticker t) { this.s = s; this.t = t; }
-        public void RequestTick() => s.Ports.RequestTick();
-        public bool HasPending => t.HasPending;
-        public Epoch PeekNext() => t.Next;
+        Ticker.Mutator r;
+        internal TickerPorts(Ticker.Mutator r) { this.r = r; }
+        public bool HasPending => r.HasPending;
+        public Epoch PeekNext() => r.Next;
+        public void Stop() => (r.Ticker as Ticker.Friend).SetIsStopped(true);
+        public void Start() => (r.Ticker as Ticker.Friend).SetIsStopped(false);
     }
     public struct TickContext {
         Ticker t;
