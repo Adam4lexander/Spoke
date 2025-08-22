@@ -52,17 +52,18 @@ namespace Spoke {
         }
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            s.OnHasPending(() => { if (FlushMode != FlushMode.Manual) s.RequestTick(); });
+            var ports = s.Ports;
+            s.OnHasPending(() => { if (FlushMode != FlushMode.Manual) ports.RequestTick(); });
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
                 const long maxPasses = 1000;
                 var passCount = 0;
                 Epoch prev = null;
-                while (s.HasPending) {
+                while (ports.HasPending) {
                     if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                     try {
-                        var next = s.PeekNext();
+                        var next = ports.PeekNext();
                         if (prev != null && prev.CompareTo(next) > 0) passCount++;
                         prev = next;
                         s.TickNext();
@@ -272,12 +273,17 @@ namespace Spoke {
         public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void RequestTick() => s.RequestTick();
         public void Log(string msg) => s.Call(new LambdaEpoch($"Log: {msg}", s => {
             if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
             logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
             return null;
         }));
+        public EpochPorts Ports => new(s);
+    }
+    public struct EpochPorts {
+        Epoch.EpochMutations s;
+        internal EpochPorts(Epoch.EpochMutations s) { this.s = s; }
+        public void RequestTick() => s.RequestTick();
     }
     // ============================== LambdaEpoch ============================================================
     public class LambdaEpoch : Epoch {
@@ -383,16 +389,20 @@ namespace Spoke {
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
         public void OnHasPending(Action fn) => r.OnHasPending(fn);
         public void OnTick(Action<TickContext> fn) => r.OnTick(fn);
-        public void RequestTick() => s.RequestTick();
+        public TickerPorts Ports => new(s, r.Ticker);
     }
-    public struct TickContext {
+    public struct TickerPorts {
         EpochBuilder s;
         Ticker t;
-        internal TickContext(EpochBuilder s, Ticker t) { this.s = s; this.t = t; }
+        internal TickerPorts(EpochBuilder s, Ticker t) { this.s = s; this.t = t; }
+        public void RequestTick() => s.Ports.RequestTick();
         public bool HasPending => t.HasPending;
         public Epoch PeekNext() => t.Next;
+    }
+    public struct TickContext {
+        Ticker t;
+        internal TickContext(EpochBuilder s, Ticker t) { this.t = t; }
         public Epoch TickNext() => (t as Ticker.Friend).TickNext();
-        public void RequestTick() => s.RequestTick();
     }
     // ============================== SpokeRuntime ============================================================
     public class SpokeRuntime : SpokeRuntime.Friend {
