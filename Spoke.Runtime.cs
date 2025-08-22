@@ -41,6 +41,7 @@ namespace Spoke {
             Root = root;
             FlushMode = flushMode;
             FlushLayer = flushLayer;
+            if (FlushMode == FlushMode.Manual) (this as Ticker.Friend).SetToManual();
             if (flushMode != FlushMode.Manual) { command = CommandKind.Flush; isPendingEagerTick = true; }
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Bootstrap, this));
             TimeStamp = SpokeRuntime.Local.TimeStamp;
@@ -55,7 +56,6 @@ namespace Spoke {
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
             ports = s.Ports;
-            if (FlushMode == FlushMode.Manual) ports.Stop();
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
@@ -164,8 +164,8 @@ namespace Spoke {
         void Friend.Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services) {
             _requestTick = () => {
                 if (Fault != null) return;
-                if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this); 
-                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this); 
+                if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this);
+                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this);
             };
             this.parent = parent;
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
@@ -334,22 +334,23 @@ namespace Spoke {
     }
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
-        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsStopped(bool value); }
+        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsStopped(bool value); void SetToManual(); }
         OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
         List<Action<TickContext>> onTick = new();
         Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
-        bool isStopped;
+        bool isStopped, isManual;
         protected override sealed bool AutoArmTickAfterInit => false;
         protected sealed override TickBlock Init(EpochBuilder s) {
-            requestTick = () => s.Ports.RequestTick();
+            if (!isManual) requestTick = () => s.Ports.RequestTick();
             s.OnCleanup(() => requestTick = null);
             var root = Bootstrap(new TickerBuilder(s, new(this)));
             s.Call(root);
             return s => {
                 if (isStopped) return;
                 foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this));
+                if (pending.Has) requestTick?.Invoke();
             };
         }
         Epoch Friend.TickNext() {
@@ -370,6 +371,7 @@ namespace Spoke {
             isStopped = value;
             if (value == false) requestTick?.Invoke();
         }
+        void Friend.SetToManual() => isManual = true;
         protected abstract Epoch Bootstrap(TickerBuilder s);
         internal struct Mutator {
             public Ticker Ticker { get; }
