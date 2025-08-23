@@ -141,6 +141,7 @@ namespace Spoke {
         }
         List<AttachRecord> attachEvents = new();
         public TreeCoords Coords { get; private set; }
+        public bool IsDetached { get; private set; }
         TreeCoords tickCursor;
         Epoch parent;
         int attachIndex;
@@ -148,7 +149,6 @@ namespace Spoke {
         TickBlock tickBlock;
         SpokeRuntime.Handle controlHandle;
         Action _requestTick;
-        bool isDetached;
         protected string Name = null;
         protected virtual bool AutoArmTickAfterInit => true;
         public Exception Fault { get; private set; }
@@ -160,7 +160,7 @@ namespace Spoke {
                 attachEvents.RemoveAt(attachEvents.Count - 1);
             }
         }
-        void Friend.Detach() { DetachFrom(0); isDetached = true; }
+        void Friend.Detach() { DetachFrom(0); IsDetached = true; }
         void Friend.Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services) {
             _requestTick = () => {
                 if (Fault != null) return;
@@ -192,7 +192,7 @@ namespace Spoke {
             if (AutoArmTickAfterInit) controlHandle.OnPopSelf(_requestTick);
         }
         void Friend.Tick() {
-            if (isDetached) return;
+            if (IsDetached) return;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
             DetachFrom((int)tickCursor.Tail);
             try {
@@ -335,7 +335,7 @@ namespace Spoke {
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
         new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsPaused(bool value); void SetToManual(); }
-        OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
+        OrderedWorkStack<Epoch> pending = new();
         List<Action<TickContext>> onTick = new();
         Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
@@ -421,7 +421,7 @@ namespace Spoke {
             (Local as SpokeRuntime.Friend).Hold();
             try { fn(); } finally { (Local as SpokeRuntime.Friend).Release(); }
         }
-        OrderedWorkStack<SpokeTree> scheduledTrees = new((a, b) => b.CompareTo(a));
+        OrderedWorkStack<SpokeTree> scheduledTrees = new();
         public long TimeStamp { get; private set; }
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
@@ -551,14 +551,36 @@ namespace Spoke {
         public override string ToString() => $"{SpokeIntrospect.TreeTrace(StackSnapshot)}\n{innerTrace}";
     }
     // ============================== OrderedWorkStack ============================================================
-    internal class OrderedWorkStack<T> {
-        List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
-        public OrderedWorkStack(Comparison<T> comp) { this.comp = comp; }
-        public bool Has => list.Count > 0 || incoming.Count > 0;
-        public void Enqueue(T t) { incoming.Add(t); }
-        public T Pop() { Take(); var x = list[^1]; list.RemoveAt(list.Count - 1); set.Remove(x); return x; }
-        public T Peek() { Take(); return list.Count > 0 ? list[^1] : default; }
-        void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }
+    internal class OrderedWorkStack<T> where T : Epoch {
+        List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); bool dirty;
+        static Comparison<T> comp = (a, b) => b.CompareTo(a);
+        public bool Has => Take(false);
+        public void Enqueue(T t) => incoming.Add(t);
+        public T Peek() => Take(true) ? list[^1] : default;
+        public T Pop() {
+            if (!Take(true)) return default;
+            var t = list[^1];
+            list.RemoveAt(list.Count - 1);
+            set.Remove(t);
+            return t;
+        }
+        bool Take(bool sort) {
+            if (incoming.Count > 0) {
+                var startCount = list.Count;
+                foreach (var t in incoming) if (!t.IsDetached && set.Add(t)) list.Add(t);
+                dirty = list.Count > startCount;
+                incoming.Clear();
+            }
+            if (sort && dirty) {
+                list.Sort(comp);
+                dirty = false;
+            }
+            while (list.Count > 0 && list[^1].IsDetached) {
+                set.Remove(list[^1]);
+                list.RemoveAt(list.Count - 1);
+            }
+            return list.Count > 0;
+        }
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
