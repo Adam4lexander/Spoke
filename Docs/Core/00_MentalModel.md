@@ -4,16 +4,15 @@ This page explains the core concepts for Spoke, and the mental model it's built 
 
 ## Abstract
 
-At the foundation of Spoke is a tree-based execution model. It has special functions called _Epochs_, that when called, implicitly generate a tree structure to match the call stack. That way, an epoch outlives the call stack. It's scope persists in a call-tree as a live object.
+Spoke implements an incremental tree-based execution model. It lets you declare a tree of behaviours, executed in imperative order, and reactively teardown/rebuild subtrees from dynamically changing runtime state. It resembles frontend frameworks like React, but with stricter invariants on execution order. In React you don't normally think about the order components (tree nodes) are mounted, in Spoke you do.
 
-In the epochs function body, it defines continuations (cleanup functions) to be run later when it's detached from the call-tree. These continuations persist in the call-tree, as part of the epochs scope. When an epoch is detached, either by internal or external signal, **all epochs in descending lexical scope will be detached first, in reverse imperative order.**
+Using Spoke is like writing a coroutine, that runs forwards and in reverse, and that dynamically recompiles and relinks sections of code at runtime. It's not literally doing this. Spoke is built entirely from vanilla C#. But its behaviour is roughly equivalent.
 
-Therefore, the call-tree encodes not just ownership, but also temporal causality. When an epoch is attached to the call-tree, it can trace an immutable pathway through its younger siblings and ancestors towards the root of the tree. This path forms a dynamic lexical scope that's guaranteed to be static over the epochs lifetime.
+The tree execution model is implemented in `Spoke.Runtime`. The fundamental primitive is the `Epoch`. Every node in the tree is a kind of epoch. Each epoch declares a block of code to run, which may make side-effects, attach child epochs and declare cleanup callbacks. The runtime successively 'ticks' these epochs, causing its code block to run, attaching its child epochs, and scheduling a new batch of epochs to be 'ticked'. If a live epoch is ticked again, it first cleans up from the last time. Child epochs are detached and disposed, and cleanup callbacks are executed. The epochs code block us run again fresh, which may produce a new subtree of epochs and callbacks.
 
-I'm not sure if this execution model already has a name, but I found these resonate with me:
+Spoke strongly emphasizes an imperative execution order. Epochs attach their children in the order the code is written, and on cleanup they are detached in the reverse order. Spoke may look declarative, but it is highly imperative. Spoke optimizes for cognitive clarity over raw performance. It builds up trees in the most predictable and intuitive order, instead of the most optimal order. It wants to feel like writing normal imperative code, even when execution flow is indirect and chaotic.
 
-- **Structured Execution**: Where the act of executing code produces a live runtime structure
-- **Lifecycle Oriented Programming**: Where the lifetimes of objects, and the hierarchy of lifecycles, are first-class citizens
+Spokes intended use case is to be the architectural spine of application logic. It's a meta-architecture where you declare and wire up subsystems depending on the state of the application. It shines most strongly where long-lived behaviours must interact in dynamic and emergent ways. Spoke collapses complexity, which normally results in spagetti code, into a tree of localized and coherent bundles. Where lifecycles, setup and teardown of application components are managed automatically. Spoke was built for the requirements of complex games in Unity, but its generalised to any C# application with these requirements.
 
 ---
 
