@@ -336,7 +336,7 @@ namespace Spoke {
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
         new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsPaused(bool value); void SetToManual(); }
-        OrderedWorkStack<Epoch> pending = new();
+        OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
         List<Action<TickContext>> onTick = new();
         Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
@@ -422,7 +422,7 @@ namespace Spoke {
             (Local as SpokeRuntime.Friend).Hold();
             try { fn(); } finally { (Local as SpokeRuntime.Friend).Release(); }
         }
-        OrderedWorkStack<SpokeTree> scheduledTrees = new();
+        OrderedWorkStack<SpokeTree> scheduledTrees = new((a, b) => b.CompareTo(a));
         public long TimeStamp { get; private set; }
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
@@ -554,7 +554,8 @@ namespace Spoke {
     // ============================== OrderedWorkStack ============================================================
     internal class OrderedWorkStack<T> where T : Epoch {
         List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); bool dirty;
-        static Comparison<T> comp = (a, b) => b.CompareTo(a);
+        Comparison<T> comp;
+        public OrderedWorkStack(Comparison<T> comp) => this.comp = comp;
         public bool Has => Take(false);
         public void Enqueue(T t) => incoming.Add(t);
         public T Peek() => Take(true) ? list[^1] : default;
