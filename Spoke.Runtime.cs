@@ -334,13 +334,13 @@ namespace Spoke {
     }
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
-        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsStopped(bool value); void SetToManual(); }
+        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsPaused(bool value); void SetToManual(); }
         OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
         List<Action<TickContext>> onTick = new();
         Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
-        bool isStopped, isManual;
+        bool isPaused, isManual, didContinue;
         protected override sealed bool AutoArmTickAfterInit => false;
         protected sealed override TickBlock Init(EpochBuilder s) {
             if (!isManual) requestTick = () => s.Ports.RequestTick();
@@ -348,27 +348,28 @@ namespace Spoke {
             var root = Bootstrap(new TickerBuilder(s, new(this)));
             s.Call(root);
             return s => {
-                if (isStopped) return;
-                foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this));
-                if (pending.Has) requestTick?.Invoke();
+                if (isPaused || !pending.Has) return;
+                didContinue = false;
+                foreach (var fn in onTick) if (!isPaused) fn?.Invoke(new TickContext(s, this));
+                if (!didContinue && !isPaused) throw new Exception("Ticker must TickNext() or Pause() during OnTick, or it risks infinite flushes.");
+                if (pending.Has && !isPaused) requestTick?.Invoke();
             };
         }
         Epoch Friend.TickNext() {
             if (!isTicking) throw new Exception("TickNext() must be called from within an OnTick block");
-            if (!pending.Has) return null;
+            didContinue = true;
             var ticked = pending.Pop();
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
         void Friend.Schedule(Epoch epoch) {
-            if (epoch.Fault != null) return;
             var prevHasPending = pending.Has;
             pending.Enqueue(epoch);
-            if (!isTicking && !prevHasPending && pending.Has) requestTick?.Invoke();
+            if (!isTicking && !prevHasPending && pending.Has && !isPaused) requestTick?.Invoke();
         }
-        void Friend.SetIsStopped(bool value) {
-            if (isStopped == value) return;
-            isStopped = value;
+        void Friend.SetIsPaused(bool value) {
+            if (isPaused == value) return;
+            isPaused = value;
             if (value == false) requestTick?.Invoke();
         }
         void Friend.SetToManual() => isManual = true;
@@ -403,8 +404,8 @@ namespace Spoke {
         internal TickerPorts(Ticker.Mutator r) { this.r = r; }
         public bool HasPending => r.HasPending;
         public Epoch PeekNext() => r.Next;
-        public void Stop() => (r.Ticker as Ticker.Friend).SetIsStopped(true);
-        public void Start() => (r.Ticker as Ticker.Friend).SetIsStopped(false);
+        public void Pause() => (r.Ticker as Ticker.Friend).SetIsPaused(true);
+        public void Resume() => (r.Ticker as Ticker.Friend).SetIsPaused(false);
     }
     public struct TickContext {
         Ticker t;
