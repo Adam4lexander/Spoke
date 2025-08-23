@@ -33,12 +33,15 @@ namespace Spoke {
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
         enum CommandKind { None, Tick, Flush }
         public T Root { get; private set; }
+        public bool HasPending => ports.HasPending;
         CommandKind command;
+        TickerPorts ports;
         public SpokeTree(string name, T root, FlushMode flushMode, int flushLayer, params object[] services) {
             Name = name;
             Root = root;
             FlushMode = flushMode;
             FlushLayer = flushLayer;
+            if (FlushMode == FlushMode.Manual) (this as Ticker.Friend).SetToManual();
             if (flushMode != FlushMode.Manual) { command = CommandKind.Flush; isPendingEagerTick = true; }
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Bootstrap, this));
             TimeStamp = SpokeRuntime.Local.TimeStamp;
@@ -52,17 +55,17 @@ namespace Spoke {
         }
         protected override Epoch Bootstrap(TickerBuilder s) {
             if (!s.TryImport(out ISpokeLogger logger)) logger = SpokeError.DefaultLogger;
-            s.OnHasPending(() => { if (FlushMode != FlushMode.Manual) s.RequestTick(); });
+            ports = s.Ports;
             s.OnTick(s => {
                 isPendingEagerTick = false;
                 if (command == CommandKind.None) return;
                 const long maxPasses = 1000;
                 var passCount = 0;
                 Epoch prev = null;
-                while (s.HasPending) {
+                while (ports.HasPending) {
                     if (passCount > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
                     try {
-                        var next = s.PeekNext();
+                        var next = ports.PeekNext();
                         if (prev != null && prev.CompareTo(next) > 0) passCount++;
                         prev = next;
                         s.TickNext();
@@ -138,6 +141,7 @@ namespace Spoke {
         }
         List<AttachRecord> attachEvents = new();
         public TreeCoords Coords { get; private set; }
+        public bool IsDetached { get; private set; }
         TreeCoords tickCursor;
         Epoch parent;
         int attachIndex;
@@ -145,8 +149,8 @@ namespace Spoke {
         TickBlock tickBlock;
         SpokeRuntime.Handle controlHandle;
         Action _requestTick;
-        bool isDetached;
         protected string Name = null;
+        protected virtual bool AutoArmTickAfterInit => true;
         public Exception Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => tickCursor.CompareTo(other.tickCursor);
@@ -156,12 +160,12 @@ namespace Spoke {
                 attachEvents.RemoveAt(attachEvents.Count - 1);
             }
         }
-        void Friend.Detach() { DetachFrom(0); isDetached = true; }
+        void Friend.Detach() { DetachFrom(0); IsDetached = true; }
         void Friend.Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services) {
             _requestTick = () => {
                 if (Fault != null) return;
-                if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this); 
-                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this); 
+                if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this);
+                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this);
             };
             this.parent = parent;
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
@@ -185,10 +189,10 @@ namespace Spoke {
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             }
-            controlHandle.OnPopSelf(_requestTick);
+            if (AutoArmTickAfterInit) controlHandle.OnPopSelf(_requestTick);
         }
         void Friend.Tick() {
-            if (isDetached) return;
+            if (IsDetached) return;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
             DetachFrom((int)tickCursor.Tail);
             try {
@@ -272,12 +276,17 @@ namespace Spoke {
         public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void RequestTick() => s.RequestTick();
         public void Log(string msg) => s.Call(new LambdaEpoch($"Log: {msg}", s => {
             if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
             logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
             return null;
         }));
+        public EpochPorts Ports => new(s);
+    }
+    public struct EpochPorts {
+        Epoch.EpochMutations s;
+        internal EpochPorts(Epoch.EpochMutations s) { this.s = s; }
+        public void RequestTick() => s.RequestTick();
     }
     // ============================== LambdaEpoch ============================================================
     public class LambdaEpoch : Epoch {
@@ -325,45 +334,51 @@ namespace Spoke {
     }
     // ============================== Ticker ============================================================
     public abstract class Ticker : Epoch, Ticker.Friend {
-        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); }
-        OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
-        List<Action> onHasPending = new();
+        new internal interface Friend { Epoch TickNext(); void Schedule(Epoch epoch); void SetIsPaused(bool value); void SetToManual(); }
+        OrderedWorkStack<Epoch> pending = new();
         List<Action<TickContext>> onTick = new();
-        Action _triggerHasPending;
-        public bool HasPending => pending.Has;
-        public Epoch Next => pending.Peek();
+        Action requestTick;
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
+        bool isPaused, isManual, didContinue;
+        protected override sealed bool AutoArmTickAfterInit => false;
         protected sealed override TickBlock Init(EpochBuilder s) {
-            _triggerHasPending = () => {
-                foreach (var fn in onHasPending) try { fn?.Invoke(); } catch (Exception e) { SpokeError.Log("Error invoking OnHasPending", e); }
-            };
+            if (!isManual) requestTick = () => s.Ports.RequestTick();
+            s.OnCleanup(() => requestTick = null);
             var root = Bootstrap(new TickerBuilder(s, new(this)));
             s.Call(root);
             return s => {
-                foreach (var fn in onTick) fn?.Invoke(new TickContext(s, this));
+                if (isPaused || !pending.Has) return;
+                didContinue = false;
+                foreach (var fn in onTick) if (!isPaused) fn?.Invoke(new TickContext(s, this));
+                if (!didContinue && !isPaused) throw new Exception("Ticker must TickNext() or Pause() during OnTick, or it risks infinite flushes.");
+                if (pending.Has && !isPaused) requestTick?.Invoke();
             };
         }
         Epoch Friend.TickNext() {
             if (!isTicking) throw new Exception("TickNext() must be called from within an OnTick block");
-            if (!HasPending) return null;
+            didContinue = true;
             var ticked = pending.Pop();
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
         void Friend.Schedule(Epoch epoch) {
-            if (epoch.Fault != null) return;
-            var prevHasPending = HasPending;
+            var prevHasPending = pending.Has;
             pending.Enqueue(epoch);
-            if (!isTicking) {
-                if (!prevHasPending && HasPending) (this as Epoch.Friend).GetControlHandle().OnPopSelf(_triggerHasPending);
-            }
+            if (!isTicking && !prevHasPending && pending.Has && !isPaused) requestTick?.Invoke();
         }
+        void Friend.SetIsPaused(bool value) {
+            if (isPaused == value) return;
+            isPaused = value;
+            if (value == false) requestTick?.Invoke();
+        }
+        void Friend.SetToManual() => isManual = true;
         protected abstract Epoch Bootstrap(TickerBuilder s);
         internal struct Mutator {
             public Ticker Ticker { get; }
+            public bool HasPending => Ticker?.pending.Has ?? false;
+            public Epoch Next => Ticker?.pending.Peek();
             public Mutator(Ticker ticker) => Ticker = ticker;
-            public void OnHasPending(Action fn) { NoMischief(); Ticker.onHasPending.Add(fn); }
             public void OnTick(Action<TickContext> fn) { NoMischief(); Ticker.onTick.Add(fn); }
             void NoMischief() {
                 var isSealed = Ticker.controlHandle.IsTop == false || Ticker.controlHandle.Frame.Type != SpokeRuntime.FrameKind.Init;
@@ -381,18 +396,21 @@ namespace Spoke {
         public T Import<T>() => s.Import<T>();
         public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void OnHasPending(Action fn) => r.OnHasPending(fn);
         public void OnTick(Action<TickContext> fn) => r.OnTick(fn);
-        public void RequestTick() => s.RequestTick();
+        public TickerPorts Ports => new(r);
+    }
+    public struct TickerPorts {
+        Ticker.Mutator r;
+        internal TickerPorts(Ticker.Mutator r) { this.r = r; }
+        public bool HasPending => r.HasPending;
+        public Epoch PeekNext() => r.Next;
+        public void Pause() => (r.Ticker as Ticker.Friend).SetIsPaused(true);
+        public void Resume() => (r.Ticker as Ticker.Friend).SetIsPaused(false);
     }
     public struct TickContext {
-        EpochBuilder s;
         Ticker t;
-        internal TickContext(EpochBuilder s, Ticker t) { this.s = s; this.t = t; }
-        public bool HasPending => t.HasPending;
-        public Epoch PeekNext() => t.Next;
+        internal TickContext(EpochBuilder s, Ticker t) { this.t = t; }
         public Epoch TickNext() => (t as Ticker.Friend).TickNext();
-        public void RequestTick() => s.RequestTick();
     }
     // ============================== SpokeRuntime ============================================================
     public class SpokeRuntime : SpokeRuntime.Friend {
@@ -403,7 +421,7 @@ namespace Spoke {
             (Local as SpokeRuntime.Friend).Hold();
             try { fn(); } finally { (Local as SpokeRuntime.Friend).Release(); }
         }
-        OrderedWorkStack<SpokeTree> scheduledTrees = new((a, b) => b.CompareTo(a));
+        OrderedWorkStack<SpokeTree> scheduledTrees = new();
         public long TimeStamp { get; private set; }
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
@@ -533,14 +551,36 @@ namespace Spoke {
         public override string ToString() => $"{SpokeIntrospect.TreeTrace(StackSnapshot)}\n{innerTrace}";
     }
     // ============================== OrderedWorkStack ============================================================
-    internal class OrderedWorkStack<T> {
-        List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); Comparison<T> comp;
-        public OrderedWorkStack(Comparison<T> comp) { this.comp = comp; }
-        public bool Has => list.Count > 0 || incoming.Count > 0;
-        public void Enqueue(T t) { incoming.Add(t); }
-        public T Pop() { Take(); var x = list[^1]; list.RemoveAt(list.Count - 1); set.Remove(x); return x; }
-        public T Peek() { Take(); return list.Count > 0 ? list[^1] : default; }
-        void Take() { if (incoming.Count == 0) return; foreach (var t in incoming) if (set.Add(t)) list.Add(t); incoming.Clear(); list.Sort(comp); }
+    internal class OrderedWorkStack<T> where T : Epoch {
+        List<T> incoming = new(); HashSet<T> set = new(); List<T> list = new(); bool dirty;
+        static Comparison<T> comp = (a, b) => b.CompareTo(a);
+        public bool Has => Take(false);
+        public void Enqueue(T t) => incoming.Add(t);
+        public T Peek() => Take(true) ? list[^1] : default;
+        public T Pop() {
+            if (!Take(true)) return default;
+            var t = list[^1];
+            list.RemoveAt(list.Count - 1);
+            set.Remove(t);
+            return t;
+        }
+        bool Take(bool sort) {
+            if (incoming.Count > 0) {
+                var startCount = list.Count;
+                foreach (var t in incoming) if (!t.IsDetached && set.Add(t)) list.Add(t);
+                dirty = list.Count > startCount;
+                incoming.Clear();
+            }
+            if (sort && dirty) {
+                list.Sort(comp);
+                dirty = false;
+            }
+            while (list.Count > 0 && list[^1].IsDetached) {
+                set.Remove(list[^1]);
+                list.RemoveAt(list.Count - 1);
+            }
+            return list.Count > 0;
+        }
     }
     // ============================== TreeCoords ============================================================
     /// <summary>
