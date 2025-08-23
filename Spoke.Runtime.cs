@@ -32,13 +32,13 @@ namespace Spoke {
     public enum FlushMode { Auto, Manual }
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
         enum CommandKind { None, Tick, Flush }
-        public T Root { get; private set; }
+        public T Main { get; private set; }
         public bool HasPending => ports.HasPending;
         CommandKind command;
         TickerPorts ports;
-        public SpokeTree(string name, T root, FlushMode flushMode, int flushLayer, params object[] services) {
+        public SpokeTree(string name, T main, FlushMode flushMode, int flushLayer, params object[] services) {
             Name = name;
-            Root = root;
+            Main = main;
             FlushMode = flushMode;
             FlushLayer = flushLayer;
             if (FlushMode == FlushMode.Manual) (this as Ticker.Friend).SetToManual();
@@ -77,7 +77,7 @@ namespace Spoke {
                     if (command == CommandKind.Tick) break;
                 }
             });
-            return Root;
+            return Main;
         }
         public override void Flush() {
             if (FlushMode != FlushMode.Manual) throw new Exception("Only trees with Manual flush policy can be explicitely flushed");
@@ -300,6 +300,7 @@ namespace Spoke {
         new internal interface Introspect { List<Epoch> GetChildren(List<Epoch> storeIn = null); }
         Dictionary<object, Epoch> dynamicChildren = new();
         bool isDetaching;
+        long childIndex;
         public Dock() { Name = "Dock"; }
         public Dock(string name) { Name = name; }
         public T Call<T>(object key, T epoch) where T : Epoch {
@@ -307,7 +308,7 @@ namespace Spoke {
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
             Drop(key);
             dynamicChildren.Add(key, epoch);
-            (epoch as Epoch.Friend).Attach(this, Coords.Extend(SpokeRuntime.Local.TimeStamp), (this as Epoch.Friend).GetTicker(), null);
+            (epoch as Epoch.Friend).Attach(this, Coords.Extend(childIndex++), (this as Epoch.Friend).GetTicker(), null);
             (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             return epoch;
         }
