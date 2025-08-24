@@ -46,6 +46,16 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 
 ---
 
+## Performance and GC churn
+
+This documentation may give the impression that Spoke has a large performance and GC cost. Frequently tearing down and rebuilding the tree will cause a large amount of GC churn. Instantiating epochs and creating closures are both a source of GC.
+
+In practical usage though, this cost can be managed. Higher frequency rebuilds tend to be pushed towards the leaves of the tree, where allocations are minimized or avoided completely. Big structural rebuilds of the tree are often results of big structural changes in game logic, like changing from one game mode to another. Also, Spoke isn't designed to be ticked every frame. It's best used to orchestrate the subsystems that do tick each frame, by wiring them up and configuring them to match changing application state.
+
+By keeping Spoke focused on the architectural shape of the code, instead of frame-by-frame logic, it can pay for itself through improved clarity and enabling optimizations that would be too complex to express without it. In my own game, Spoke was a massive improvement to performance. Not because Spoke is fast, its not, but because it let me move so much logic out of Update() loops into event chains that only run when necessary.
+
+---
+
 ## Primitives
 
 The core primitives in `Spoke.Runtime` are:
@@ -192,6 +202,82 @@ In general I stick to the following patterns:
 
 - Put simple initialization in Init, so the epochs public API (if any) is wired up even before its been ticked.
 - Put all other logic in Tick.
+
+---
+
+#### Fault Handling
+
+Epochs catch exceptions thrown from Init or Tick, and wraps them in a `SpokeException`, including a snapshot of the virtual Spoke stack at the point of failure. The exception propagates upwards through the chain of epochs and tickers, marking each one as faulted on the way. The `SpokeTree` catches the exception and marks itself as faulted. All epochs and tickers which faulted will no longer be able to tick.
+
+You can catch the `SpokeException` at any point to stop it propagating further up the tree. If it reaches the `SpokeTree` then the entire tree has faulted and will cease to be executed. You can access the fault marked on an epoch with `Epoch.Fault`.
+
+Let's see an example and the resulting stack trace:
+
+```cs
+// Define an epoch which throws an exception on tick
+public class MyBrokenEpoch : Epoch {
+    protected override void Init(EpochBuilder s) {
+        return s => {
+            throw new Exception("An error has occurred");
+        };
+    }
+}
+
+// Spawn a tree to run the epoch, and observe the fault
+var tree = SpokeTree.Spawn(new MyBrokenEpoch());
+
+// Access the fault from either the tree or the MyBrokenEpoch, they will both have it
+var isFaulted = tree.Fault != null;  // True
+```
+
+If you catch the exception before it reaches the SpokeTree then you can contain the fault and stop the whole tree from becoming faulted. This is one use case for implementing custom tickers.
+
+---
+
+#### Exports and Imports
+
+Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by other epochs further down the tree. This lets you share common dependencies without having to explicitely feed it down through the tree via epoch constructor props.
+
+In Spoke, exports are lexically scoped. Which may be surprising if you're familiar with React. Epochs import resources, not just from their direct ancestors, but also their earlier siblings, their parents earlier siblings and so on. It's functionally equivalent to typical scoping rules in programming languages.
+
+```cs
+// Define a contextual data object to share in the tree
+public class ContextData {
+    public string Data { get; }
+    public ContextData(string data) => Data = data;
+}
+
+// Define an epoch that imports and uses the context object
+public class ImportingEpoch : Epoch {
+    protected override void Init(EpochBuilder s) {
+        if (s.TryImport<ContextData>(out var ctx)) {
+            s.Log($"Context is {ctx.Data}");
+        } else {
+            s.Log($"Cannot find context");
+        }
+        return null;
+    }
+}
+
+// Define an epoch to export the contextual data, and attach epochs that import it
+public class MainEpoch : Epoch {
+    protected override void Init(EpochBuilder s) {
+        s.Call(new ImportingEpoch());       // Will log: Cannot find context
+        s.Export(new ContextData("Foobar"));
+        s.Call(new ImportingEpoch());       // Will log: Context is Foobar
+        s.Export(new ContextData("Baz"));
+        return s => {
+            s.Call(new ImportingData());    // Will log: Context is Baz
+        };
+    }
+}
+```
+
+The list of attachments for `MainEpoch` would look like this:
+
+`[ImportingEpoch, Export<ContextData>, ImportingEpoch, Export<ContextData>, ImportingEpoch]`
+
+`s.Import` searches backwards through the attachment list of its epoch, up to the parents attachment list and backwards through that, all the way to the root. It stops once it finds finds an Export with a matching type. Lexical scoping is possible in Spoke because of the strict imperative execution. Once an epoch is attached, its guaranteed that everything on its dynamic lexical scope will exist over its lifetime.
 
 ---
 
