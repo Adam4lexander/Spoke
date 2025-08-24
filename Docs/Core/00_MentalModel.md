@@ -39,6 +39,37 @@ In all of Spoke's code examples you'll see a lot of nested lambdas, which result
 
 ---
 
+## Primitives
+
+The core primitives in `Spoke.Runtime` are:
+
+- `Epoch`: A stateful, lifecycle aware node in the spoke tree. They have three lifecycle phases: Attach, Tick and Detach.
+- `Ticker`: An epoch that controls the tempo of ticks to its subtree. Nested tickers form a chain of execution gateways for advanced control structures and fault boundaries.
+- `SpokeTree`: A ticker that must be at the root of the tree. It exposes the interface for ticking the tree, either reactively by the spoke runtime, or manually by user code.
+- `Dock`: An epoch that can dynamically attach and detach keyed subrees of epochs. It lets you modify the tree outside the `Init` and `Tick` mutation windows.
+
+All primitives are derivations of `Epoch`, and are bound to the same lifefycle contracts. You use Spoke by implementing subclasses of `Epoch` and `Ticker`, composing in `Dock` where needed, and mounting it under a `SpokeTree`.
+
+---
+
+### Epoch
+
+The name epoch comes refers to its role as a lifetime window. When attached it makes imperative mutations to application state, marking a new epoch in program structure.
+
+---
+
+### Ticker
+
+---
+
+### SpokeTree
+
+---
+
+### Dock
+
+---
+
 ## Tree-based execution
 
 Let's look at a simple Spoke program:
