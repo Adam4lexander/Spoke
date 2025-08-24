@@ -8,7 +8,7 @@ Spoke implements an incremental tree-based execution model. It lets you declare 
 
 Using Spoke is like writing a coroutine, that runs forwards and in reverse, and that dynamically recompiles and relinks sections of code at runtime. It's not literally doing this. Spoke is built entirely from vanilla C#. But its behaviour is roughly equivalent.
 
-The tree execution model is implemented in `Spoke.Runtime`. The fundamental primitive is the `Epoch`. Every node in the tree is a kind of epoch. Each epoch declares a block of code to run, which may make side-effects, attach child epochs and declare cleanup callbacks. The runtime successively 'ticks' these epochs, causing its code block to run, attaching its child epochs, and scheduling a new batch of epochs to be 'ticked'. If a live epoch is ticked again, it first cleans up from the last time. Child epochs are detached and disposed, and cleanup callbacks are executed. The epochs code block us run again fresh, which may produce a new subtree of epochs and callbacks.
+The tree execution model is implemented in `Spoke.Runtime`. The fundamental primitive is the `Epoch`. Every node in the tree is a kind of epoch. Each epoch declares a block of code to run, which may make side-effects, attach child epochs and declare cleanup callbacks. The runtime successively 'ticks' these epochs, causing its code block to run, attaching its child epochs, and scheduling a new batch of epochs to be 'ticked'. If a live epoch is ticked again, it first cleans up from the last time. Child epochs are detached and disposed, and cleanup callbacks are executed. The epochs code block is run again fresh, which may produce a new subtree of epochs and callbacks.
 
 Spoke strongly emphasizes an imperative execution order. Epochs attach their children in the order the code is written, and on cleanup they are detached in the reverse order. Spoke may look declarative, but it is highly imperative. Spoke optimizes for cognitive clarity over raw performance. It builds up trees in the most predictable and intuitive order, instead of the most optimal order. It wants to feel like writing normal imperative code, even when execution flow is indirect and chaotic.
 
@@ -337,6 +337,52 @@ public class FaultBoundary : Ticker {
 > OnTick must advance execution by calling TickNext(), or pause itself. If it does neither then it will throw an exception. As this is high-risk behaviour for inducing infinite loops.
 
 Tickers are powerful because they force execution flow through them to Tick any epochs that descend from them. They enable complex control structures, even incremental loops, where looping conditions are derived from the completion of subtrees attached on each iteration. I've found them extremely useful in DSLs for procedural generation, not so much for general reactivity like in `Spoke.Reactive`.
+
+---
+
+#### Ordering Epochs by Tree Coords
+
+Tickers control the tempo of execution, by choosing how often `TickNext()` is called. But they have no control over which epoch is ticked. The ticker maintains an ordered list of epochs that requested a tick. The epochs are sorted by their _Tree Coords_, which is a list of numbers that reflects the position in the tree when walked in an imperative order.
+
+For example in this tree:
+
+```
+(Tree Structure)            (Tree Coord)
+
+SpokeTree                   []
+│
+Main                        [0]
+├── epoch                   [0,0]
+│   ├── epoch               [0,0,0]
+│   └── epoch               [0,0,1]
+└── epoch                   [0,1]
+    ├── epoch               [0,1,0]
+    └── epoch               [0,1,1]
+```
+
+And lets see the order of execution when there are multiple epochs in the tree which have requested a tick:
+
+```
+(Tree Structure)            (Tick Order)
+
+SpokeTree                   -
+│
+Main                        -
+├── epoch                   -
+│   ├── epoch(*)            1st
+│   └── epoch               -
+└── epoch(*)                2nd
+    ├── epoch(*)            3rd
+    └── epoch               -
+```
+
+> Epochs marked with `(*)` are requesting a tick.
+
+It's equivalent to walking the tree in imperative order, skipping epochs that don't need ticks, and ticking the epochs that do. The epoch marked _3rd_ won't get a tick, because it will be detached first when its parent is ticked _2nd_.
+
+Now I've oversimplified this a bit. Epochs maintain two Tree Coords, one for their personal coordinate, and one for the coordinate of their _Tick Cursor_. Since epochs can attach children in their Init phase, their _Tick Cursor_ is the coordinate from where their ephemeral attachments start. This is the coordinate used for sorting. Epochs attached in the Init phase will be ticked before their parent, while Epochs attached in the Tick phase will be ticked after.
+
+In case it sounds complicated, the objective is to make ticking order as intuitive as possible. If you imagine your Spoke code as an imperative, stackful program, then its simple to intuit the ticking order. The Tree Coords should enable this intuition, without needing to be thought of directly.
 
 ---
 
