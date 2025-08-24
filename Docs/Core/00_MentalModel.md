@@ -16,6 +16,14 @@ Spokes intended use case is to be the architectural spine of application logic. 
 
 ---
 
+## Foreward: When to extend Spoke.Runtime
+
+The information here is mostly to document the runtime behaviour of Spoke, so you understand clearly what's happening in the background when using `Spoke.Reactive`. In practice you'll rarely need to define your own custom Epochs or Tickers.
+
+`Spoke.Runtime` is a low level substrate that enables modules like `Spoke.Reactive` to be built on top. Think of it as a low-level layer for building custom reactive DSLs. Not so much for implementing application logic.
+
+---
+
 ## Closures
 
 Before diving into Spokes execution model, lets touch briefly on closures. A closure is created when a function constructs and returns another function, causing its stack-allocated variables to be moved to the heap:
@@ -92,7 +100,7 @@ public class CounterEpoch : Epoch {
             counter++;
 
             // Log a message showing how many times we were ticked
-            s.Log($"CounterEpoch was ticker {counter} times!");
+            s.Log($"CounterEpoch was ticked {counter} times!");
         };
     }
 }
@@ -117,23 +125,71 @@ tree.Dispose();
 If you did run this you would see log messages in the console that look like this:
 
 ```
-CounterEpoch was ticker 1 times!
+CounterEpoch was ticked 1 times!
 
 <------------ Spoke Frame Trace ------------>
 0: Bootstrap SpokeTree <SpokeTree>
 1: Tick SpokeTree <SpokeTree>
 2: Tick CounterEpoch <CounterEpoch>
-3: Init Log: CounterEpoch was ticker 1 times! <LambdaEpoch>
+3: Init Log: CounterEpoch was ticked 1 times! <LambdaEpoch>
 
 <------------ Spoke Tree Trace ------------>
 |--(0,1)-SpokeTree
     |--(2)-CounterEpoch
-        |--(3)-Log: CounterEpoch was ticker 1 times!
+        |--(3)-Log: CounterEpoch was ticked 1 times!
 ```
 
 The Spoke runtime implements its own virtual stack. With stack frames logged when you called `s.Log()`. The _Spoke Tree Trace_ dumps a structural representation of the tree, with stack frame indices shown against their associated epochs. This comes in useful for debugging issues and understanding execution flows.
 
 You may be surprised to see that `s.Log()` actually attached an epoch (type `LambdaEpoch`). Log messages are persisted into the tree, as epochs, so they're visible when introspecting the tree.
+
+---
+
+#### Epoch attachments
+
+Let's examine the attachment and detachment behaviour of epochs more closely:
+
+```cs
+public class MyEpoch : Epoch {
+
+    protected override TickBlock Init(EpochBuilder s) {
+        // 'Call' in an epoch to attach it. The word 'Call' reflects how Spokes imperative execution
+        // order constructs a tree of epochs extruded from the virtual Spoke stack.
+        s.Call(new SomeEpoch());
+
+        // Take ownership of an IDisposable object. It will be disposed automatically.
+        s.Use(new SomeResource());
+
+        // Subscribe to an event, and unsubscribe on detachment.
+        Action eventHandler = () => Debug.Log("Event triggered!");
+        SomeEvent += eventHandler;
+        s.OnCleanup(() => SomeEvent -= eventHandler);
+
+        return s => {
+            s.Call(new SomeOtherEpoch());
+        };
+    }
+}
+```
+
+After Init, `MyEpoch` with have the attachment list: `[SomeEpoch, SomeResource, OnCleanup]`.
+
+Then after Tick, the attachment list will be extended to: `[SomeEpoch, SomeResource, OnCleanup, SomeOtherEpoch]`. All attachments are appended to the same list, in the order that they are declared. The epoch remembers which index the TickBlock started from, which is index 3 in this case. On subsequent ticks, attachments are rolled back to this index. When `MyEpoch` detaches, the entire list is rolled back. This is what I meant by Spoke resembling a coroutine that runs forwards and backwards.
+
+Spoke assumes that in imperative code, dependencies are fed forward in a chain of causality. Objects tend to only depend on those created before it. Detaching in reverse order unwinds this same chain of causality.
+
+---
+
+#### Choosing Init or Tick
+
+Both `Init` and `Tick` take an `EpochBuilder`, giving the same capabilities for adding attachments. Which one you choose to rely on depends on context, as they have different execution semantics: Init happens synchronously on attachment, while Tick is deferred.
+
+You could use Init for everything, and ignore Tick completely. But then you would lose the incremental computation abilities. The whole tree would be constructed in a single tick. And the whole tree would be torn down, from the root, in a single `SpokeTree.Dispose()`. For some use cases, that might be desirable.
+
+In general I stick to the following patterns:
+
+- Put simple initialization in Init, so the epochs public API (if any) is wired up even before its been ticked.
+- Put all other logic in Tick.
 
 ---
 
