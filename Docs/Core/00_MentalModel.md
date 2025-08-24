@@ -53,7 +53,87 @@ All primitives are derivations of `Epoch`, and are bound to the same lifefycle c
 
 ### Epoch
 
-The name epoch comes refers to its role as a lifetime window. When attached it makes imperative mutations to application state, marking a new epoch in program structure.
+The name _Epoch_ refers to its role as a lifetime window. They mark a new epoch in program structure. All epochs define three lifetime phases:
+
+- **Attach**: When the epoch is attached to the tree, under its parent epoch, it runs `Init()` to declare attachments which persist for the duration of its lifetime.
+- **Tick**: When ticked, an epoch declares ephemeral attachments, which exist until the next time it's ticked. These attachments stored after those declared in `Init`.
+- **Detach**: The epoch traverses backwards over its list of attachments, detaching each one in turn. Including all child epochs, cleanup callbacks and `IDisposable` resources.
+
+Now, lets see a very simple implementation of an epoch:
+
+```cs
+public class CounterEpoch : Epoch {
+
+    // Expose an API to increment the counter. We'll bind the incrementCommand action to its behaviour
+    // inside the Init block.
+    Action incrementCommand;
+    public void Increment() => incrementCommand?.Invoke();
+
+    protected override TickBlock Init(EpochBuilder s) {
+        // Init is called immediately after the epoch is attached to its parent.
+        // Declare attachments here that must persist over the epochs lifetime (until its detached)
+
+        // EpochBuilder has DSL functions for attaching children. It can only be used during Init or Tick,
+        // and cannot be captured in a lambda or variable for later usage. The exception is anything under Ports.
+        incrementCommand = () => s.Ports.RequestTick();
+
+        // Set incrementCommand to null when this epoch detaches, reversing the mutation we just made.
+        // Its not strictly required, calling RequestTick() on a detached epoch won't do anything, but it's a good
+        // habit to form for the cases where it does matter.
+        s.OnCleanup(() => incrementCommand = null);
+
+        int counter = 0;
+
+        // Init must return a 'TickBlock', which is a delegate that's executed each time the epoch ticks.
+        // This pattern was chosen for convenience. The TickBlock can capture a closure with everything
+        // defined during Init.
+        return (EpochBuilder s) => {
+            // Increment the counter we captured in our closure
+            counter++;
+
+            // Log a message showing how many times we were ticked
+            s.Log($"CounterEpoch was ticker {counter} times!");
+        };
+    }
+}
+```
+
+Now we can test `CounterEpoch` by spawning a new `SpokeTree`:
+
+```cs
+// The CounterEpoch requests a tick immediately after Init, so straight away you'll see a log message
+// that it was ticked once.
+var tree = SpokeTree.Spawn(new CounterEpoch());
+
+// Call Increment() to trigger a second log message. SpokeTree.Main refers to the top-most epoch passed
+// to SpokeTree.Spawn(). Think of it like the main function of a Spoke program. Its exposed so you can
+// get at any public API methods you want on the top-most epoch.
+tree.Main.Increment();
+
+// When finished, call tree.Dispose to detach the entire tree. Including the SpokeTree epoch itself.
+tree.Dispose();
+```
+
+If you did run this you would see log messages in the console that look like this:
+
+```
+CounterEpoch was ticker 1 times!
+
+<------------ Spoke Frame Trace ------------>
+0: Bootstrap SpokeTree <SpokeTree>
+1: Tick SpokeTree <SpokeTree>
+2: Tick CounterEpoch <CounterEpoch>
+3: Init Log: CounterEpoch was ticker 1 times! <LambdaEpoch>
+
+<------------ Spoke Tree Trace ------------>
+|--(0,1)-SpokeTree
+    |--(2)-CounterEpoch
+        |--(3)-Log: CounterEpoch was ticker 1 times!
+```
+
+The Spoke runtime implements its own virtual stack. With stack frames logged when you called `s.Log()`. The _Spoke Tree Trace_ dumps a structural representation of the tree, with stack frame indices shown against their associated epochs. This comes in useful for debugging issues and understanding execution flows.
+
+You may be surprised to see that `s.Log()` actually attached an epoch (type `LambdaEpoch`). Log messages are persisted into the tree, as epochs, so they're visible when introspecting the tree.
 
 ---
 
