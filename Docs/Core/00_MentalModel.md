@@ -216,7 +216,7 @@ Let's see an example and the resulting stack trace:
 ```cs
 // Define an epoch which throws an exception on tick
 public class MyBrokenEpoch : Epoch {
-    protected override void Init(EpochBuilder s) {
+    protected override TickBlock Init(EpochBuilder s) {
         return s => {
             throw new Exception("An error has occurred");
         };
@@ -249,7 +249,7 @@ public class ContextData {
 
 // Define an epoch that imports and uses the context object
 public class ImportingEpoch : Epoch {
-    protected override void Init(EpochBuilder s) {
+    protected override TickBlock Init(EpochBuilder s) {
         if (s.TryImport<ContextData>(out var ctx)) {
             s.Log($"Context is {ctx.Data}");
         } else {
@@ -261,7 +261,7 @@ public class ImportingEpoch : Epoch {
 
 // Define an epoch to export the contextual data, and attach epochs that import it
 public class MainEpoch : Epoch {
-    protected override void Init(EpochBuilder s) {
+    protected override TickBlock Init(EpochBuilder s) {
         s.Call(new ImportingEpoch());       // Will log: Cannot find context
         s.Export(new ContextData("Foobar"));
         s.Call(new ImportingEpoch());       // Will log: Context is Foobar
@@ -277,11 +277,66 @@ The list of attachments for `MainEpoch` would look like this:
 
 `[ImportingEpoch, Export<ContextData>, ImportingEpoch, Export<ContextData>, ImportingEpoch]`
 
-`s.Import` searches backwards through the attachment list of its epoch, up to the parents attachment list and backwards through that, all the way to the root. It stops once it finds finds an Export with a matching type. Lexical scoping is possible in Spoke because of the strict imperative execution. Once an epoch is attached, its guaranteed that everything on its dynamic lexical scope will exist over its lifetime.
+`s.Import` searches backwards through the attachment list of its epoch, up to the parents attachment list and backwards through that, all the way to the root. It stops once it finds an Export with a matching type. Lexical scoping is possible in Spoke because of the strict imperative execution. Once an epoch is attached, its guaranteed that everything on its dynamic lexical scope will exist over its lifetime.
 
 ---
 
 ### Ticker
+
+A `Ticker` is an abstract class, and a type of epoch that acts as an execution gateway for ticking the epochs descending from it. You've already seen the `SpokeTree`, which is a ticker that must exist at the root of the tree. It's possible to define other tickers, which can be nested in the tree.
+
+When an epoch attaches to the tree, it finds its nearest ancestor ticker and records it. When the epoch requests to be ticked, that request is directed to this ticker. The same is true for tickers. When they have descendants requesting a tick, the ticker will first need to request a tick from its own ticker. The exception is `SpokeTree`, as its the root of the tree, it doesn't have any tickers beyond it.
+
+Tickers may implement fault boundaries, loops, retries and other control structures. Let's see how to implement a ticker fault boundary:
+
+```cs
+// The FaultBoundary ticker should capture any faults thrown from its descendants and trap them so they don't
+// bubble up the tree. Its subtree will be marked faulted, and cease to tick. But the rest of the tree can
+// continue on.
+public class FaultBoundary : Ticker {
+
+    Epoch childEpoch;
+
+    public RetryTicker(Epoch childEpoch) {
+        this.childEpoch = childEpoch;
+    }
+
+    // Tickers must implement a Bootstrap method, where they wire up their ticking logic.
+    // This is different from the Init method in Epoch. Although it is executed during the
+    // Init phase.
+    protected override Epoch Bootstrap(TickerBuilder s) {
+
+        // Store ports, which includes the Pause() method that we'll need later
+        var ports = s.Ports;
+
+        // Register a callback when this ticker receives a tick from its ticker. When the
+        // ticker has pending epochs to tick, it automatically schedules itself, unless
+        // its paused. You don't explicitly RequestTick on a ticker.
+        s.OnTick(s => {
+            // Call TickNext(), wrapped in a try-catch. It will tick the next pending epoch
+            // and catch any exceptions. You can call TickNext as many times as you want
+            // inside a single OnTick block.
+            try {
+                s.TickNext();
+            } catch (SpokeException ex) {
+                // An exception occured. Log the error, and then pause the ticker, so it
+                // stops receiving ticks that trigger the OnTick callback. We've caught
+                // the error so it won't propagate up to the next ticker.
+                Debug.LogError("Fault boundary caught an error, will stop", ex);
+                ports.Pause();
+            }
+        });
+
+        // Bootstrap should return an unattached epoch that will be attached as the first
+        // descendant under this ticker. Here we've supplied it via a constructor prop.
+        return child;
+    }
+}
+```
+
+> OnTick must advance execution by calling TickNext(), or pause itself. If it does neither then it will throw an exception. As this is high-risk behaviour for inducing infinite loops.
+
+Tickers are powerful because they force execution flow through them to Tick any epochs that descend from them. They enable complex control structures, even incremental loops, where looping conditions are derived from the completion of subtrees attached on each iteration. I've found them extremely useful in DSLs for procedural generation, not so much for general reactivity like in `Spoke.Reactive`.
 
 ---
 
