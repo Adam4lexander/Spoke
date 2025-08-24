@@ -151,7 +151,7 @@ namespace Spoke {
         Action _requestTick;
         protected string Name = null;
         protected virtual bool AutoArmTickAfterInit => true;
-        public Exception Fault { get; private set; }
+        public SpokeException Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => tickCursor.CompareTo(other.tickCursor);
         void DetachFrom(int i) {

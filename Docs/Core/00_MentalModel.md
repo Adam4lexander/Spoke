@@ -12,11 +12,11 @@ The tree execution model is implemented in `Spoke.Runtime`. The fundamental prim
 
 Spoke strongly emphasizes an imperative execution order. Epochs attach their children in the order the code is written, and on cleanup they are detached in the reverse order. Spoke may look declarative, but it is highly imperative. Spoke optimizes for cognitive clarity over raw performance. It builds up trees in the most predictable and intuitive order, instead of the most optimal order. It wants to feel like writing normal imperative code, even when execution flow is indirect and chaotic.
 
-Spokes intended use case is to be the architectural spine of application logic. It's a meta-architecture where you declare and wire up subsystems depending on the state of the application. It shines most strongly where long-lived behaviours must interact in dynamic and emergent ways. Spoke collapses complexity, which normally results in spagetti code, into a tree of localized and coherent bundles. Where lifecycles, setup and teardown of application components are managed automatically. Spoke was built for the requirements of complex games in Unity, but its generalised to any C# application with these requirements.
+Spoke's intended use case is to be the architectural spine of application logic. It's a meta-architecture where you declare and wire up subsystems depending on the state of the application. It shines most strongly where long-lived behaviours must interact in dynamic and emergent ways. Spoke collapses complexity, which normally results in spaghetti code, into a tree of localized and coherent bundles. Where lifecycles, setup and teardown of application components are managed automatically. Spoke was built for the requirements of complex games in Unity, but its generalised to any C# application with these requirements.
 
 ---
 
-## Foreward: When to extend Spoke.Runtime
+## Foreword: When to extend Spoke.Runtime
 
 The information here is mostly to document the runtime behaviour of Spoke, so you understand clearly what's happening in the background when using `Spoke.Reactive`. In practice you'll rarely need to define your own custom Epochs or Tickers.
 
@@ -42,7 +42,7 @@ counter();  // Prints: Counter is 2
 
 This example has a very simple closure. When you call `CreateCounter()` it's almost like instantiating a class with a private `counter` variable and a single method to increment it.
 
-In all of Spoke's code examples you'll see a lot of nested lambdas, which results in nested closures. This is done very intentially. Spoke wouldn't be nearly as expressive without closures. They're the backbone for Spoke, and it's recommended to have a solid understanding of them to use Spoke comfortably.
+In all of Spoke's code examples you'll see a lot of nested lambdas, which results in nested closures. This is done very intentionally. Spoke wouldn't be nearly as expressive without closures. They're the backbone for Spoke, and it's recommended to have a solid understanding of them to use Spoke comfortably.
 
 ---
 
@@ -53,9 +53,9 @@ The core primitives in `Spoke.Runtime` are:
 - `Epoch`: A stateful, lifecycle aware node in the spoke tree. They have three lifecycle phases: Attach, Tick and Detach.
 - `Ticker`: An epoch that controls the tempo of ticks to its subtree. Nested tickers form a chain of execution gateways for advanced control structures and fault boundaries.
 - `SpokeTree`: A ticker that must be at the root of the tree. It exposes the interface for ticking the tree, either reactively by the spoke runtime, or manually by user code.
-- `Dock`: An epoch that can dynamically attach and detach keyed subrees of epochs. It lets you modify the tree outside the `Init` and `Tick` mutation windows.
+- `Dock`: An epoch that can dynamically attach and detach keyed subtrees of epochs. It lets you modify the tree outside the `Init` and `Tick` mutation windows.
 
-All primitives are derivations of `Epoch`, and are bound to the same lifefycle contracts. You use Spoke by implementing subclasses of `Epoch` and `Ticker`, composing in `Dock` where needed, and mounting it under a `SpokeTree`.
+All primitives are derivations of `Epoch`, and are bound to the same lifecycle contracts. You use Spoke by implementing subclasses of `Epoch` and `Ticker`, composing in `Dock` where needed, and mounting it under a `SpokeTree`.
 
 ---
 
@@ -64,7 +64,7 @@ All primitives are derivations of `Epoch`, and are bound to the same lifefycle c
 The name _Epoch_ refers to its role as a lifetime window. They mark a new epoch in program structure. All epochs define three lifetime phases:
 
 - **Attach**: When the epoch is attached to the tree, under its parent epoch, it runs `Init()` to declare attachments which persist for the duration of its lifetime.
-- **Tick**: When ticked, an epoch declares ephemeral attachments, which exist until the next time it's ticked. These attachments stored after those declared in `Init`.
+- **Tick**: When ticked, an epoch declares ephemeral attachments, which exist until the next time it's ticked. These attachments are stored after those declared in `Init`.
 - **Detach**: The epoch traverses backwards over its list of attachments, detaching each one in turn. Including all child epochs, cleanup callbacks and `IDisposable` resources.
 
 Now, lets see a very simple implementation of an epoch:
@@ -105,6 +105,8 @@ public class CounterEpoch : Epoch {
     }
 }
 ```
+
+> RequestTick() doesn't mean it will happen immediately, although in default cases it often does. The epoch schedules itself on its nearest ticker, which potentially has its own ticker. The tick could be deferred for a number of reasons: the epoch is already ticking, or a different epoch in the tree is prioritised for the next tick. We'll get to this later, the rules controlling this are predictable, but in general requesting to tick only flags the intention. The Spoke runtime ultimately decides when it happens.
 
 Now we can test `CounterEpoch` by spawning a new `SpokeTree`:
 
@@ -172,7 +174,7 @@ public class MyEpoch : Epoch {
 }
 ```
 
-After Init, `MyEpoch` with have the attachment list: `[SomeEpoch, SomeResource, OnCleanup]`.
+After Init, `MyEpoch` will have the attachment list: `[SomeEpoch, SomeResource, OnCleanup]`.
 
 Then after Tick, the attachment list will be extended to: `[SomeEpoch, SomeResource, OnCleanup, SomeOtherEpoch]`. All attachments are appended to the same list, in the order that they are declared. The epoch remembers which index the TickBlock started from, which is index 3 in this case. On subsequent ticks, attachments are rolled back to this index. When `MyEpoch` detaches, the entire list is rolled back. This is what I meant by Spoke resembling a coroutine that runs forwards and backwards.
 
