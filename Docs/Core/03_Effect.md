@@ -50,15 +50,11 @@ You can create effects yourself without having to use `SpokeBehaviour`:
 // A reactive state we can test with
 var number = State.Create(0);
 
-// Add a flush zone to the global FlushEngine. Only one zone in the engine can flush at a time.
-FlushEngine.Global.AddFlushZone(s => {
-    s.Effect(s => Debug.Log($"number is: {s.D(number)}"));
-});
-
-// Or alternatively create a brand new isolated engine. This can flush inside the flush of another engine.
-// Powerful but dangerous if you're not careful.
-SpokeRoot.Create(new FlushEngine(s => {
-    Debug.Log($"number is: {s.D(number)}");
+// Spawns a `SpokeTree`. The parameter is a subclass of Epoch thats attached under SpokeTree
+SpokeTree.Spawn(new Effect("Init", s => {
+    s.Effect(s => {
+        Debug.Log($"number is: {s.D(number)}");
+    });
 }));
 ```
 
@@ -83,11 +79,11 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 var myTrigger = Trigger.Create();
 var myState = State.Create(0);
 
-FlushEngine.Global.AddFlushZone(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         Debug.Log($"myState is {myState.Now}");
     }, myTrigger, myState); // any number of dependencies in final args
-});
+}));
 
 // Instantiating effect Prints: myState is 0
 
@@ -112,7 +108,7 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 var name = State.Create("Spokey");
 var age = State.Create(0);
 
-FlushEngine.Global.AddFlushZone(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
     });
@@ -129,7 +125,7 @@ age.Set(1);         // Prints: name: Reacts, age 1
 If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
 
 ```csharp
-FlushEngine.Global.AddFlushZone(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         // Totally fine
         if (s.D(condition)) {

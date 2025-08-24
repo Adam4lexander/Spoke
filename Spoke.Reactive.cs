@@ -8,8 +8,6 @@
 // > Phase
 // > Effect<T>
 // > Memo
-// > FlushEngine
-// > FlushStack
 // > Computation
 // > DependencyTracker
 
@@ -19,7 +17,7 @@ using System.Collections.Generic;
 namespace Spoke {
 
     public delegate void EffectBlock(EffectBuilder s);
-    public delegate Ref<T> EffectBlock<T>(EffectBuilder s);
+    public delegate IRef<T> EffectBlock<T>(EffectBuilder s);
     public delegate T MemoBlock<T>(MemoBuilder s);
 
     // ============================== Trigger ============================================================
@@ -46,18 +44,18 @@ namespace Spoke {
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         Queue<T> events = new Queue<T>();
         Action<long> _Unsub;
+        Action _Flush;
         long idCount = 0;
         bool isFlushing;
-        public Trigger() { _Unsub = Unsub; }
+        public Trigger() { _Unsub = Unsub; _Flush = Flush; }
         public override SpokeHandle Subscribe(Action action) => Subscribe(Subscription.Create(idCount++, action));
         public SpokeHandle Subscribe(Action<T> action) => Subscribe(Subscription.Create(idCount++, action));
         public override void Invoke() => Invoke(default(T));
-        public void Invoke(T param) { events.Enqueue(param); Flush(); }
+        public void Invoke(T param) { events.Enqueue(param); SpokeRuntime.Batch(_Flush); }
         public override void Unsubscribe(Action action) => Unsub(action);
         public void Unsubscribe(Action<T> action) => Unsub(action);
         void Flush() {
             if (isFlushing) return;
-            FlushStack.Hold();
             isFlushing = true;
             while (events.Count > 0) {
                 var evt = events.Dequeue();
@@ -69,7 +67,6 @@ namespace Spoke {
                 subListPool.Return(subList);
             }
             isFlushing = false;
-            FlushStack.Release();
         }
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
@@ -97,10 +94,10 @@ namespace Spoke {
         }
     }
     // ============================== State ============================================================
-    public interface Ref<out T> {
+    public interface IRef<out T> {
         T Now { get; }
     }
-    public interface ISignal<out T> : Ref<T>, ITrigger<T> { }
+    public interface ISignal<out T> : IRef<T>, ITrigger<T> { }
     public interface IState<T> : ISignal<T> {
         void Set(T value);
         void Update(Func<T, T> setter);
@@ -177,14 +174,15 @@ namespace Spoke {
             this.addDynamicTrigger = addDynamicTrigger;
             this.s = s;
         }
-        public void Log(string msg) => s.Log(msg);
         public T D<T>(ISignal<T> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void Use(SpokeHandle trigger) => s.Use(trigger);
         public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
         public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
         public T Export<T>(T obj) => s.Export(obj);
+        public bool TryImport<T>(out T obj) => s.TryImport(out obj);
         public T Import<T>() => s.Import<T>();
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        public void Log(string msg) => s.Log(msg);
     }
     // ============================== Effect ============================================================
     public class Effect : BaseEffect {
@@ -206,7 +204,7 @@ namespace Spoke {
             this.mountWhen = mountWhen;
             this.block = s => { if (mountWhen.Now) block?.Invoke(s); };
         }
-        protected override ExecBlock Init(EpochBuilder s) {
+        protected override TickBlock Init(EpochBuilder s) {
             var mountBlock = base.Init(s);
             AddStaticTrigger(mountWhen);
             return mountBlock;
@@ -259,97 +257,6 @@ namespace Spoke {
         public U D<U>(ISignal<U> signal) { addDynamicTrigger(signal); return signal.Now; }
         public void OnCleanup(Action fn) => s.OnCleanup(fn);
     }
-    // ============================== FlushEngine ============================================================
-    public enum FlushMode { Immediate, Manual }
-    public class FlushEngine : SpokeEngine {
-        static SpokeRoot<FlushEngine> globalRoot = SpokeRoot.Create(new FlushEngine("Global FlushEngine"));
-        public static FlushEngine Global = globalRoot.Epoch;
-        public FlushMode FlushMode = FlushMode.Immediate;
-        Action flushCommand;
-        Epoch epoch;
-        Dock dock;
-        long idCounter;
-        public FlushEngine(string name, Epoch epoch, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : base(logger) {
-            Name = name;
-            this.epoch = epoch;
-            FlushMode = flushMode;
-        }
-        public FlushEngine(string name, EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, new Effect("Root", block), flushMode, logger) { }
-        public FlushEngine(string name, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this(name, (Epoch)null, flushMode, logger) { }
-        public FlushEngine(EffectBlock block, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) : this("FlushEngine", block, flushMode, logger) { }
-        public SpokeHandle AddFlushZone(EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) => AddFlushZone("FlushZone", init, flushMode, logger);
-        public SpokeHandle AddFlushZone(string name, EffectBlock init, FlushMode flushMode = FlushMode.Immediate, ISpokeLogger logger = null) {
-            var id = idCounter++;
-            var subEngine = new FlushEngine(name, new ZoneInit(init), flushMode, logger);
-            dock.Call(id, subEngine);
-            return SpokeHandle.Of(id, id => dock.Drop(id));
-        }
-        protected override Epoch Bootstrap(EngineBuilder s) {
-            flushCommand = () => s.ScheduleExec();
-            s.OnCleanup(() => flushCommand = null);
-            s.OnHasPending(() => {
-                if (FlushMode == FlushMode.Immediate) flushCommand?.Invoke();
-            });
-            s.OnExec(s => {
-                if (!FlushStack.TryAllowFlush(flushCommand)) return;
-                const long maxPasses = 1000;
-                var startFlush = s.FlushNumber;
-                try {
-                    while (s.HasPending) {
-                        if (s.FlushNumber - startFlush > maxPasses) throw new Exception("Exceed iteration limit - possible infinite loop");
-                        s.RunNext();
-                    }
-                } catch (Exception ex) { SpokeError.Log("Internal Flush Error", ex); }
-            });
-            dock = new Dock("Zones");
-            s.OnCleanup(() => dock = null);
-            if (epoch == null) return dock;
-            return new LambdaEpoch("Roots", s => {
-                if (epoch != null) s.Call(epoch);
-                s.Call(dock);
-                return null;
-            });
-        }
-        public void Flush() => flushCommand?.Invoke();
-        public static void Batch(Action action) {
-            FlushStack.Hold();
-            try { action(); } finally { FlushStack.Release(); }
-        }
-        class ZoneInit : Epoch {
-            EffectBlock block;
-            public ZoneInit(EffectBlock block) { this.block = block; }
-            protected override ExecBlock Init(EpochBuilder s) {
-                Action<ITrigger> addDynamicTrigger = _ => {
-                    throw new InvalidOperationException("Cannot call D() from flush zone initializer");
-                };
-                block?.Invoke(new EffectBuilder(addDynamicTrigger, s));
-                return null;
-            }
-        }
-    }
-    // ============================== FlushStack ============================================================
-    internal static class FlushStack {
-        static SpokePool<DeferredQueue> dqPool = SpokePool<DeferredQueue>.Create(dq => { });
-        static Stack<DeferredQueue> dqStack = new Stack<DeferredQueue>();
-        public static void Hold() {
-            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) {
-                dqStack.Push(dqPool.Get());
-            }
-            dqStack.Peek().FastHold();
-        }
-        public static bool TryAllowFlush(Action deferOnHold) {
-            if (dqStack.Count == 0 || dqStack.Peek().IsDraining) {
-                return true;
-            }
-            dqStack.Peek().Enqueue(deferOnHold);
-            return false;
-        }
-        public static void Release() {
-            if (dqStack.Count == 0 || !dqStack.Peek().IsHolding) throw new InvalidOperationException("[FlushStack] Cannot release");
-            dqStack.Peek().FastRelease();
-            if (!dqStack.Peek().IsHolding) dqPool.Return(dqStack.Pop());
-        }
-    }
     // ============================== Computation ============================================================
     public abstract class Computation : Epoch {
         IEnumerable<ITrigger> triggers;
@@ -358,8 +265,8 @@ namespace Spoke {
             Name = name;
             this.triggers = triggers;
         }
-        protected override ExecBlock Init(EpochBuilder s) {
-            tracker = new DependencyTracker(s.ScheduleExec);
+        protected override TickBlock Init(EpochBuilder s) {
+            tracker = new DependencyTracker(s.Ports.RequestTick);
             s.OnCleanup(() => tracker.Dispose());
             foreach (var trigger in triggers) tracker.AddStatic(trigger);
             return s => {

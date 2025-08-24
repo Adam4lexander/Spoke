@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.1.3 - 2025-08-20
+
+Many big changes in `Spoke.Runtime`, although the `Spoke.Reactive` APIs are unchanged. This release adds better logging, a virtual Spoke stack trace, and introspection abilities. The global flush engine from the previous release has been removed. I found a way to make nested flushes safe and predictable.
+
+Nested flushes are very useful in the context of Unity. If one `SpokeBehaviour` instantiates another, its intuitive that the new behaviour will flush immediately to initialize itself. Therefore this release adds some rules where a nested flush is allowed:
+
+- Trees are divided by priority layers, where higher priorities can flush nested in lower priorities. The layer is decided by calling `SpokeRuntime.SpawnTree` or `SpokeRuntime.SpawnEagerTree`.
+- When a `SpokeTree` is created during the flush of another, it's allowed to flush once, inside the existing flush. But only if it's on an equal or higher priority layer.
+- In all other cases trees are deferred and flushed in the order they were created. Each tree is assigned a timestamp at creation time.
+
+These rules enforce a strict, one-way decision when a nested flush can occur. If A can be nested in B, then B cannot be nested in A.
+
+Changelist:
+
+- `SpokeRuntime` is the global orchestrator for Spoke trees. It's a static class which exposes capability to spawn trees and batching updates.
+- A virtual stack is implemented and exposed in `SpokeRuntime`. Spoke produces stack frames when epochs are initialized and ticked.
+- Improved logging will print a virtual stack trace in tree-form. So execution flow across the tree structure is apparent.
+- `SpokeIntrospect` provides functions for traversing the epoch tree, which could be used in visualizations.
+- `FlushLogger` has been removed and replaced with error logging that shows the Spoke stack.
+- `SpokeException` is propagated up the Spoke tree, with a snapshot of the Spoke stack at the point of failure.
+- Removed `FlushEngine.Batch` (Now in SpokeRuntime), `FlushEngine.Global` and `FlushEngine.AddFlushRegion`.
+
+## 1.1.2 - 2025-08-14
+
+This release focuses on `FlushEngine` (previously SpokeEngine), and the choice to have a global engine for all behaviours, or each behaviour having its own. In past releases, every `SpokeBehaviour` had its own `FlushEngine`. This lets an engine flush, and during its flush trigger another to engine flush, resulting in a nested flush. This is powerful, but dangerous if not careful. The default now is a single global `FlushEngine` at the root of all `SpokeBehaviour` engines, so only one can flush at a time.
+
+Nested flushing is still possible by creating seperate trees with `SpokeRoot.Create(new FlushEngine(...))`. But this is now an advanced opt-in feature, not the default.
+
+Another important change is `s.Export` and `s.Import`. Example:
+
+```cs
+s.Effect(s => {
+    s.Export(new SomeResource());
+    s.Effect(s => {
+        var resource = s.Import<SomeResource>();
+    });
+});
+```
+
+Exported objects are visible on the lexical scope. All descendants and later siblings can import it.
+
+Changelist:
+
+- `SpokeEngine` renamed to `FlushEngine`, and the base class `ExecutionEngine` takes the name `SpokeEngine`
+- `FlushEngine.Batch()` is a static method that holds all engines from flushing. It replaces the per-engine batching
+- `FlushEngine.Global` is one engine that all `SpokeBehaviour` will attach to. The implication is only one `SpokeBehaviour` has flush at once
+- `FlushEngine.AddFlushRegion` lets you conveniently attach a nested `FlushEngine` under another. This is what `SpokeBehaviour` is using
+- `s.Export` and `s.Import` replaces `TryGetLexical` and `TryGetContext`
+- Correctly handle Epochs that dispose their own root, or drop themselves from a dock mid-execution
+- Correctly order all `Call`, `OnCleanup` and `Use` resources in a single array. Now they are truly disposed in reverse-declaration order
+
 ## 1.1.1 - 2025-08-04
 
 This update continues to refine the declarative lifecycle tree in `Spoke.Runtime`. The documented behaviour of Spoke and its reactive engine is unchanged. The reactivity APIs in Spoke are stabilizing, even though the runtime changes often.

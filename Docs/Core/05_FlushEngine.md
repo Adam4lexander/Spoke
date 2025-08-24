@@ -1,30 +1,30 @@
-# FlushEngine
+# SpokeTree
 
-The `FlushEngine` is an implementation of `SpokeEngine`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `FlushEngine` specific behaviour that's not part of the base `SpokeEngine`.
+The `SpokeTree` is an implementation of `Ticker`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `SpokeTree` specific behaviour that's not already covered.
 
-When epochs are attached to a call-tree, they schedule themselves on the nearest `SpokeEngine`. Unless you're hacking deep in Spoke, this will be a `FlushEngine`, and it will be hosted by the root node of the tree.
+When epochs are attached to a call-tree, they schedule themselves on the nearest `Ticker`. Unless you're hacking deep in Spoke, this will be a `SpokeTree`, and it will be the root of the tree.
 
-When the engine begins a flush, it will synchronously execute all scheduled epochs until nothing remains to be done. The engine can be configured to flush immediately when an epoch is scheduled, or it can be controlled manually.
+When the SpokeTree begins a flush, it will synchronously execute all scheduled epochs until nothing remains to be done. The SpokeTree can be configured to flush immediately when an epoch is scheduled, or it can be controlled manually.
 
 ---
 
 ## Usage with SpokeBehaviour
 
-Each `SpokeBehaviour` creates it's own personal `FlushEngine`, that it mounts the `Init` Effect to. This default engine is configured with `FlushMode.Immediate`.
+Each `SpokeBehaviour` creates it's own personal `SpokeTree`, that it mounts the `Init` Effect to. This default SpokeTree is configured with `FlushMode.Auto`.
 
 ---
 
 ## Batching
 
-_Batching_ means grouping multiple reactive updates together before the `FlushEngine` flushes any computations.
-Put simply, batching tells the engine: **"Don't flush yet."**
+_Batching_ means grouping multiple reactive updates together before the `SpokeTree` flushes any computations.
+Put simply, batching tells the runtime: **"Don't flush yet."**
 
 In Spoke, batching happens in two ways:
 
-1. **Explicit Batching** – You call `FlushEngine.Batch(() => { ... })` to group updates manually.
-2. **Internal Deferral** – The engine automatically defers flushing during certain internal operations (like `Trigger.Invoke`) to ensure safety and consistency.
+1. **Explicit Batching** – You call `SpokeRuntime.Batch(() => { ... })` to group updates manually.
+2. **Internal Deferral** – The runtime automatically defers flushing during certain internal operations (like `Trigger.Invoke`) to ensure safety and consistency.
 
-Both mechanisms cause the engine to **defer a flush**.
+Both mechanisms cause the runtime to **defer a flush**.
 Both are essential for keeping your logic efficient and deterministic.
 
 Let's break them down.
@@ -39,7 +39,7 @@ First let's see the problem it's trying to solve:
 var className = State.Create("Warrior");
 var level = State.Create(1);
 
-FlushEngine.Global.AddFlushZone(s => {
+SpokeTree.Spawn(new Effect(s => {
     s.Effect(s => {
         Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
     });
@@ -55,7 +55,7 @@ Result: **3 flushes, 3 recomputations, 3 logs.**
 Now let’s say you want to update both values together, and flush only once:
 
 ```csharp
-FlushEngine.Batch(() => {
+SpokeRuntime.Batch(() => {
     className.Set("Paladin");
     level.Set(2);
 });                       // Prints: class: Paladin, lvl: 2
