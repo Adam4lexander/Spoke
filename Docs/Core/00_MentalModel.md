@@ -417,6 +417,32 @@ In case it sounds complicated, the objective is to make ticking order as intuiti
 
 ### SpokeTree
 
+The `Spoketree` is a special kind of ticker that must exist at the root of a tree. All ticks within the tree must pass through `SpokeTree`, and these signals will originate from outside the tree. Generally, `SpokeTree` will flush its scheduled epochs on receiving a single tick. Although its possible to construct a manually flushed `SpokeTree` and tick it incrementally from user code.
+
+---
+
+#### Flushing
+
+To be precise what a flush is, here is an ultra-simple example of a ticker that flushes:
+
+```cs
+public class FlushingTicker : Ticker {
+    Epoch child;
+
+    public FlushingTicker(Epoch child) => this.child = child;
+
+    protected override Epoch Bootstrap(TickerBuilder s) {
+        var ports = s.Ports;
+        s.OnTick(s => {
+            // On receiving a single tick, tick all pending epochs in a loop until there is
+            // nothing remaining. Holds the thread until the entire subtree has stabilized
+            while (ports.HasPending) s.TickNext();
+        });
+        return child;
+    }
+}
+```
+
 ---
 
 ### Dock
