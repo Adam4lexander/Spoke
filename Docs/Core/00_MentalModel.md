@@ -281,6 +281,35 @@ The list of attachments for `MainEpoch` would look like this:
 
 ---
 
+#### `LambdaEpoch`
+
+Instead of subclassing from `Epoch`, you can use `LambdaEpoch` to define them in a functional composition style. Its constructor takes an `InitBlock`, which is a function delegate type matching the `TickBlock Init(EpochBuilder s)` method you'd normally override in `Epoch`:
+
+```cs
+SpokeTree.Spawn(new LambdaEpoch("Main", s => {
+    s.Log("Main is attached");
+    s.Call(new LambdaEpoch("Child1", s => {
+        s.Log("Child1 is attached");
+        return s => {
+            s.Log("Child1 is ticked");
+        };
+    }));
+    return s => {
+        s.Log("Main is ticked");
+        s.Call(new LambdaEpoch("Child2", s => {
+            s.Log("Child2 is attached");
+            return s => {
+                s.Log("Child2 is ticked");
+            };
+        }));
+    };
+}));
+```
+
+It's the same pattern as `Effect` taking an `EffectBlock` in `Spoke.Reactive`. They're great for declaring inline, one-off behaviour without having to define a new class. If you want to deep dive Spokes runtime behaviour, the `LambdaEpoch` is a great tool for writing short, self-contained test cases.
+
+---
+
 ### Ticker
 
 A `Ticker` is an abstract class, and a type of epoch that acts as an execution gateway for ticking the epochs descending from it. You've already seen the `SpokeTree`, which is a ticker that must exist at the root of the tree. It's possible to define other tickers, which can be nested in the tree.
@@ -297,7 +326,7 @@ public class FaultBoundary : Ticker {
 
     Epoch childEpoch;
 
-    public RetryTicker(Epoch childEpoch) {
+    public FaultBoundary(Epoch childEpoch) {
         this.childEpoch = childEpoch;
     }
 
