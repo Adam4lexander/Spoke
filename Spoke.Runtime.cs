@@ -108,7 +108,7 @@ namespace Spoke {
         protected bool isPendingEagerTick;
         bool Friend.IsPendingEagerTick() => isPendingEagerTick;
         public int CompareTo(SpokeTree other) {
-            if (FlushMode != other.FlushMode) return FlushMode.CompareTo(other.FlushMode);
+            if (FlushLayer != other.FlushLayer) return FlushLayer.CompareTo(other.FlushLayer);
             if (isPendingEagerTick == other.isPendingEagerTick) return TimeStamp.CompareTo(other.TimeStamp);
             return isPendingEagerTick ? -1 : 1;
         }
@@ -151,7 +151,7 @@ namespace Spoke {
         Action _requestTick;
         protected string Name = null;
         protected virtual bool AutoArmTickAfterInit => true;
-        public Exception Fault { get; private set; }
+        public SpokeException Fault { get; private set; }
         public override string ToString() => Name ?? GetType().Name;
         public int CompareTo(Epoch other) => tickCursor.CompareTo(other.tickCursor);
         void DetachFrom(int i) {
