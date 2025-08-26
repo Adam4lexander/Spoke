@@ -108,7 +108,7 @@ namespace Spoke {
         protected bool isPendingEagerTick;
         bool Friend.IsPendingEagerTick() => isPendingEagerTick;
         public int CompareTo(SpokeTree other) {
-            if (FlushMode != other.FlushMode) return FlushMode.CompareTo(other.FlushMode);
+            if (FlushLayer != other.FlushLayer) return FlushLayer.CompareTo(other.FlushLayer);
             if (isPendingEagerTick == other.isPendingEagerTick) return TimeStamp.CompareTo(other.TimeStamp);
             return isPendingEagerTick ? -1 : 1;
         }

@@ -443,6 +443,105 @@ public class FlushingTicker : Ticker {
 }
 ```
 
+> In practice, you'd probably want to add guards against potential infinite loops, in case the subtree oscillates and never finishes ticking.
+
+---
+
+#### Spawning Trees
+
+The easiest way to spawn trees is by the convenience methods on `SpokeTree`:
+
+```cs
+// Spawns a default auto-flushed tree. Pass it an epoch that will be attached directly below the
+// SpokeTree ticker. This tree will request ticks from the Spoke runtime automatically, when
+// it has any pending work.
+SpokeTree.Spawn(Epoch main);
+
+// Spawns an auto-flushed tree, but with a higher priority flush-layer compared to Spawn().
+// The flush-layer determines when a tree can start flushing, during the flush of another.
+// This is called a nested flush, which we'll discuss soon.
+SpokeTree.SpawnEager(Epoch main);
+
+// Spawns a tree thats manually driven by user code. You call SpokeTree.Flush() to initiate
+// a flush, or SpokeTree.Tick() to progress one tick.
+SpokeTree.SpawnManual(Epoch main);
+```
+
+---
+
+#### Auto Flushed Trees
+
+Both `SpokeTree.Spawn()` and `SpokeTree.SpawnEager()` will spawn a tree in auto-flush mode. This means the tree is flushed automatically by the runtime. When the `SpokeTree` receives any tick requests from its dependants it requests a tick from the Spoke runtime. The only difference between them is the flush layer. `SpawnEager()` creates a tree with a higher flushing priority then `Spawn()` does.
+
+Spoke is single-threaded, and it can support multiple trees. That means, at a given time there can be any number of trees requesting a tick. The runtime has strict rules for orchestrating these requests and deciding which tree flushes when. The rules are straightforward:
+
+- For any given flush layer, there can be only one tree being flushed at a time. Pending trees are ordered by their creation time, so older trees are flushed before newer trees.
+- If a tree is flushing, and a tree of a higher priority flush layer is scheduled, then a nested flush is initiated. The incoming tree is flushed synchronously, before passing control back to the first one to finish its flush.
+- If a tree is flushing, and a new tree **of equal or higher priority is spawned**, then a nested flush is initiated. This rule overrides the first, and its the only time that a tree can flush nested in another of equal flush layer.
+
+Lets see some examples to drive home how these rules work in practice:
+
+```cs
+// SpokeRuntime.Batch() holds the runtime from running anything while inside the code block.
+// I'm using it to ensure both trees are scheduled before the runtime begins flushing anything.
+SpokeRuntime.Batch(() => {
+    SpokeTree.Spawn("Tree1", new LambdaEpoch(s => s => s.Log("Tree1 Flushed")));
+    SpokeTree.Spawn("Tree2", new LambdaEpoch(s => s => s.Log("Tree2 Flushed")));
+});
+// Will show, "Tree1 Flushed", "Tree2 Flushed"
+// Tree1 is older so it will always flush before Tree2, if the runtime has to choose.
+
+SpokeRuntime.Batch(() => {
+    SpokeTree.Spawn("Default", new LambdaEpoch(s => s => s.Log("Default Flushed")));
+    SpokeTree.SpawnEager("Eager", new LambdaEpoch(s => s => s.Log("Eager Flushed")));
+});
+// Will show: "Eager Flushed", "Default Flushed"
+// The eager one is flushed first, but its not nested. A nested flush would only happen if the
+// eager one was scheduled while the default one was mid-flush.
+
+// So lets see an actual nested flush in action.
+SpokeTree.Spawn("Outer", new LambdaEpoch(s => s => {
+    s.Log("Before");
+    SpokeTree.Spawn("Inner", new LambdaEpoch(s => s => {
+        s.Log("Inner Flushed");
+    }));
+    s.Log("After");
+}));
+// Will show: "Before", "Inner Flushed", "After"
+// This is the one chance "Inner" has to flush nested in "Outer".
+// Because they have equal flush layers.
+```
+
+Let's see the Spoke stack trace produced by that log: "Inner FLushed":
+
+```
+<------------ Spoke Frame Trace ------------>
+0: Bootstrap Outer <SpokeTree>
+1: Tick Outer <SpokeTree>
+2: Tick LambdaEpoch <LambdaEpoch>
+3: Bootstrap Inner <SpokeTree>
+4: Tick Inner <SpokeTree>
+5: Tick LambdaEpoch <LambdaEpoch>
+6: Init Log: Inner Flushed <LambdaEpoch>
+
+<------------ Spoke Tree Trace ------------>
+|--(0,1)-Outer
+    |--(2)-LambdaEpoch
+        |--Log: Before
+
+|--(3,4)-Inner
+    |--(5)-LambdaEpoch
+        |--(6)-Log: Inner Flushed
+```
+
+> The stack trace shows both trees: "Outer" and "Inner". Nested flushes are reflected on the stack so they're visible and debuggable in case of problems.
+
+So why all the rules? And why allow nested flushes at all? The third rule, where trees can flush nested on creation, is extremely useful in Unity. Every `SpokeBehaviour` has its own `SpokeTree`. Often, in Unity, a `MonoBehaviour` will instantiate another, via `AddComponent<T>()`. If a `SpokeBehaviour` instantiates another, it aligns with expectations, that the second will be fully initialized by the time control returns to the first. Just like MonoBehaviours `Awake` and `OnEnable` are invoked synchronously when you `AddComponent`.
+
+A deeper reason these rules were chosen, is to enforce a one-way control flow. If tree A can be nested in B, then B can never be nested in A. If this wasn't true then nested flushing would be unpredictable and dangerous.
+
+Finally, I haven't explained the purpose for `SpawnEager()`. It's intended to model multi-phase flushes. It enables write-then-read, where a tree can set a reactive signal, and then read a derived signal with its fresh value. It's an advanced feature, and probably best ignored unless you're very familiar with Spoke.
+
 ---
 
 ### Dock
