@@ -544,274 +544,55 @@ Finally, I haven't explained the purpose for `SpawnEager()`. It's intended to mo
 
 ---
 
+#### Manual Flushed Trees
+
+A tree created with `SpokeTree.Manual()` is under user-control. You decide when it ticks, or when it flushes:
+
+```cs
+var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+    s.Call(new LambdaEpoch(s => s => s.Log("1")));
+    s.Call(new LambdaEpoch(s => s => s.Log("2")));
+    s.Call(new LambdaEpoch(s => s => s.Log("3")));
+}));
+
+// Either call tick
+tree.Tick();    // Logs: 1
+
+// Or call flush
+tree.Flush();   // logs: 2 then 3
+```
+
+> '1' wasn't logged on flush because it had already been ticked once
+
+Calling `Tick()` or `Flush()` is guaranteed to happen synchronously. Although an exception will be thrown if re-entrancy is detected. Nested flushes from auto-flushed trees are possible. The manual tree has the same flush layer as the tree created from `SpokeTree.Spawn()`.
+
+Manually flushed trees are rarely useful with `Spoke.Reactive`. I built it for a procedural generation DSL I was experimenting with. It lets trees be ticked. So heavy proc gen logic can be spread across frames without causing lag spikes.
+
+---
+
 ### Dock
 
----
-
-## Tree-based execution
-
-Let's look at a simple Spoke program:
+The `Dock` is the final primitive in Spoke runtime arsenal, and it's an important one. It lets you dynamically attach keyed epochs to the tree, outside the normal mutation windows: Init and Tick.
 
 ```cs
-SpokeTree.Spawn(new Effect("Root", s => {
-    s.Effect("1", s => {
-        s.Effect("11", s => {
-            s.Effect("111", s => { });
-        });
-        s.Effect("12", s => {
-            s.Effect("121", s => { });
-        });
-    });
-    s.Effect("2", s => {
-        s.Effect("21", s => {
-            s.Effect("211", s => { });
-        });
-        s.Effect("22", s => {
-            s.Effect("221", s => { });
-        });
-    });
+// Spawn a tree with a dock inside
+SpokeTree.Spawn(new LambdaEpoch(s => {
+    dock = s.Call(new Dock());
+    return null;
 }));
-```
 
-Which constructs the tree structure:
-
-```
-(Tree Structure)            (Execution Order)
-
-SpokeTree                   1
-│
-Root                        2
-├── 1                       3
-│   ├── 11                  4
-│   │   └── 111             5
-│   └── 12                  6
-│       └── 121             7
-└── 2                       8
-    ├── 21                  9
-    │   └── 211             10
-    └── 22                  11
-        └── 221             12
-```
-
-First notice that the `SpokeTree` is an active object in the tree. When epochs attach to the tree, they find the nearest ancestor extending `Ticker`, and schedule themselves there. The ticker decides the tempo of execution. `SpokeTree` is one kind of ticker. In this configuration it will flush eagerly, ticking all scheduled epochs in one synchronous flush.
-
-The second column shows the order the epochs are ticked. It's in a strict imperative order. They're flushed in the same order as their code is written. This is **the most important invariant of the mental model**. The call-tree doesn't just encode ownership, it encodes causality as well. For an epoch to exist in the tree, all its earlier siblings must exist too. Even subclasses of `Ticker` cannot break this invariant.
-
-This invariant is vital for predictable execution behaviour when arbitrary subtrees are scheduled for remount. For example lets say a reactive signal triggers some of the epochs to reschedule:
-
-```
-SpokeTree
-│
-Root
-├── 1
-│   ├── 11
-│   │   └── 111*
-│   └── 12
-│       └── 121
-└── 2*
-    ├── 21*
-    │   └── 211
-    └── 22
-        └── 221
-```
-
-The epochs scheduled for remount are marked by a `*`, including `111`, `2` and `21`.
-
-According to imperative ordering, they will tick in the order `111`, `2` and then `21`. Exactly the order they appear in the tree. In fact since `21` is descending from `2` it would be recreated anyway, so the fact it was explicitely scheduled is ignored.
-
-The final execution order will be:
-
-```
-(Tree Structure)            (Execution Order)
-
-SpokeTree
-│
-Root
-├── 1
-│   ├── 11
-│   │   └── 111             1
-│   └── 12
-│       └── 121
-└── 2                       2
-    ├── 21                  3
-    │   └── 211             4
-    └── 22                  5
-        └── 221             6
-```
-
----
-
-### Detach behaviour
-
-When a live epoch is scheduled to be ticked, it will cause a remount. First the epoch is detached, and then created again fresh, rerunning the logic associated to that node.
-
-When an epoch detaches, it will first detach its children in reverse-imperative order. When node `2` was scheduled before, the epochs were cleaned up in this order:
-
-```
-(Tree Structure)            (Cleanup Order)
-
-.
-└── 2                       5
-    ├── 21                  4
-    │   └── 211             3
-    └── 22                  2
-        └── 221             1
-```
-
-After cleanup it results in the following transitory structure:
-
-```
-(Tree Structure)
-
-.
-└── 2
-```
-
-Epoch `2` still exists in the tree, it's still 'attached', but its been unmounted. All its descendants have been detached and disposed, and its cleanup functions have run (in reverse declaration order). Immediately after unmounting `2`, Spoke will mount it once again to produce a new subtree.
-
----
-
-### Deferred Execution
-
-When an epoch is mounted, it attaches sub-epochs that are scheduled and ticked later. They're not ticked within the same call-stack frame. This has some subtle consequences to be aware of:
-
-```cs
-SpokeTree.Spawn(new Effect("Root", s => {
-
-    var number = 5;
-    s.Effect(s => number = 10);
-
-    Debug.Log($"number is {number}");                   // Prints: number is 5
-
-    s.Effect(s => Debug.Log($"number is {number}"));    // Prints: number is 10
+// Attach a new epoch to the dock
+dock.Call("key", new LambdaEpoch(s => {
+    Debug.Log("Docked epoch attached");
+    s.OnCleanup(() => Debug.Log("Docked epoch detached"));
+    return null;
 }));
+// Will print: Docked epoch attached
+
+// Then drop the docked epoch, passing its key to dispose it
+dock.Drop("key"); // Will print: Docked epoch detached
 ```
 
-Lets step through the construction of the call-tree to understand what's going on. First at the call to `SpokeTree.Spawn(...)`:
+> If you `Dock.Call()` and re-use the key of an existing docked epoch, that existing epoch will first be attached. Before the new one is attached.
 
-```
-SpokeEngine
-│
-Root*
-```
-
-The Effect (named root) is attached to SpokeTree. It's scheduled for tick, triggering a flush, but it's not mounted yet.
-
-```
-SpokeTree
-│
-Root            (number=5, print: "number is 5")
-├── Effect*
-│
-└── Effect*
-```
-
-Now root is mounted, and its mount function is called. It initializes `number = 5`, it attaches two sub-effects, and it prints `number is 5`. The first Effect will set `number = 10`, but only when it mounts. It's not mounted yet, it's attached and scheduled for mounting.
-
-```
-SpokeTree
-│
-Root
-├── Effect      (number=10)
-│
-└── Effect*
-```
-
-The first Effect is mounted and sets `number = 10`.
-
-```
-SpokeTree
-│
-Root
-├── Effect
-│
-└── Effect      (prints: "number is 10")
-```
-
-This behaviour can take you by surprise if you're not expecting it. But there's a simple fix. If you have code that depends on the output of a sub-node, put that code in a sub-node too.
-
----
-
-## Runtime classes
-
-`Spoke.Runtime.cs` defines a handful of base classes that implement the tree execution model:
-
-- `Epoch`: Is the foundational base class in Spoke. Epochs are invoked declaratively, form a tree, and persist as active objects. They maintain state, respond to context, expose behaviour, and may spawn child epochs.
-
-- `Ticker`: Is a type of `Epoch`, and an abstract class for controlling the tempo of execution of its subtree. When Epochs are attached to the tree, they schedule themselves on their contextual ticker to be ticked.
-
-- `Dock`: An `Epoch` that lets you dynamically attach and dispose epochs at runtime.
-
-This runtime is the foundation that all the `Spoke.Reactive` behaviour is built on. Many of the reactive objects including `Effect`, `Reaction`, `Phase` and `Memo` are each derived from `Epoch`.
-
----
-
-### Custom Epochs
-
-You can define your own Epochs by subclassing `Epoch`:
-
-```cs
-public class MyCustomEpoch : Epoch {
-
-    public bool IsAttached { get; private set; }
-    public bool IsMounted { get; private set; }
-
-    public MyCustomEpoch() {
-        Name = "My Epoch"; // Optionally set the name, which will show in debugging views
-    }
-
-    protected override ExecBlock Init(EpochBuilder s) {
-        // This code block is run eagerly, as soon as the epoch attaches to the tree, and before
-        // its scheduled for execution on the nearest engine
-        IsAttached = true;
-        s.OnCleanup(() => IsAttached = false);
-
-        return s => {
-            // Returns a 'continuation' for logic that's deferred and scheduled on the nearest engine.
-            // This block is cleaned up, and executed again fresh each time the epoch is 'executed'
-            IsMounted = true;
-            s.OnCleanup(() => IsMounted = false);
-        };
-    }
-}
-```
-
-> In Spoke, an Epoch runs across two temporal zones. Epochs attach a linear sequence of sub-epochs, resources and cleanup functions in Init, followed by Init's continuation. The Init block binds resources to the lifetime of the Epoch. The ExecBlock can be rerun repeatedly, by an engine, each time cleaning up and attaching a new set of children.
-
-You can attach the custom epoch into the call-tree by 'calling' it from a parent epoch:
-
-```cs
-SpokeTree.Spawn(new Effect("Root", s => {
-    var myEpoch = s.Call(new MyCustomeEpoch()); // Attaches to the tree and returns the epoch instance
-    Debug.Log(myEpoch.IsAttached);              // Prints: true
-}));
-```
-
-This would result in the following tree structure:
-
-```
-Epoch[SpokeEngine]
-│
-Epoch[Effect(name = "Root")]
-│
-Epoch[MyCustomEpoch(name = "My Epoch")]
-```
-
-Note the `s.Call()` expression. This is the fundamental way for epochs to be 'called' into the lifecycle tree. In `Spoke.Reactive` calls like `s.Effect()` and `s.Memo()` are convenience sugar over `s.Call()`:
-
-```cs
-s.Effect("myEffect", s => {});
-
-// Is equivalent to
-
-s.Call(new Effect("myEffect", s => {}));
-```
-
-Defining custom Epochs is generally not needed outside of some advanced use cases. The `Spoke.Reactive` epochs already implement a functional composition style via `EffectBuilder`. There are two main reasons to define new epochs:
-
-1. To define a custom DSL in a new problem domain. For example, something like `EffectBuilder`, but designed for procedural generation.
-2. To define a lifecycle-controlled manager that facades a sub-tree and gives context to lexically scoped epochs.
-
-I'll expand on these use cases elsewhere. For now it's enough to know that everything in Spoke's call-tree is a kind of `Epoch`, and they are all bound to the same tree-based execution behaviour.
-
----
+Docks are dynamic containers for epochs. They're very often used for event handlers. For example, say you have an event that triggers when an enemy is nearby, and you want to attach an epoch to track that enemy. You would need to use a dock. Because the event would have been triggered outside the parents mutation window.
