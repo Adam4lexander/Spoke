@@ -116,7 +116,7 @@ public class CounterEpoch : Epoch {
 }
 ```
 
-> RequestTick() doesn't mean it will happen immediately, although in default cases it often does. The epoch schedules itself on its nearest ticker, which potentially has its own ticker. The tick could be deferred for a number of reasons: the epoch is already ticking, or a different epoch in the tree is prioritised for the next tick. We'll get to this later, the rules controlling this are predictable, but in general requesting to tick only flags the intention. The Spoke runtime ultimately decides when it happens.
+> RequestTick() doesn't mean it will happen immediately, although in default cases it often does. The epoch schedules itself on its nearest ticker, which may have its own ticker. The tick could be deferred for a number of reasons: the epoch is already ticking, or a different epoch in the tree is prioritised for the next tick. We'll get to this later, the rules controlling this are predictable, but in general requesting to tick only flags the intention. The Spoke runtime ultimately decides when it happens.
 
 Now we can test `CounterEpoch` by spawning a new `SpokeTree`:
 
@@ -196,7 +196,7 @@ Spoke assumes that in imperative code, dependencies are fed forward in a chain o
 
 Both `Init` and `Tick` take an `EpochBuilder`, giving the same capabilities for adding attachments. Which one you choose to rely on depends on context, as they have different execution semantics: Init happens synchronously on attachment, while Tick is deferred.
 
-You could use Init for everything, and ignore Tick completely. But then you would lose the incremental computation abilities. The whole tree would be constructed in a single tick. And the whole tree would be torn down, from the root, in a single `SpokeTree.Dispose()`. For some use cases, that might be desirable.
+You could use Init for everything, and ignore Tick completely. But then you would lose the incremental computation abilities. The whole tree would be constructed in one go, without a single tick. And the whole tree would be torn down, from the root, in a single `SpokeTree.Dispose()`. For some use cases, that might be desirable.
 
 In general I stick to the following patterns:
 
@@ -207,7 +207,7 @@ In general I stick to the following patterns:
 
 #### Fault Handling
 
-Epochs catch exceptions thrown from Init or Tick, and wraps them in a `SpokeException`, including a snapshot of the virtual Spoke stack at the point of failure. The exception propagates upwards through the chain of epochs and tickers, marking each one as faulted on the way. The `SpokeTree` catches the exception and marks itself as faulted. All epochs and tickers which faulted will no longer be able to tick.
+Epochs catch exceptions thrown from Init or Tick, and wraps them in a `SpokeException`, including a snapshot of the virtual Spoke stack at the point of failure. The exception propagates upwards through the chain of tickers, marking each one as faulted on the way. The `SpokeTree` catches the exception and marks itself as faulted. All epochs and tickers which faulted will no longer be able to tick.
 
 You can catch the `SpokeException` at any point to stop it propagating further up the tree. If it reaches the `SpokeTree` then the entire tree has faulted and will cease to be executed. You can access the fault marked on an epoch with `Epoch.Fault`.
 
@@ -236,9 +236,9 @@ If you catch the exception before it reaches the SpokeTree then you can contain 
 
 #### Exports and Imports
 
-Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by other epochs further down the tree. This lets you share common dependencies without having to explicitely feed it down through the tree via epoch constructor props.
+Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by another further down the tree. This lets you share common dependencies without having to explicitely feed it down through the tree via epoch constructor props.
 
-In Spoke, exports are lexically scoped. Which may be surprising if you're familiar with React. Epochs import resources, not just from their direct ancestors, but also their earlier siblings, their parents earlier siblings and so on. It's functionally equivalent to typical scoping rules in programming languages.
+In Spoke, exports are lexically scoped. Which may be surprising if you're familiar with React. Epochs import resources, not just from their direct ancestors, but also their earlier siblings, their parents earlier siblings and so on. It's equivalent to variable scoping rules in programming languages.
 
 ```cs
 // Define a contextual data object to share in the tree
@@ -312,11 +312,11 @@ It's the same pattern as `Effect` taking an `EffectBlock` in `Spoke.Reactive`. T
 
 ### Ticker
 
-A `Ticker` is an abstract class, and a type of epoch that acts as an execution gateway for ticking the epochs descending from it. You've already seen the `SpokeTree`, which is a ticker that must exist at the root of the tree. It's possible to define other tickers, which can be nested in the tree.
+A `Ticker` is an abstract class, and a type of epoch that acts as an execution gateway for driving ticks to their descendants. You've already seen the `SpokeTree`, which is a ticker that exists at the root of the tree. You can define other tickers too, which are nested in the tree.
 
-When an epoch attaches to the tree, it finds its nearest ancestor ticker and records it. When the epoch requests to be ticked, that request is directed to this ticker. The same is true for tickers. When they have descendants requesting a tick, the ticker will first need to request a tick from its own ticker. The exception is `SpokeTree`, as its the root of the tree, it doesn't have any tickers beyond it.
+When an epoch attaches to the tree, it finds its nearest ancestor ticker and records it. When it requests to be ticked, that request is directed to this ticker. As tickers are a kind of epoch, this is also true for them. To tick their descendants they will first request a tick from their own ticker. The exception is `SpokeTree`, as its the root of the tree, it doesn't have any tickers beyond it.
 
-Tickers may implement fault boundaries, loops, retries and other control structures. Let's see how to implement a ticker fault boundary:
+Tickers may implement fault boundaries, loops, retries and other control structures. Let's see how to implement a fault boundary:
 
 ```cs
 // The FaultBoundary ticker should capture any faults thrown from its descendants and trap them so they don't
@@ -417,7 +417,7 @@ In case it sounds complicated, the objective is to make ticking order as intuiti
 
 ### SpokeTree
 
-The `Spoketree` is a special kind of ticker that must exist at the root of a tree. All ticks within the tree must pass through `SpokeTree`, and these signals will originate from outside the tree. Generally, `SpokeTree` will flush its scheduled epochs on receiving a single tick. Although its possible to construct a manually flushed `SpokeTree` and tick it incrementally from user code.
+The `Spoketree` is a special kind of ticker that must exist at the root of a tree. All ticks in the tree will pass through `SpokeTree`. Generally, `SpokeTree` will flush its scheduled epochs on receiving a single tick. Although its possible to construct a manually flushed `SpokeTree` and tick it incrementally from user code.
 
 ---
 
@@ -471,9 +471,9 @@ SpokeTree.SpawnManual(Epoch main);
 
 #### Auto Flushed Trees
 
-Both `SpokeTree.Spawn()` and `SpokeTree.SpawnEager()` will spawn a tree in auto-flush mode. This means the tree is flushed automatically by the runtime. When the `SpokeTree` receives any tick requests from its dependants it requests a tick from the Spoke runtime. The only difference between them is the flush layer. `SpawnEager()` creates a tree with a higher flushing priority then `Spawn()` does.
+Both `SpokeTree.Spawn()` and `SpokeTree.SpawnEager()` will spawn a tree in auto-flush mode. This means the tree is flushed automatically by the runtime. When the `SpokeTree` receives any tick requests from its dependants, it requests its own tick from the Spoke runtime. The difference between `Spawn` and `SpawnEager` is the flush layer. `SpawnEager()` creates a tree with a higher flushing priority then `Spawn()` does.
 
-Spoke is single-threaded, and it can support multiple trees. That means, at a given time there can be any number of trees requesting a tick. The runtime has strict rules for orchestrating these requests and deciding which tree flushes when. The rules are straightforward:
+Spoke is single-threaded, and it can support multiple trees. That means at a given time there can be any number of trees requesting a tick. The runtime has strict rules for orchestrating these requests and deciding which tree flushes when. The rules are straightforward:
 
 - For any given flush layer, there can be only one tree being flushed at a time. Pending trees are ordered by their creation time, so older trees are flushed before newer trees.
 - If a tree is flushing, and a tree of a higher priority flush layer is scheduled, then a nested flush is initiated. The incoming tree is flushed synchronously, before passing control back to the first one to finish its flush.
@@ -491,6 +491,8 @@ SpokeRuntime.Batch(() => {
 // Will show, "Tree1 Flushed", "Tree2 Flushed"
 // Tree1 is older so it will always flush before Tree2, if the runtime has to choose.
 
+
+
 SpokeRuntime.Batch(() => {
     SpokeTree.Spawn("Default", new LambdaEpoch(s => s => s.Log("Default Flushed")));
     SpokeTree.SpawnEager("Eager", new LambdaEpoch(s => s => s.Log("Eager Flushed")));
@@ -498,6 +500,8 @@ SpokeRuntime.Batch(() => {
 // Will show: "Eager Flushed", "Default Flushed"
 // The eager one is flushed first, but its not nested. A nested flush would only happen if the
 // eager one was scheduled while the default one was mid-flush.
+
+
 
 // So lets see an actual nested flush in action.
 SpokeTree.Spawn("Outer", new LambdaEpoch(s => s => {
@@ -509,10 +513,10 @@ SpokeTree.Spawn("Outer", new LambdaEpoch(s => s => {
 }));
 // Will show: "Before", "Inner Flushed", "After"
 // This is the one chance "Inner" has to flush nested in "Outer".
-// Because they have equal flush layers.
+// They have equal flush layers, so the runtime won't nest their flushes again.
 ```
 
-Let's see the Spoke stack trace produced by that log: "Inner FLushed":
+Let's see the Spoke stack trace produced by that log: "Inner Flushed":
 
 ```
 <------------ Spoke Frame Trace ------------>
@@ -534,11 +538,11 @@ Let's see the Spoke stack trace produced by that log: "Inner FLushed":
         |--(6)-Log: Inner Flushed
 ```
 
-> The stack trace shows both trees: "Outer" and "Inner". Nested flushes are reflected on the stack so they're visible and debuggable in case of problems.
+> The stack trace shows both trees: "Outer" and "Inner". Nested flushes are reflected on the stack to help understanding and debugging.
 
-So why all the rules? And why allow nested flushes at all? The third rule, where trees can flush nested on creation, is extremely useful in Unity. Every `SpokeBehaviour` has its own `SpokeTree`. Often, in Unity, a `MonoBehaviour` will instantiate another, via `AddComponent<T>()`. If a `SpokeBehaviour` instantiates another, it aligns with expectations, that the second will be fully initialized by the time control returns to the first. Just like MonoBehaviours `Awake` and `OnEnable` are invoked synchronously when you `AddComponent`.
+So why all the rules? And why allow nested flushes at all? The third rule where trees can flush nested on creation, is extremely useful in Unity. Every `SpokeBehaviour` has its own `SpokeTree`. If a `SpokeBehaviour` instantiates another, then it will be fully initialized by the time control returns to the first. This aligns with expectations. A newly attached `MonoBehaviour` has `Awake` and `OnEnable` invoked synchronously when you `AddComponent<T>()`. Spoke keeps this mental model intact.
 
-A deeper reason these rules were chosen, is to enforce a one-way control flow. If tree A can be nested in B, then B can never be nested in A. If this wasn't true then nested flushing would be unpredictable and dangerous.
+A deeper reason these rules were chosen is to enforce a one-way control flow. If tree A can be nested in B, then B can never be nested in A. If this wasn't true then nested flushing would be unpredictable and dangerous.
 
 Finally, I haven't explained the purpose for `SpawnEager()`. It's intended to model multi-phase flushes. It enables write-then-read, where a tree can set a reactive signal, and then read a derived signal with its fresh value. It's an advanced feature, and probably best ignored unless you're very familiar with Spoke.
 
@@ -566,7 +570,7 @@ tree.Flush();   // logs: 2 then 3
 
 Calling `Tick()` or `Flush()` is guaranteed to happen synchronously. Although an exception will be thrown if re-entrancy is detected. Nested flushes from auto-flushed trees are possible. The manual tree has the same flush layer as the tree created from `SpokeTree.Spawn()`.
 
-Manually flushed trees are rarely useful with `Spoke.Reactive`. I built it for a procedural generation DSL I was experimenting with. It lets trees be ticked. So heavy proc gen logic can be spread across frames without causing lag spikes.
+Manually flushed trees are rarely useful with `Spoke.Reactive`. I built it for a procedural generation DSL I was experimenting with. It lets trees be ticked incrementally, step by step. So heavy proc gen logic can be spread across frames without causing lag spikes.
 
 ---
 
@@ -575,6 +579,9 @@ Manually flushed trees are rarely useful with `Spoke.Reactive`. I built it for a
 The `Dock` is the final primitive in Spoke runtime arsenal, and it's an important one. It lets you dynamically attach keyed epochs to the tree, outside the normal mutation windows: Init and Tick.
 
 ```cs
+// create a variable to reference the dock we'll create in the tree
+Dock dock;
+
 // Spawn a tree with a dock inside
 SpokeTree.Spawn(new LambdaEpoch(s => {
     dock = s.Call(new Dock());
