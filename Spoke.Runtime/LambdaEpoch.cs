@@ -1,5 +1,10 @@
 namespace Spoke {
 
+    /// <summary>
+    /// Define epochs in a functional composition style.
+    /// Instead of subclassing Epoch, and overriding Init, you can use a LambdaEpoch.
+    /// The InitBlock is a delegate that matches the signature of Epoch.Init.
+    /// </summary>
     public sealed class LambdaEpoch : Epoch {
         InitBlock block;
 

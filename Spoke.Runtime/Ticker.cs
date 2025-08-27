@@ -3,6 +3,12 @@ using System;
 
 namespace Spoke {
 
+    /// <summary>
+    /// Tickers are epochs that act as execution gateways driving ticks to descending epochs.
+    /// All epochs (including Tickers) request ticks from their nearest ancestor Ticker.
+    /// Tickers decide the tempo of ticks delivered to their descendants, but not the order they're ticked in.
+    /// Pending epochs are sorted by their tick-cursor coordinate, to enforce an imperative execution order.
+    /// </summary>
     public abstract class Ticker : Epoch, Ticker.Friend {
 
         new internal interface Friend { 
@@ -12,7 +18,9 @@ namespace Spoke {
             void SetToManual(); 
         }
         
+        // Priority queue of pending epochs that requested a tick.
         OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
+        // List of OnTick callbacks, declared in Bootstrap()
         List<Action<TickContext>> onTick = new();
         Action requestTick;
         bool isPaused;
@@ -22,17 +30,26 @@ namespace Spoke {
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
 
+        // Tickers shouldn't auto-arm ticks after Init, because they request ticks on receiving pending epochs
         protected override sealed bool AutoArmTickAfterInit => false;
 
+        /// <summary>
+        /// Override to configure and wire up the tickers behaviour. Bootstrap is called during Init,
+        /// and it's passed a builder DSL thats only valid during the bootstrap block.
+        /// The returned epoch is attached directly under the ticker, and it's the root of the tickers managed tree.
+        /// </summary>
         protected abstract Epoch Bootstrap(TickerBuilder s);
 
+        // Wires up the ticker behaviour, invokes Bootstrap, and attaches the returned epoch.
         protected sealed override TickBlock Init(EpochBuilder s) {
+            // SpokeTree will set isManual=true for Manual trees. They shouldn't request ticks automatically.
             if (!isManual) {
                 requestTick = () => s.Ports.RequestTick();
                 s.OnCleanup(() => requestTick = null);
             }
             var root = Bootstrap(new TickerBuilder(s, new(this)));
-            s.Call(root);
+            s.Call(root); // Attach the epoch returned by Bootstrap
+            // Declare a TickBlock that invokes each OnTick callback in order, once per tick.
             return s => {
                 if (isPaused || !pending.Has) return;
                 didContinue = false;
@@ -44,22 +61,25 @@ namespace Spoke {
                 if (!didContinue && !isPaused) {
                     throw new Exception("Ticker must TickNext() or Pause() during OnTick, or it risks infinite flushes.");
                 }
+                // After processing OnTick callbacks, if there are still pending epochs, request another tick.
                 if (pending.Has && !isPaused) {
                     requestTick?.Invoke();
                 }
             };
         }
 
+        // Delivers a single tick to the next pending epoch, returning that epoch.
         Epoch Friend.TickNext() {
             if (!isTicking) {
                 throw new Exception("TickNext() must be called from within an OnTick block");
             } 
-            didContinue = true;
+            didContinue = true; // TickNext was called at least once
             var ticked = pending.Pop();
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
 
+        // Epochs schedule themselves by calling this method on their nearest ancestor ticker.
         void Friend.Schedule(Epoch epoch) {
             var prevHasPending = pending.Has;
             pending.Enqueue(epoch);
@@ -68,18 +88,22 @@ namespace Spoke {
             } 
         }
 
+        // Pausing a ticker prevents it from requesting ticks.
         void Friend.SetIsPaused(bool value) {
             if (isPaused == value) return;
             isPaused = value;
-            if (value == false) {
+            if (value == false && pending.Has && !isTicking) {
+                // Request a tick if we received pending epochs while paused
                 requestTick?.Invoke();
             }
         }
 
+        // Used by SpokeTree in manual mode to disable automatic tick requests.
         void Friend.SetToManual() {
             isManual = true;
         }
 
+        // Exposes mutation operations available during Bootstrap and OnTick blocks.
         internal struct Mutator {
             public Ticker Ticker { get; }
             public bool HasPending => Ticker?.pending.Has ?? false;
@@ -103,6 +127,11 @@ namespace Spoke {
         }
     }
 
+    /// <summary>
+    /// A DSL builder for configuring a Ticker during its Bootstrap block.
+    /// Only valid during Bootstrap. Mutation methods throw if called outside that block.
+    /// The exception is TickerBuilder.Ports, which may be captured and used later.
+    /// </summary>
     public struct TickerBuilder {
         EpochBuilder s;
         Ticker.Mutator r;
@@ -136,6 +165,9 @@ namespace Spoke {
         public TickerPorts Ports => new(r);
     }
 
+    /// <summary>
+    /// Ports for controlling a Ticker. Can be captured and used outside the Bootstrap block.
+    /// </summary>
     public struct TickerPorts {
         Ticker.Mutator r;
         
@@ -143,21 +175,28 @@ namespace Spoke {
             this.r = r; 
         }
         
+        /// <summary>True when there is at least one epoch pending a tick</summary>
         public bool HasPending => r.HasPending;
 
+        /// <summary>Peeks at the next epoch that will be ticked, or null if none pending</summary>
         public Epoch PeekNext() {
             return r.Next;
         }
 
+        /// <summary>Paused tickers won't request ticks and won't call OnTick actions</summary>
         public void Pause() {
             (r.Ticker as Ticker.Friend).SetIsPaused(true);
         }
 
+        /// <summary>Resumes a paused ticker, allowing it to deliver ticks again</summary>
         public void Resume() {
             (r.Ticker as Ticker.Friend).SetIsPaused(false);
         }
     }
 
+    /// <summary>
+    /// DSL object passed to OnTick callbacks, allowing them to drive ticks to pending epochs.
+    /// </summary>
     public struct TickContext {
         Ticker t;
 

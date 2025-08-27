@@ -8,6 +8,7 @@ namespace Spoke {
     }
 
     public class ConsoleSpokeLogger : ISpokeLogger {
+        
         public void Log(string msg) {
             Console.WriteLine(msg);
         }

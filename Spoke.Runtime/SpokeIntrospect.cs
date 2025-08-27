@@ -4,6 +4,10 @@ using System.Text;
 
 namespace Spoke {
 
+    /// <summary>
+    /// Introspection utilities for Spoke Epoch trees.
+    /// Enables visualization tools to be built that can explore the tree structure.
+    /// </summary>
     public static class SpokeIntrospect {
         static SpokePool<List<Epoch>> elPool = SpokePool<List<Epoch>>.Create(l => l.Clear());
 

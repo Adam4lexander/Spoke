@@ -3,12 +3,17 @@ using System;
 
 namespace Spoke {
 
-    // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of
-    // stack trace, and a weakref to the epoch.
+    /// <summary>
+    /// When an uncaught exception is thrown in the tree, its wrapped in a SpokeException and bubbles
+    /// up the chain of tickers, marking each as faulted on the way.
+    /// Creates a snapshot of Spokes virtual call stack, for debugging.
+    /// </summary>
     public sealed class SpokeException : Exception {
+        // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of
+        // stack trace, and a weakref to the epoch.
         List<SpokeRuntime.Frame> stackSnapshot = new List<SpokeRuntime.Frame>();
         string innerTrace;
-        public bool SkipMarkFaulted;
+        public bool SkipMarkFaulted; // Epochs may toggle this and rethrow, to avoid marking themselves as faulted.
 
         public ReadOnlyList<SpokeRuntime.Frame> StackSnapshot => new(stackSnapshot);
 

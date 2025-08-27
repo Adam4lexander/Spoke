@@ -3,6 +3,11 @@ using System;
 
 namespace Spoke {
     
+    /// <summary>
+    /// A priority queue for pending epochs that requested a tick.
+    /// Used by Ticker to sort epochs, and SpokeRuntime to sort trees.
+    /// An explicit Comparison is taken because Epoch and SpokeTree have different sorting rules.
+    /// </summary>
     internal sealed class OrderedWorkStack<T> where T : Epoch {
         List<T> incoming = new(); 
         HashSet<T> set = new(); 

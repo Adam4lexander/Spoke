@@ -2,6 +2,10 @@ using System.Collections.Generic;
 
 namespace Spoke {
 
+    /// <summary>
+    /// A struct that wraps a List<T> and provides a read-only interface.
+    /// It can be used in foreach loops without allocating.
+    /// </summary>
     public readonly struct ReadOnlyList<T> {
         readonly List<T> list;
 

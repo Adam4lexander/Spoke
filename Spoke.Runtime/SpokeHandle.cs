@@ -3,9 +3,13 @@ using System;
 
 namespace Spoke {
 
+    /// <summary>
+    /// A zero-gc handle for disposing a managed resource.
+    /// It's a known attachment type by Epoch and allows zero-gc ticks to declare attachments that use it.
+    /// </summary>
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
-        long id; 
-        Action<long> onDispose;
+        long id; // Identifier for the resource to dispose.
+        Action<long> onDispose; // Delegate taking the id number.
 
         public static SpokeHandle Of(long id, Action<long> onDispose) {
             return new SpokeHandle { 
@@ -14,6 +18,10 @@ namespace Spoke {
             };
         }
 
+        /// <summary>
+        /// Invokes the onDispose delegate, passing the id.
+        /// Assumes the target is robust to multiple calls, and doesn't reuse ids.
+        /// </summary>
         public void Dispose() {
             onDispose?.Invoke(id);
         }
