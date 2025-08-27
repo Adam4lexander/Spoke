@@ -230,6 +230,20 @@ var tree = SpokeTree.Spawn(new MyBrokenEpoch());
 var isFaulted = tree.Fault != null;  // True
 ```
 
+```
+FLUSH ERROR
+->A fault occurred during flush.
+
+<------------ Spoke Frame Trace ------------>
+0: Bootstrap SpokeTree <SpokeTree>[Faulted: Exception]
+1: Tick SpokeTree <SpokeTree>[Faulted: Exception]
+2: Tick MyBrokenEpoch <MyBrokenEpoch>[Faulted: Exception]
+
+<------------ Spoke Tree Trace ------------>
+|--(0,1)-SpokeTree [Faulted: Exception]
+    |--(2)-MyBrokenEpoch [Faulted: Exception]
+```
+
 If you catch the exception before it reaches the SpokeTree then you can contain the fault and stop the whole tree from becoming faulted. This is one use case for implementing custom tickers.
 
 ---
@@ -358,7 +372,7 @@ public class FaultBoundary : Ticker {
 
         // Bootstrap should return an unattached epoch that will be attached as the first
         // descendant under this ticker. Here we've supplied it via a constructor prop.
-        return child;
+        return childEpoch;
     }
 }
 ```
