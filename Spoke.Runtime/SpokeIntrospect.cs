@@ -5,7 +5,6 @@ using System.Text;
 namespace Spoke {
 
     public static class SpokeIntrospect {
-
         static SpokePool<List<Epoch>> elPool = SpokePool<List<Epoch>>.Create(l => l.Clear());
 
         public static List<Epoch> GetChildren(Epoch epoch, List<Epoch> storeIn = null) {
@@ -22,23 +21,18 @@ namespace Spoke {
         
         internal static string TreeTrace(ReadOnlyList<SpokeRuntime.Frame> frames) {
             if (frames.Count == 0) return "(empty)";
-
             var sb = new StringBuilder();
-            
             var es = new List<Epoch>();
             foreach (var f in frames) {
                 es.Add(f.Epoch);
             }
-            
             var roots = new List<Epoch>();
             foreach (var e in es) {
                 if (!roots.Contains(e) && GetParent(e) == null) {
                     roots.Add(e);
                 }
             } 
-            
             sb.Append("<------------ Spoke Frame Trace ------------>\n").Append(StackTrace(frames)).Append("\n").Append("<------------ Spoke Tree Trace ------------>\n");
-
             foreach (var root in roots) {
                 sb.Append(DumpTree(root, e => {
                     var label = e.ToString();
@@ -54,30 +48,25 @@ namespace Spoke {
                 }));
                 sb.Append("\n");
             }
-
             return sb.ToString();
         }
 
         static string StackTrace(ReadOnlyList<SpokeRuntime.Frame> frames) {
             if (frames.Count == 0) return "(empty)";
-            
             var sb = new StringBuilder();
             var width = frames.Count.ToString().Length;
             for (int i = 0; i < frames.Count; i++) {
                 sb.AppendLine($"{i}: {frames[i]}".PadLeft(width));
             }
-                
             return sb.ToString();
         }
 
         static string DumpTree(Epoch root, Func<Epoch, string> eLabel = null) {
             var sb = new StringBuilder();
-
             TraverseRecurs(0, root, (depth, x) => {
                 for (int i = 0; i < depth; i++) sb.Append("    ");
                 sb.Append($"|--{eLabel?.Invoke(x) ?? x.ToString()}\n");
             });
-
             return sb.ToString();
         }
 

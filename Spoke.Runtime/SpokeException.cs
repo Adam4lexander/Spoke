@@ -6,7 +6,6 @@ namespace Spoke {
     // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of
     // stack trace, and a weakref to the epoch.
     public sealed class SpokeException : Exception {
-
         List<SpokeRuntime.Frame> stackSnapshot = new List<SpokeRuntime.Frame>();
         string innerTrace;
         public bool SkipMarkFaulted;

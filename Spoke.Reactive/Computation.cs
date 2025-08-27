@@ -4,7 +4,6 @@ using System.Collections.Generic;
 namespace Spoke {
 
     public abstract class Computation : Epoch {
-
         IEnumerable<ITrigger> triggers;
         DependencyTracker tracker;
 
@@ -14,14 +13,11 @@ namespace Spoke {
         }
 
         protected override TickBlock Init(EpochBuilder s) {
-
             tracker = new DependencyTracker(s.Ports.RequestTick);
             s.OnCleanup(() => tracker.Dispose());
-
             foreach (var trigger in triggers) {
                 tracker.AddStatic(trigger);
             }
-
             return s => {
                 tracker.BeginDynamic();
                 try { OnRun(s); } finally { tracker.EndDynamic(); }
@@ -30,12 +26,14 @@ namespace Spoke {
 
         protected abstract void OnRun(EpochBuilder s);
 
-        protected void AddStaticTrigger(ITrigger trigger) => tracker.AddStatic(trigger);
-        protected void AddDynamicTrigger(ITrigger trigger) => tracker.AddDynamic(trigger);
+        protected void AddStaticTrigger(ITrigger trigger) 
+            => tracker.AddStatic(trigger);
+
+        protected void AddDynamicTrigger(ITrigger trigger) 
+            => tracker.AddDynamic(trigger);
     }
 
     internal class DependencyTracker : IDisposable {
-
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
@@ -61,14 +59,12 @@ namespace Spoke {
 
         public void AddDynamic(ITrigger trigger) {
             if (!seen.Add(trigger)) return;
-
             if (depIndex >= dynamicHandles.Count) {
                 dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(depIndex))));
             } else if (dynamicHandles[depIndex].t != trigger) {
                 dynamicHandles[depIndex].h.Dispose();
                 dynamicHandles[depIndex] = (trigger, trigger.Subscribe(ScheduleFromIndex(depIndex)));
             }
-
             depIndex++;
         }
 
@@ -86,10 +82,7 @@ namespace Spoke {
             staticHandles.Clear(); dynamicHandles.Clear();
         }
 
-        Action ScheduleFromIndex(int index) { 
-            return () => { 
-                if (index < depIndex) schedule(); 
-            }; 
-        }
+        Action ScheduleFromIndex(int index) 
+            => () => { if (index < depIndex) schedule(); }; 
     }
 }

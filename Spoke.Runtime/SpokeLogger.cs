@@ -8,7 +8,6 @@ namespace Spoke {
     }
 
     public class ConsoleSpokeLogger : ISpokeLogger {
-
         public void Log(string msg) {
             Console.WriteLine(msg);
         }
@@ -19,7 +18,6 @@ namespace Spoke {
     }
 
     public static class SpokeError {
-
         internal static Action<string, Exception> Log 
             = (msg, ex) => Console.WriteLine($"[Spoke] {msg}\n{ex}");
         

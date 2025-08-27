@@ -5,7 +5,6 @@ namespace Spoke {
     public delegate T MemoBlock<T>(MemoBuilder s);
 
     public class Memo<T> : Computation, ISignal<T> {
-
         State<T> state = State.Create<T>();
         Action<ITrigger> _addDynamicTrigger;
         Action<MemoBuilder> block;
@@ -26,14 +25,20 @@ namespace Spoke {
             block(builder);
         }
 
-        public SpokeHandle Subscribe(Action action) => state.Subscribe(action);
-        public SpokeHandle Subscribe(Action<T> action) => state.Subscribe(action);
-        public void Unsubscribe(Action action) => state.Unsubscribe(action);
-        public void Unsubscribe(Action<T> action) => state.Unsubscribe(action);
+        public SpokeHandle Subscribe(Action action) 
+            => state.Subscribe(action);
+
+        public SpokeHandle Subscribe(Action<T> action) 
+            => state.Subscribe(action);
+            
+        public void Unsubscribe(Action action) 
+            => state.Unsubscribe(action);
+
+        public void Unsubscribe(Action<T> action) 
+            => state.Unsubscribe(action);
     }
 
     public struct MemoBuilder {
-
         Action<ITrigger> addDynamicTrigger;
         EpochBuilder s;
 
@@ -47,6 +52,7 @@ namespace Spoke {
             return signal.Now; 
         }
 
-        public void OnCleanup(Action fn) => s.OnCleanup(fn);
+        public void OnCleanup(Action fn) 
+        => s.OnCleanup(fn);
     }
 }

@@ -19,9 +19,10 @@ namespace Spoke {
     }
 
     public class State<T> : IState<T> {
-
         T value;
         Trigger<T> trigger = new Trigger<T>();
+
+        public T Now => value;
 
         public State() { }
 
@@ -29,12 +30,17 @@ namespace Spoke {
             Set(value); 
         }
 
-        public T Now => value;
+        public SpokeHandle Subscribe(Action action) 
+            => trigger.Subscribe(action);
 
-        public SpokeHandle Subscribe(Action action) => trigger.Subscribe(action);
-        public SpokeHandle Subscribe(Action<T> action) => trigger.Subscribe(action);
-        public void Unsubscribe(Action action) => trigger.Unsubscribe(action);
-        public void Unsubscribe(Action<T> action) => trigger.Unsubscribe(action);
+        public SpokeHandle Subscribe(Action<T> action) 
+            => trigger.Subscribe(action);
+
+        public void Unsubscribe(Action action) 
+            => trigger.Unsubscribe(action);
+
+        public void Unsubscribe(Action<T> action) 
+            => trigger.Unsubscribe(action);
 
         public void Set(T value) {
             if (EqualityComparer<T>.Default.Equals(value, this.value)) return;
@@ -43,9 +49,8 @@ namespace Spoke {
         }
 
         public void Update(Func<T, T> setter) {
-            if (setter != null) {
-                Set(setter(Now));
-            }
+            if (setter == null) return;
+            Set(setter(Now));
         }
     }
 }

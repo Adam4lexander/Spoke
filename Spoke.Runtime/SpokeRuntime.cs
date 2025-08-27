@@ -77,11 +77,9 @@ namespace Spoke {
             if (holdCount > 0 || !scheduledTrees.Has) return;
             do {
                 var top = scheduledTrees.Peek();
-
                 var isPendingEagerTick = (top as SpokeTree.Friend).IsPendingEagerTick();
                 if (isPendingEagerTick && top.FlushLayer > layer) return;
                 else if (!isPendingEagerTick && top.FlushLayer >= layer) return;
-                
                 (this as Friend).TickTree(scheduledTrees.Pop());
             } while (scheduledTrees.Has);
         }
@@ -89,15 +87,12 @@ namespace Spoke {
         void Friend.TickTree(SpokeTree tree) {
             var storeLayer = layer; 
             layer = Math.Min(tree.FlushLayer, layer);
-            
             try {
                 (tree as Epoch.Friend).Tick(); 
             } catch (Exception e) { 
                 SpokeError.Log($"Uncaught Spoke error", e); 
             }
-
             layer = storeLayer;
-
             if (frames.Count == 0) {
                 TryFlush();
             }
@@ -106,7 +101,6 @@ namespace Spoke {
         public enum FrameKind : byte { None, Init, Tick, Dock, Bootstrap }
 
         public readonly struct Frame {
-
             public readonly Epoch Epoch;
             public readonly FrameKind Type;
 
@@ -124,7 +118,6 @@ namespace Spoke {
         }
 
         internal readonly struct Handle {
-
             public readonly SpokeRuntime Stack;
             public readonly int Index;
             readonly long version;

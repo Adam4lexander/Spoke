@@ -8,7 +8,6 @@ namespace Spoke {
     /// execution order. This struct is the slow but robust fallback in case it doesn't fit into PackedTree128
     /// </summary>
     public struct TreeCoords : IComparable<TreeCoords> {
-
         List<long> coords;
         PackedTreeCoords128 packed;
 
@@ -68,7 +67,6 @@ namespace Spoke {
             if (coords == null || coords.Count > 16) {
                 return Invalid;
             }
-
             ulong hi = 0, lo = 0;
             for (int i = 0; i < coords.Count; i++) {
                 var val = coords[i];
@@ -85,12 +83,10 @@ namespace Spoke {
             if (cmp != 0) {
                 return cmp;
             }
-
             cmp = lo.CompareTo(other.lo);
             if (cmp != 0) {
                 return cmp;
             }
-
             return depth.CompareTo(other.depth);
         }
     }

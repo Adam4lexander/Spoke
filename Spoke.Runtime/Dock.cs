@@ -25,25 +25,18 @@ namespace Spoke {
             if (isDetaching) {
                 throw new Exception("Cannot Call while detaching");
             }
-
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
-            
             Drop(key);
-
             dynamicChildren.Add(key, epoch);
             var childCoords = Coords.Extend(childIndex++);
             var childTicker = (this as Epoch.Friend).GetTicker();
             (epoch as Epoch.Friend).Attach(this, childCoords, childTicker, null);
-
             (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
-            
             return epoch;
         }
 
         public void Drop(object key) {
-            if (!dynamicChildren.TryGetValue(key, out var child)) {
-                return;
-            }
+            if (!dynamicChildren.TryGetValue(key, out var child)) return;
             (child as Epoch.Friend).Detach();
             dynamicChildren.Remove(key);
         }
@@ -52,7 +45,9 @@ namespace Spoke {
             s.OnCleanup(() => {
                 isDetaching = true;
                 var children = (this as Introspect).GetChildren();
-                for (int i = children.Count - 1; i >= 0; i--) (children[i] as Epoch.Friend).Detach();
+                for (int i = children.Count - 1; i >= 0; i--) {
+                    (children[i] as Epoch.Friend).Detach();
+                }
                 dynamicChildren.Clear();
             });
             return null;

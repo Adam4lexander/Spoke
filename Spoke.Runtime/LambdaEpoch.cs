@@ -1,7 +1,6 @@
 namespace Spoke {
 
     public sealed class LambdaEpoch : Epoch {
-
         InitBlock block;
 
         public LambdaEpoch(string name, InitBlock block) { 

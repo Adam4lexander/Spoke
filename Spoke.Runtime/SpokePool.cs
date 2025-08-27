@@ -4,7 +4,6 @@ using System;
 namespace Spoke {
 
     public struct SpokePool<T> where T : new() {
-
         Stack<T> pool; 
         Action<T> reset;
 
@@ -16,9 +15,7 @@ namespace Spoke {
         }
 
         public T Get() {
-            if (pool.Count > 0) {
-                return pool.Pop();
-            }
+            if (pool.Count > 0) return pool.Pop();
             return new T();
         }
         

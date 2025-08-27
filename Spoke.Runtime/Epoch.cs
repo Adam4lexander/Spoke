@@ -32,7 +32,6 @@ namespace Spoke {
         public SpokeException Fault { get; private set; }
 
         protected string Name = null;
-
         protected virtual bool AutoArmTickAfterInit => true;
 
         List<AttachRecord> attachEvents = new();
@@ -44,9 +43,13 @@ namespace Spoke {
         SpokeRuntime.Handle controlHandle;
         Action _requestTick;
         
-        public override string ToString() => Name ?? GetType().Name;
+        public override string ToString() { 
+            return Name ?? GetType().Name;
+        }
 
-        public int CompareTo(Epoch other) => tickCursor.CompareTo(other.tickCursor);
+        public int CompareTo(Epoch other) {
+            return tickCursor.CompareTo(other.tickCursor);
+        }
 
         void DetachFrom(int i) {
             while (attachEvents.Count > Math.Max(i, 0)) {
@@ -65,19 +68,16 @@ namespace Spoke {
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             Coords = tickCursor = coords;
             this.ticker = ticker;
-
             _requestTick = () => {
                 if (Fault != null) return;
                 if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this);
                 else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this);
             };
-
             Init(services);
         }
 
         void Init(IEnumerable<object> services) {
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Init, this));
-            
             try {
                 if (services != null) {
                     foreach (var x in services) {
@@ -96,7 +96,6 @@ namespace Spoke {
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             }
-
             if (AutoArmTickAfterInit) {
                 controlHandle.OnPopSelf(_requestTick);
             }
@@ -106,11 +105,8 @@ namespace Spoke {
 
         void Friend.Tick() {
             if (IsDetached) return;
-
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
-            
             DetachFrom((int)tickCursor.Tail);
-
             try {
                 tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this)));
             } catch (Exception e) {
@@ -125,11 +121,17 @@ namespace Spoke {
             }
         }
 
-        SpokeRuntime.Handle Friend.GetControlHandle() => controlHandle;
+        SpokeRuntime.Handle Friend.GetControlHandle() { 
+            return controlHandle; 
+        }
 
-        Ticker Friend.GetTicker() => ticker;
+        Ticker Friend.GetTicker() { 
+            return ticker; 
+        }
 
-        void Friend.SetFault(SpokeException fault) => Fault = fault;
+        void Friend.SetFault(SpokeException fault) { 
+            Fault = fault; 
+        }
 
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
@@ -141,10 +143,11 @@ namespace Spoke {
             return storeIn;
         }
 
-        Epoch Introspect.GetParent() => parent;
+        Epoch Introspect.GetParent() {
+            return parent;
+        }
 
         readonly struct AttachRecord {
-
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
 
             public readonly Kind Type;
@@ -194,7 +197,6 @@ namespace Spoke {
         }
 
         internal struct EpochMutations {
-
             Epoch owner;
 
             public EpochMutations(Epoch owner) {
@@ -259,6 +261,7 @@ namespace Spoke {
             public void RequestTick() {
                 owner.controlHandle.OnPopSelf(owner._requestTick);
             }
+
             void NoMischief() {
                 if (!owner.controlHandle.IsTop) {
                     throw new InvalidOperationException("Tried to mutate an Epoch that's been sealed for further changes.");
@@ -268,37 +271,51 @@ namespace Spoke {
     }
 
     public struct EpochBuilder {
-
         Epoch.EpochMutations s;
 
         internal EpochBuilder(Epoch.EpochMutations s) { 
             this.s = s; 
         }
 
-        public SpokeHandle Use(SpokeHandle handle) => s.Use(handle);
-        public T Use<T>(T disposable) where T : IDisposable => s.Use(disposable);
-        public T Call<T>(T epoch) where T : Epoch => s.Call(epoch);
-        public T Export<T>(T obj) => s.Export(obj);
-        public bool TryImport<T>(out T obj) => s.TryImport(out obj);
-        public T Import<T>() => s.Import<T>();
-        public void OnCleanup(Action fn) => s.OnCleanup(fn);
-        public void Log(string msg) => s.Call(new LambdaEpoch($"Log: {msg}", s => {
-            if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
-            logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
-            return null;
-        }));
+        public SpokeHandle Use(SpokeHandle handle) 
+            => s.Use(handle);
+
+        public T Use<T>(T disposable) where T : IDisposable 
+            => s.Use(disposable);
+
+        public T Call<T>(T epoch) where T : Epoch 
+            => s.Call(epoch);
+
+        public T Export<T>(T obj) 
+            => s.Export(obj);
+
+        public bool TryImport<T>(out T obj) 
+            => s.TryImport(out obj);
+            
+        public T Import<T>() 
+            => s.Import<T>();
+
+        public void OnCleanup(Action fn) 
+            => s.OnCleanup(fn);
+
+        public void Log(string msg) 
+            => s.Call(new LambdaEpoch($"Log: {msg}", s => {
+                if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
+                logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
+                return null;
+            }));
 
         public EpochPorts Ports => new(s);
     }
 
     public struct EpochPorts {
-
         Epoch.EpochMutations s;
 
         internal EpochPorts(Epoch.EpochMutations s) { 
             this.s = s; 
         }
 
-        public void RequestTick() => s.RequestTick();
+        public void RequestTick() 
+            => s.RequestTick();
     }
 }

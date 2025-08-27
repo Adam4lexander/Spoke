@@ -4,7 +4,6 @@ using System;
 namespace Spoke {
     
     internal sealed class OrderedWorkStack<T> where T : Epoch {
-
         List<T> incoming = new(); 
         HashSet<T> set = new(); 
         List<T> list = new(); 
@@ -27,7 +26,6 @@ namespace Spoke {
 
         public T Pop() {
             if (!Take(true)) return default;
-
             var t = list[^1];
             list.RemoveAt(list.Count - 1);
             set.Remove(t);
@@ -35,7 +33,6 @@ namespace Spoke {
         }
 
         bool Take(bool sort) {
-
             if (incoming.Count > 0) {
                 var startCount = list.Count;
                 foreach (var t in incoming) {
@@ -46,17 +43,14 @@ namespace Spoke {
                 dirty = list.Count > startCount;
                 incoming.Clear();
             }
-
             if (sort && dirty) {
                 list.Sort(comp);
                 dirty = false;
             }
-
             while (list.Count > 0 && list[^1].IsDetached) {
                 set.Remove(list[^1]);
                 list.RemoveAt(list.Count - 1);
             }
-
             return list.Count > 0;
         }
     }

@@ -1,7 +1,6 @@
 namespace Spoke {
 
     public sealed class Phase : BaseEffect {
-
         ISignal<bool> mountWhen;
 
         public Phase(string name, ISignal<bool> mountWhen, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {

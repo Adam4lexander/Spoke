@@ -3,7 +3,6 @@ using System.Collections.Generic;
 namespace Spoke {
 
     public readonly struct ReadOnlyList<T> {
-
         readonly List<T> list;
 
         public ReadOnlyList(List<T> list) { 

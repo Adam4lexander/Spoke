@@ -17,7 +17,6 @@ namespace Spoke {
 
     [Serializable]
     public class UState<T> : IState<T>, ISerializationCallbackReceiver {
-
         [SerializeField] T value;
         T runtimeValue;
         Trigger<T> trigger = new Trigger<T>();

@@ -8,7 +8,6 @@ using UnityEditor;
 namespace Spoke {
 
     public static class SpokeTeardown {
-
         static Trigger<Scene> scene = Trigger.Create<Scene>();
         static Trigger app = Trigger.Create();
 
@@ -36,7 +35,6 @@ namespace Spoke {
         static void EnsureInit() {
             if (isInitialized) return;
             isInitialized = true;
-
             Application.quitting += () => app.Invoke();
 #if UNITY_EDITOR
             EditorApplication.playModeStateChanged += state => { 

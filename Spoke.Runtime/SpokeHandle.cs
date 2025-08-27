@@ -4,7 +4,6 @@ using System;
 namespace Spoke {
 
     public struct SpokeHandle : IDisposable, IEquatable<SpokeHandle> {
-
         long id; 
         Action<long> onDispose;
 

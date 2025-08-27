@@ -17,26 +17,29 @@ namespace Spoke {
 
         public struct Unit { }
 
-        public static Trigger Create() => Create<Unit>();
-        public static Trigger<T> Create<T>() => new Trigger<T>();
+        public static Trigger Create() 
+            => Create<Unit>();
+
+        public static Trigger<T> Create<T>() 
+            => new Trigger<T>();
 
         public abstract SpokeHandle Subscribe(Action action);
+
         public abstract void Invoke();
+
         public abstract void Unsubscribe(Action action);
+
         protected abstract void Unsub(long id);
     }
 
     public class Trigger<T> : Trigger, ITrigger<T> {
-
         SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
         SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
         
         List<Subscription> subs = new List<Subscription>();
         Queue<T> events = new Queue<T>();
-        
         Action<long> _unsub;
         Action _flush;
-        
         long idCount = 0;
         bool isFlushing;
 
@@ -73,7 +76,6 @@ namespace Spoke {
         void Flush() {
             if (isFlushing) return;
             isFlushing = true;
-
             while (events.Count > 0) {
                 var evt = events.Dequeue();
                 var subList = subListPool.Get();
@@ -89,23 +91,19 @@ namespace Spoke {
                 }
                 subListPool.Return(subList);
             }
-
             isFlushing = false;
         }
 
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
-            
             foreach (var sub in subs) {
                 if (sub.Key == action) {
                     idList.Add(sub.Id);
                 }
             }
-
             foreach (var id in idList) {
                 Unsub(id);
             }
-                
             longListPool.Return(idList);
         }
 
@@ -124,7 +122,6 @@ namespace Spoke {
         }
 
         struct Subscription {
-
             public long Id; 
             Action<T> ActionT; 
             Action Action;

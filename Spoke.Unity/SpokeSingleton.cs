@@ -27,13 +27,11 @@ namespace Spoke {
         static Scene instanceScene;
 
         protected virtual bool OverrideDontDestroyOnLoad => false;
-
         protected virtual string OverrideName => $"[!-------{typeof(T).Name}-------!]";
 
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
-
             SpokeTeardown.App.Subscribe(() => isDestroyed.Set(false));
             SceneManager.sceneUnloaded += scene => {
                 if (scene != instanceScene) return;
