@@ -46,7 +46,7 @@ namespace Spoke {
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Bootstrap, this));
             TimeStamp = SpokeRuntime.Local.TimeStamp;   // spawn-time ordering tie-breaker
             try {
-                // Call Attack without a parent. This will in turn call Bootstrap()
+                // Call Attach without a parent. This will in turn call Bootstrap()
                 (this as Epoch.Friend).Attach(null, default, null, services);
             } catch (Exception e) {
                 SpokeError.Log("[SpokeTree] uncaught error in Bootstrap", e);
@@ -206,3 +206,4 @@ namespace Spoke {
         public abstract void Tick();
     }
 }
+
