@@ -472,8 +472,8 @@ The easiest way to spawn trees is by the convenience methods on `SpokeTree`:
 SpokeTree.Spawn(Epoch main);
 
 // Spawns an auto-flushed tree, but with a higher priority flush-layer compared to Spawn().
-// The flush-layer determines when a tree can start flushing, during the flush of another.
-// This is called a nested flush, which we'll discuss soon.
+// The flush-layer determines the order that trees are ticked, and also whether a tree can
+// be flushed while another is currently flushing (nested flush)
 SpokeTree.SpawnEager(Epoch main);
 
 // Spawns a tree thats manually driven by user code. You call SpokeTree.Flush() to initiate
