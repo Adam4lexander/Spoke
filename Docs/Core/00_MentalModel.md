@@ -281,7 +281,7 @@ public class MainEpoch : Epoch {
         s.Call(new ImportingEpoch());       // Will log: Context is Foobar
         s.Export(new ContextData("Baz"));
         return s => {
-            s.Call(new ImportingData());    // Will log: Context is Baz
+            s.Call(new ImportingEpoch());    // Will log: Context is Baz
         };
     }
 }
