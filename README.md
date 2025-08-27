@@ -7,7 +7,6 @@ It lets you write gameplay logic that reacts to state automatically: no flag-che
 Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
 
 - ✨ **Control complexity** — simplifies eventful, state-driven logic
-- 📦 **Drop-in simple** — three files, no setup, no dependencies
 - 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
 
 ---
@@ -83,7 +82,7 @@ It's not just shorter. It's **closer to how you actually think.**
 
 ## 🔰 Getting Started
 
-Copy **Spoke.Runtime.cs**, **Spoke.Reactive.cs** and **Spoke.Unity.cs** into your project.
+Copy **Spoke.Runtime**, **Spoke.Reactive** and **Spoke.Unity** into your project (or just clone this repo).
 
 Then create a new script and subclass `SpokeBehaviour` instead of `MonoBehaviour`:
 
