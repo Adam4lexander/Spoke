@@ -61,7 +61,7 @@ namespace Spoke {
             return tickCursor.CompareTo(other.tickCursor);
         }
 
-        // Roll back attachments to index i (exclusive). Used by Tick and Detach.
+        // Roll back attachments to index i (inclusive). Used by Tick and Detach.
         void DetachFrom(int i) {
             while (attachEvents.Count > Math.Max(i, 0)) {
                 attachEvents[attachEvents.Count - 1].Detach(this);
@@ -348,4 +348,5 @@ namespace Spoke {
         public void RequestTick() 
             => s.RequestTick();
     }
+
 }
