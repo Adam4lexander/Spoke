@@ -105,13 +105,24 @@ namespace Spoke {
             bool IsPendingEagerTick(); 
         }
         
-        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree", root, FlushMode.Auto, 0, services);
-        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Auto, 0, services);
-        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Default)", root, FlushMode.Auto, -1, services);
-        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Auto, -1, services);
-        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch => new SpokeTree<T>("SpokeTree (Manual)", root, FlushMode.Manual, int.MinValue, services);
-        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch => new SpokeTree<T>(name, root, FlushMode.Manual, int.MinValue, services);
-        
+        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>("SpokeTree", root, FlushMode.Auto, 0, services);
+
+        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>(name, root, FlushMode.Auto, 0, services);
+
+        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>("SpokeTree (Default)", root, FlushMode.Auto, -1, services);
+
+        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>(name, root, FlushMode.Auto, -1, services);
+
+        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>("SpokeTree (Manual)", root, FlushMode.Manual, int.MinValue, services);
+            
+        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch 
+            => new SpokeTree<T>(name, root, FlushMode.Manual, int.MinValue, services);
+
         public FlushMode FlushMode { get; protected set; }
         public int FlushLayer { get; protected set; }
         
