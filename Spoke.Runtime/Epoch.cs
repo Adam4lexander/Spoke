@@ -7,12 +7,17 @@ namespace Spoke {
     public delegate void TickBlock(EpochBuilder s);
 
     /// <summary>
-    /// A declarative, stateful execution unit that lives in the lifecycle tree.
-    /// Epochs are invoked declaratively, mounted into nodes, and persist as active objects.
-    /// They maintain state, respond to context, expose behaviour, and may spawn child epochs.
+    /// The most primitive object in Spoke. Everything in the Spoke tree is a kind of epoch.
+    /// They have three lifecycle phases: Attach, Tick and Detach
+    /// 
+    /// They maintain their own list of sub-attachments.
+    /// Init adds attachments which persist over the epochs lifetime. And Tick adds ephemeral
+    /// attachments that exist until the next Tick.
+    /// When detaching, the epoch unwinds its list of attachments, detaching each one in turn.
     /// </summary>
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
-        
+
+        // Internal methods used by the runtime/ticker only.
         internal interface Friend { 
             void Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services); 
             void Tick(); 
@@ -27,22 +32,27 @@ namespace Spoke {
             Epoch GetParent(); 
         }
 
+        /// <summary>Coordinate in the epoch tree</summary>
         public TreeCoords Coords { get; private set; }
         public bool IsDetached { get; private set; }
+        /// <summary>Non-null if Init/Tick faulted. Faults stop this epoch from requesting ticks.</summary>
         public SpokeException Fault { get; private set; }
 
         protected string Name = null;
+        /// <summary>Auto request first tick after Init completes.</summary>
         protected virtual bool AutoArmTickAfterInit => true;
 
+        // Ordered attachments declared during Init/Tick.
         List<AttachRecord> attachEvents = new();
+        // Tree coordinate from where Tick attachments start. Used to order epochs requesting a tick
         TreeCoords tickCursor;
         Epoch parent;
-        int attachIndex;
-        Ticker ticker;
-        TickBlock tickBlock;
+        int attachIndex; // parent attachment index where this was added
+        Ticker ticker;   // nearest ancestor ticker (or null at root)
+        TickBlock tickBlock; // delegate returned by Init, called on each tick
         SpokeRuntime.Handle controlHandle;
-        Action _requestTick;
-        
+        Action _requestTick; // bound to nearest ticker/runtime
+
         public override string ToString() { 
             return Name ?? GetType().Name;
         }
@@ -51,6 +61,7 @@ namespace Spoke {
             return tickCursor.CompareTo(other.tickCursor);
         }
 
+        // Roll back attachments to index i (exclusive). Used by Tick and Detach.
         void DetachFrom(int i) {
             while (attachEvents.Count > Math.Max(i, 0)) {
                 attachEvents[attachEvents.Count - 1].Detach(this);
@@ -68,23 +79,28 @@ namespace Spoke {
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
             Coords = tickCursor = coords;
             this.ticker = ticker;
+            // Route tick requests to nearest ticker; ignore if faulted.
             _requestTick = () => {
                 if (Fault != null) return;
                 if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this);
-                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this);
+                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this); // SpokeTree requests ticks from runtime
             };
             Init(services);
         }
 
+        // Attach-time initialization. Builds the initial attachment list and arms first tick.
         void Init(IEnumerable<object> services) {
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Init, this));
             try {
+                // Pre-export any provided services so children can Import<T>() during Init.
                 if (services != null) {
                     foreach (var x in services) {
                         attachEvents.Add(new AttachRecord(AttachRecord.Kind.Export, x));
                     }
                 }
+                // User-defined Init yields a TickBlock.
                 tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
+                // Tick attachments start after everything added during Init.
                 tickCursor = Coords.Extend(attachEvents.Count);
             } catch (Exception e) {
                 if (e is SpokeException se) {
@@ -96,13 +112,16 @@ namespace Spoke {
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             }
+            // After Init frame completes, request first tick unless overridden.
             if (AutoArmTickAfterInit) {
                 controlHandle.OnPopSelf(_requestTick);
             }
         }
 
+        /// <summary>Override to declare Init attachments and return the Tick delegate.</summary>
         protected abstract TickBlock Init(EpochBuilder s);
 
+        // Single tick pass. Rolls back prior Tick attachments, then invokes TickBlock to rebuild them.
         void Friend.Tick() {
             if (IsDetached) return;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
@@ -147,12 +166,15 @@ namespace Spoke {
             return parent;
         }
 
+        // An attachment record in the attachment list. Its a fake union-type. All the
+        // kinds of attachment are represented by this struct. Not all fields are relevant
+        // for each.
         readonly struct AttachRecord {
             public enum Kind : byte { Cleanup, Handle, Use, Call, Export }
 
             public readonly Kind Type;
-            public readonly object AsObj;
-            public readonly SpokeHandle Handle;
+            public readonly object AsObj;       // For Types: Cleanup, Use, Call, Export
+            public readonly SpokeHandle Handle; // Only for Type: Handle
 
             public AttachRecord(SpokeHandle handle) {
                 this = default;
@@ -196,6 +218,7 @@ namespace Spoke {
             }
         }
 
+        // Epoch mutation API (Init/Tick only).
         internal struct EpochMutations {
             Epoch owner;
 
@@ -233,6 +256,7 @@ namespace Spoke {
                 return obj;
             }
 
+            // Lexically scoped import: walk back through attachments, then up through ancestors.
             public bool TryImport<T>(out T obj) {
                 obj = default(T);
                 var startIndex = owner.attachEvents.Count - 1;
@@ -270,6 +294,9 @@ namespace Spoke {
         }
     }
 
+    /// <summary>
+    /// DSL-style builder passed to Init/Tick. Allows attachments to be added to the epoch.
+    /// </summary>
     public struct EpochBuilder {
         Epoch.EpochMutations s;
 
@@ -308,6 +335,9 @@ namespace Spoke {
         public EpochPorts Ports => new(s);
     }
 
+    /// <summary>
+    /// Capabilities passed to Init/Tick which can be captured and used outside the mutation windows.
+    /// </summary>
     public struct EpochPorts {
         Epoch.EpochMutations s;
 
