@@ -17,7 +17,7 @@ namespace Spoke {
         State<bool> isEnabled = State.Create(false);
         State<bool> isStarted = State.Create(false);
 
-        /// <summary>True after Awake, False of Destroyed</summary>
+        /// <summary>True after Awake, False after Destroyed</summary>
         public ISignal<bool> IsAwake => isAwake;
 
         /// <summary>True while the behaviour is enabled</summary>
