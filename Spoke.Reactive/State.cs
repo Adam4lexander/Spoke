@@ -59,22 +59,22 @@ namespace Spoke {
         public SpokeHandle Subscribe(Action<T> action) 
             => trigger.Subscribe(action);
 
-        /// <summary>Explicit alternative to unsubscribe the given action.</summary>
+        /// <summary>Unsubscribe the action. Prefer SpokeHandle.Dispose() instead</summary>
         public void Unsubscribe(Action action) 
             => trigger.Unsubscribe(action);
 
-        /// <summary>Explicit alternative to unsubscribe the given action.</summary>
+        /// <summary>Unsubscribe the action. Prefer SpokeHandle.Dispose() instead</summary>
         public void Unsubscribe(Action<T> action) 
             => trigger.Unsubscribe(action);
 
-        /// <summary>Sets the value, invoking the trigger if it changed</summary>
+        /// <summary>Sets the value, notify subscribers if it changed</summary>
         public void Set(T value) {
             if (EqualityComparer<T>.Default.Equals(value, this.value)) return;
             this.value = value;
             trigger.Invoke(value);
         }
 
-        /// <summary>Updates the value using the given a function of the present value</summary>
+        /// <summary>Updates the value by a function of the previous value</summary>
         public void Update(Func<T, T> setter) {
             if (setter == null) return;
             Set(setter(Now));

@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace Spoke {
 
+    /// <summary> Unity logger implementation of ISpokeLogger </summary>
     public class UnitySpokeLogger : ISpokeLogger {
         public Object context;
 

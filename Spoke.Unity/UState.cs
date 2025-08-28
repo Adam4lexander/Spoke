@@ -11,14 +11,23 @@ using System.Reflection;
 
 namespace Spoke {
 
+    /// <summary>Static factory for UState<T></summary>
     public static class UState {
         public static UState<T> Create<T>(T val = default) => new UState<T>(val);
     }
 
+    /// <summary>
+    /// A reactive state container that is serializable by Unity.
+    /// It's serializable in the Unity Editor, and will show up in the Inspector.
+    /// You can use it to expose editor-configurable state in your MonoBehaviours and ScriptableObjects.
+    /// 
+    /// This was quite tricky to get right, due to how Unity handles serialization.
+    /// But it does seem to handle all the edge cases, including the Undo/Redo system.
+    /// </summary>
     [Serializable]
     public class UState<T> : IState<T>, ISerializationCallbackReceiver {
-        [SerializeField] T value;
-        T runtimeValue;
+        [SerializeField] T value; // Serialized value can be compared with runtimeValue to detect editor changes
+        T runtimeValue; // True value of the state
         Trigger<T> trigger = new Trigger<T>();
         bool isInitialized = false;
         int setCount;
@@ -29,6 +38,7 @@ namespace Spoke {
             this.value = runtimeValue = value;
         }
 
+        /// <summary>The current value of the UState</summary>
         public T Now { 
             get { 
                 EnsureInitialized(); 
@@ -36,26 +46,31 @@ namespace Spoke {
             } 
         }
 
+        /// <summary>Subscribes to value changes, returns unsubscribe handle</summary>
         public SpokeHandle Subscribe(Action action) { 
             EnsureInitialized(); 
             return trigger.Subscribe(action); 
         }
 
+        /// <summary>Subscribes to value changes, returns unsubscribe handle</summary>
         public SpokeHandle Subscribe(Action<T> action) { 
             EnsureInitialized(); 
             return trigger.Subscribe(action); 
         }
 
+        /// <summary>Unsubscribe the action. Prefer SpokeHandle.Dispose() instead</summary>
         public void Unsubscribe(Action action) { 
             EnsureInitialized(); 
             trigger.Unsubscribe(action); 
         }
 
+        /// <summary>Unsubscribe the action. Prefer SpokeHandle.Dispose() instead</summary>
         public void Unsubscribe(Action<T> action) { 
             EnsureInitialized(); 
             trigger.Unsubscribe(action); 
         }
         
+        /// <summary>Sets the value, notify subscribers if it changed</summary>
         public void Set(T value) {
             setCount++;
             EnsureInitialized();
@@ -67,12 +82,14 @@ namespace Spoke {
             trigger.Invoke(value);
         }
 
+        /// <summary>Updates the value by a function of the previous value</summary>
         public void Update(Func<T, T> setter) {
             if (setter != null) Set(setter(Now));
         }
 
         public void OnBeforeSerialize() { }
 
+        // Detects changes made in the editor, including Undo/Redo
         public void OnAfterDeserialize() {
             if (!isInitialized) {
                 runtimeValue = value;
@@ -81,6 +98,8 @@ namespace Spoke {
             var newValue = value;
             var storeSetCount = ++setCount;
 #if UNITY_EDITOR
+            // Delay call, so trigger.Invoke() happens outside of deserialization
+            // Many Unity APIs are not safe to call during deserialization
             EditorApplication.delayCall += () => {
                 if (setCount > storeSetCount) return;
                 Set(newValue);
@@ -90,6 +109,8 @@ namespace Spoke {
 #endif
         }
 
+        // Lazy initialize the state on first access by user code. Avoids a whole lot of
+        // complexity in the Unity serialization lifecycle.
         void EnsureInitialized() {
             if (!isInitialized) {
                 isInitialized = true;
@@ -103,9 +124,12 @@ namespace Spoke {
     public class StateDrawer : UnwrappedValueDrawer {
         public override SerializedProperty GetValueProperty(SerializedProperty property) => property.FindPropertyRelative("value");
     }
-#endif
 
-#if UNITY_EDITOR
+    /// <summary>
+    /// Base class for property drawers that unwrap a serialized value from a wrapper class.
+    /// Used by UState to show the inner value in the inspector.
+    /// Otherwise it would appear as { Now: value }
+    /// </summary>
     public abstract class UnwrappedValueDrawer : PropertyDrawer {
 
         public abstract SerializedProperty GetValueProperty(SerializedProperty property);

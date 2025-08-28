@@ -6,6 +6,12 @@ using UnityEditor;
 
 namespace Spoke {
 
+/// <summary>
+/// Static bootstrap for Spoke in Unity.
+/// Initializes SpokeError logging to use Unity's Debug.LogError.
+/// That's where Spoke logs internal errors by default.
+/// Also configures the default Spoke logger to use the UnitySpokeLogger.
+/// </summary>
 #if UNITY_EDITOR
     [InitializeOnLoad]
 #endif
