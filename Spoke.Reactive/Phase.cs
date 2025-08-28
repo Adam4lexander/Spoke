@@ -1,5 +1,8 @@
 namespace Spoke {
 
+    /// <summary>
+    /// A Phase is a specialized Effect which only runs its block when mountWhen is true
+    /// </summary>
     public sealed class Phase : BaseEffect {
         ISignal<bool> mountWhen;
 

@@ -2,6 +2,9 @@ using System;
 
 namespace Spoke {
 
+    /// <summary>
+    /// An Effect runs an EffectBlock, and then re-runs whenever any of its triggers fire
+    /// </summary>
     public sealed class Effect : BaseEffect {
 
         public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
@@ -9,6 +12,12 @@ namespace Spoke {
         }
     }
 
+    /// <summary>
+    /// An Effect<T> is similar to Memo<T>, in that it's a reactive signal
+    /// However, it's EffectBlock<T> returns an ISignal<T>, and not a raw T value like memos do
+    /// It's also capable of attaching its own sub-effects, memos or cleanup logic
+    /// This makes Effect<T> nestable and composable
+    /// </summary> 
     public sealed class Effect<T> : BaseEffect, ISignal<T> {
         State<T> state = State.Create<T>();
 

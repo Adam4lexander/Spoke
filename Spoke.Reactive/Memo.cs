@@ -4,6 +4,11 @@ namespace Spoke {
 
     public delegate T MemoBlock<T>(MemoBuilder s);
 
+    /// <summary>
+    /// A computed reactive value which updates when any of its triggers fire
+    /// It takes a selector function (type MemoBlock<T>) which returns the new value
+    /// It's best used for pure functions of other signals, ie: s.Memo(s => s.D(A) + s.D(B))
+    /// </summary>
     public class Memo<T> : Computation, ISignal<T> {
         State<T> state = State.Create<T>();
         Action<ITrigger> _addDynamicTrigger;
@@ -38,6 +43,10 @@ namespace Spoke {
             => state.Unsubscribe(action);
     }
 
+    /// <summary>
+    /// DSL-style builder passed into MemoBlock
+    /// It's minimal compared to EffectBuilder, since memos are intended to be pure functions
+    /// </summary>
     public struct MemoBuilder {
         Action<ITrigger> addDynamicTrigger;
         EpochBuilder s;
@@ -53,6 +62,6 @@ namespace Spoke {
         }
 
         public void OnCleanup(Action fn) 
-        => s.OnCleanup(fn);
+            => s.OnCleanup(fn);
     }
 }

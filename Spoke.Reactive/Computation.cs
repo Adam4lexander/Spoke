@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace Spoke {
 
+    /// <summary>
+    /// Abstract base class for all reactive objects
+    /// A Computation is a reactive action which runs when any of its triggers fire
+    /// Supports both static and dynamic trigger subscriptions
+    /// - Static triggers are subscribed once, when the computation is created
+    /// - Dynamic triggers can be added during each run of the computation
+    /// </summary>
     public abstract class Computation : Epoch {
         IEnumerable<ITrigger> triggers;
         DependencyTracker tracker;
@@ -33,6 +40,7 @@ namespace Spoke {
             => tracker.AddDynamic(trigger);
     }
 
+    // Manages dynamic trigger subscriptions for a Computation
     internal class DependencyTracker : IDisposable {
         Action schedule;
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
@@ -82,6 +90,9 @@ namespace Spoke {
             staticHandles.Clear(); dynamicHandles.Clear();
         }
 
+        // Dependencies may fire while we're in the middle of refreshing them
+        // Constructs a closure to capture the index at the time of subscription
+        // The index tells us if the dependency is valid or stale when it fires
         Action ScheduleFromIndex(int index) 
             => () => { if (index < depIndex) schedule(); }; 
     }
