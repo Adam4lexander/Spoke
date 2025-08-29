@@ -100,10 +100,6 @@ public class MyBehaviour : SpokeBehaviour {
             // Run OnDestroy logic here
         });
 
-        s.Phase(IsAwake, s => {
-            // Runs at the end of Awake (useful for dependency timing)
-        });
-
         s.Phase(IsEnabled, s => {
             // OnEnable logic here
             s.OnCleanup(() => {
