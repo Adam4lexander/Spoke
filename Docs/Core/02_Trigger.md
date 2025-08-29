@@ -4,6 +4,8 @@ A trigger is an event broadcaster. It can be subscribed to and can notify subscr
 
 In Spoke, a trigger is also the **core primitive** that drives reactive computation. When a trigger is invoked, all its dependants are notified and re-executed.
 
+You don't **need** to use triggers to replace all `UnityEvent` or C# events. Spoke can manage subscriptions to any of these. But triggers are tightly integrated with `Spoke.Reactive` and have some important capabilities.
+
 ---
 
 ## Types
@@ -144,7 +146,7 @@ public class MyBehaviour : SpokeBehaviour {
 
         // When the SomeDelegateEvent is invoked, it will also invoke the trigger
         SomeDelegateEvent += trigger.Invoke;
-        // Manual cleanup when the behaviour unmounts, s.Subscribe() does for us already
+        // Manual cleanup when the behaviour unmounts, s.Subscribe() does this for us automatically
         s.OnCleanup(() => SomeDelegateEvent -= trigger.Invoke);
 
         // Now we can bind reactive objects to the trigger
@@ -161,8 +163,8 @@ public class MyBehaviour : SpokeBehaviour {
 
 - **Zero GC**: Uses object pools and value types internally to avoid garbage allocations.
 
-- **Safe Unsubscribes**: During `Invoke()`, it clones the subscriber list to ensure safe and deterministic behavior even if a subscriber unsubscribes mid-call.
+- **Mutation Safety**: During `Invoke()`, it clones the subscriber list to ensure safe and deterministic behavior even if the subscriber list changes mid-call.
 
-- **Deferred Invocation**: Nested `Invoke()` calls are deferred and flushed in order, one batch at a time.
+- **Re-entrancy Safety**: Re-entrant `Invoke()` calls are queued and flushed in order, one event at a time.
 
-- **Reactivity-safe**: If a `Trigger` invalidates a reactive computation (e.g. remounting an `Effect` or recomputing a `Memo`), the flush is deferred until all subscribers have been notified — preserving deterministic update order.
+- **Batched Notifications**: If a `Trigger` invalidates a reactive computation (e.g. to rerun an `Effect` or `Memo`), execution is deferred until all subscribers have been notified. Equivalent to calling `SpokeRuntime.Batch()`.

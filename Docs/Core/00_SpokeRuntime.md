@@ -1,14 +1,40 @@
-# Mental Model
+# Spoke Runtime
 
-This page explains the core concepts for Spoke, and the mental model it's built on. If you're just starting, don't worry about diving too deep. You can refer back here as you become more familiar with Spoke.
+This page explains the core `Spoke.Runtime` package. It's the engine that `Spoke.Reactive` is built on. You don't need to understand it deeply in order to use Spoke. If you're just starting, you may prefer to skip this page, and refer back later if you're curious.
+
+---
+
+## Table of Contents
+
+- [Abstract](#abstract)
+- [Foreword: When to extent Spoke.Runtime](#foreword-when-to-extend-spokeruntime)
+- [Closures](#closures)
+- [Performance and GC churn](#performance-and-gc-churn)
+- [Primitives](#primitives)
+  - [Epoch](#epoch)
+    - [Epoch attachments](#epoch-attachments)
+    - [Choosing Init or Tick](#choosing-init-or-tick)
+    - [Fault Handling](#fault-handling)
+    - [Exports and Imports](#exports-and-imports)
+    - [LambdaEpoch](#lambdaepoch)
+  - [Ticker](#ticker)
+    - [Ordering Epochs by Tree Coords](#ordering-epochs-by-tree-coords)
+  - [SpokeTree](#spoketree)
+    - [Flushing](#flushing)
+    - [Spawning Trees](#spawning-trees)
+    - [Auto Flushed Trees](#auto-flushed-trees)
+    - [Manual Flushed Trees](#manual-flushed-trees)
+  - [Dock](#dock)
+
+---
 
 ## Abstract
 
-Spoke implements an incremental tree-based execution model. It lets you declare a tree of behaviours, executed in imperative order, and reactively teardown/rebuild subtrees from dynamically changing runtime state. It resembles frontend frameworks like React, but with stricter invariants on execution order. In React you don't normally think about the order components (tree nodes) are mounted, in Spoke you do.
+`Spoke.Runtime` implements an incremental tree-based execution model. It lets you declare a tree of behaviours, executed in imperative order, and teardown/rebuild subtrees dynamically. It resembles frontend frameworks like React, but with stricter invariants on execution order. In React you don't normally think about the order components (tree nodes) are mounted, in Spoke you do.
 
-Using Spoke is like writing a coroutine, that runs forwards and in reverse, and that dynamically recompiles and relinks sections of code at runtime. It's not literally doing this. Spoke is built entirely from vanilla C#. But its behaviour is roughly equivalent.
+Using Spoke is like writing a tree of coroutines, that runs forwards and in reverse, and that dynamically recompiles and relinks sections of code at runtime. It's not literally doing this. Spoke is built entirely from vanilla C#. But its behaviour is roughly equivalent.
 
-The tree execution model is implemented in `Spoke.Runtime`. The fundamental primitive is the `Epoch`. Every node in the tree is a kind of epoch. They each declare a code-block to be executed when the epoch is 'ticked'. The runtime progressively 'ticks' the epochs, which may make side-effects, declare cleanup callbacks and attach a new batch of epochs to be 'ticked'. If an epoch is ticked again, it first cleans up from the last time. Child epochs are detached, bound resources are disposed, and cleanup callbacks are executed. The code-block is run again fresh, which may produce a new subtree of epochs.
+The fundamental primitive is the `Epoch`. Every node in the tree is a kind of epoch. They each declare a code-block to be executed when the epoch is 'ticked'. The runtime progressively ticks the epochs, which may make side-effects, declare cleanup callbacks and attach a new batch of epochs to be ticked. If an epoch is ticked again, it first cleans up from the last time. Child epochs are detached, bound resources are disposed, and cleanup callbacks are executed. The code-block is run again fresh, which may produce a new subtree of epochs.
 
 Spoke may look declarative, but it is highly imperative. Epochs attach their children in the order the code is written, and on cleanup they are detached in the reverse order. Spoke optimizes for cognitive clarity over raw performance. It builds up trees in the most predictable and intuitive order, instead of the most optimal order. It wants to feel like writing normal imperative code, even when execution flow is indirect and chaotic.
 

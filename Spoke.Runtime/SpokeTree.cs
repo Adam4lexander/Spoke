@@ -153,7 +153,7 @@ namespace Spoke {
             => new SpokeTree<T>(name, root, FlushMode.Auto, 0, services);
 
         public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch 
-            => new SpokeTree<T>("SpokeTree (Default)", root, FlushMode.Auto, -1, services);
+            => new SpokeTree<T>("SpokeTree (Eager)", root, FlushMode.Auto, -1, services);
 
         public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch 
             => new SpokeTree<T>(name, root, FlushMode.Auto, -1, services);

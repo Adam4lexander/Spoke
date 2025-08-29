@@ -118,41 +118,7 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
----
-
-## ⚙️ Prefer manual control?
-
-You can also create a `SpokeTree` manually in any `MonoBehaviour`:
-
-```csharp
-using Spoke;
-
-public class MyBehaviour : MonoBehaviour {
-
-    State<bool> isEnabled = State.Create(false);
-    SpokeTree tree;
-
-    void Awake() {
-        // A SpokeTree is the root that drives execution of a reactive tree
-        tree = SpokeTree.Spawn(new Effect("Init", s => {
-            s.Phase(isEnabled, s => {
-                // OnEnable logic
-                s.OnCleanup(() => {
-                    // OnDisable logic
-                });
-            });
-        }));
-    }
-
-    void OnDestroy() => tree.Dispose();
-
-    void OnEnable() => isEnabled.Set(true);
-    void OnDisable() => isEnabled.Set(false);
-}
-```
-
-Spoke integrates with Unity through a very thin wrapper.
-Take a peek at SpokeBehaviour if you're curious — it's tiny.
+[Read the Quickstart Guide →](./Docs/Core/01_QuickStart.md)
 
 ---
 

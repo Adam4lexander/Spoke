@@ -1,20 +1,22 @@
 # Effect
 
-In Spoke, the `Effect` is the most important primitive for expressing logic. Put simply it's a block of code, subscribed to a set of triggers. If one or more of the these triggers fire, the Effect is scheduled for remount.
+Effects are block of code, arranged into a tree, that rerun automatically when their dependencies change. These dependencies can be a mix of triggers and signals.
 
-Effects are a derivative of `Epoch` described in [00_MentalModel](./00_MentalModel.md).
+When an effect runs, it makes changes to game state, declares cleanup functions, binds resources and attaches sub-effects and memos.
 
-Effects are functional blocks that combine _setup_ and _cleanup_ logic into one cohesive package. When the Effect is mounted, its code block is executed, which may register one or more cleanup functions. When the Effect is unmounted, these cleanup functions are executed in reverse order.
+When an effect is rerun due to a dependency, it first cleans up everything from the last time. Resources are disposed, cleanup functions are invoked, and sub-effects are cleaned up as well. Think of it like Undo/Redo.
 
-Effect blocks can create its own sub-effects or sub-epochs to form a lifecycle tree. The lifetimes of these children are bound to the parent effect. If the parent effect is to be unmounted, these children will be unmounted first.
+There are three kinds of Effect in Spoke:
 
-There are three kinds of **Effect** in Spoke: `Effect`, `Reaction` and `Phase`. They are all syntactic sugar over the same underlying concept. Spoke could work with just `Effect`, but the others exist for convenience and improved clarity in your code.
+- `Effect`: Standard effect behaviour
+- `Phase`: Explicit `ISignal<bool>` parameter, when the effect can run
+- `Reaction`: Skips the first run
+
+`Phase` and `Reaction` are minor syntactic sugar over `Effect`. Spoke could work with just `Effect` and not the others, but they were included for convenience and improved clarity in your code.
 
 ---
 
 ## Creating an Effect
-
-If you're using `SpokeBehaviour`, the `Init()` method is already mounted to an Effect. Creating additional sub-effects is easy:
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
@@ -22,11 +24,11 @@ public class MyBehaviour : SpokeBehaviour {
     [SerializeField] UState<int> number = UState.Create(0);
 
     protected override void Init(EffectBuilder s) {
-        // This function 'Init', already runs inside an Effect defined in SpokeBehaviour
+        // Init itself is hosted in an Effect
 
-        // Create a child Effect, bound to the lifetime of 'Init'
         s.Effect(s => {
-            // Read 'number' and bind it as a dependency. So this function re-runs when 'number' changes
+            // Declare 'number' a dependency, and store its value
+            // This block reruns automatically whenever 'number' changes
             var numberNow = s.D(number);
             Debug.Log($"number is: {numberNow}");
         });
@@ -34,37 +36,105 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-> `s.D()` reads and tracks a dynamic signal dependency, which I'll explain in a later section.
-
-When you run the code, it will first print: `number is: 0`.
-
-Each time you change the number in the Unity inspector, it will trigger the Effect to rerun, and print the updated value.
+> `s.D()` reads and tracks a dynamic signal dependency, we'll get to it later
 
 ---
 
-### Manual Creation
+## `Effect` vs `EffectBlock`
 
-You can create effects yourself without having to use `SpokeBehaviour`:
+Effects come in two distinct pieces.
+
+First there is the the `Effect` class:
 
 ```cs
-// A reactive state we can test with
-var number = State.Create(0);
-
-// Spawns a `SpokeTree`. The parameter is a subclass of Epoch thats attached under SpokeTree
-SpokeTree.Spawn(new Effect("Init", s => {
-    s.Effect(s => {
-        Debug.Log($"number is: {s.D(number)}");
-    });
-}));
+new Effect(/*...*/);
 ```
 
-This pretty much replicates what `SpokeBehaviour` is doing before it calls `Init`.
+And then there is the `EffectBlock`:
+
+```cs
+EffectBlock block = (EffectBuilder s) => {
+    DoTheThing();
+    s.OnCleanup(() => UndoTheThing());
+};
+```
+
+`EffectBlock` is a function delegate type. It's the code block assigned to the `Effect`. It's run once when the effect is created and mounted. It's run again (after cleanup) each time the effect is triggered by its dependencies.
+
+```cs
+// So, when you see:
+s.Effect(s => {
+
+});
+
+// It's a convenience wrapper doing:
+new Effect(s => {
+
+});
+```
+
+`Effect` is a class which takes an `EffectBlock` as parameter. The class is the live object in the tree, and the block is its behaviour.
+
+---
+
+## Deferred Execution
+
+Take a look at this example and try to predict the output:
+
+```cs
+public class MyBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder s) {
+        s.Effect(s => {
+            var number = 10;
+            s.Effect(s => {
+                Debug.Log($"number is {number}");
+            });
+            number = 20;
+        });
+    }
+}
+```
+
+> `number` isn't a signal, so it can't be wrapped in s.D()
+
+The log will print: `number is 20`
+
+Why not `10`? Because effects aren't run synchronously. The outer effect first runs to completion:
+
+- It declares `number = 10`
+- It runs `s.Effect()`, to attach the inner effect, but doesnt run it yet
+- It then sets `number = 20`
+
+Only after the outer block completes, does the inner block get to run. But by then `number` has already been updated. To fix you can rewrite like this:
+
+```cs
+public class MyBehaviour : SpokeBehaviour {
+
+    protected override void Init(EffectBuilder s) {
+        s.Effect(s => {
+            var number = 10;
+            s.Effect(s => {
+                Debug.Log($"number is {number}");
+            });
+            // Wrap the mutation in its own Effect, which runs after the one above
+            s.Effect(s => {
+                number = 20;
+            });
+        });
+    }
+}
+```
+
+Now it prints: `number is 10`
+
+This behaviour can be surprising if you're not expecting it. But the fix is simple. To control the order of execution, sometimes you need to drop logic into its own effect.
 
 ---
 
 ## Dependencies
 
-There are two ways that dependencies on an `Effect` can be defined:
+There are two ways to declare dependencies on an `Effect`:
 
 - **Explicit**: passing them explicitly in the constructor.
 - **Dynamic**: auto-binding to `ISignal`'s accessed in the `EffectBlock`.
@@ -76,25 +146,23 @@ There are pros and cons to each. You can choose one or the other, or both, depen
 ### Explicit Dependencies
 
 ```csharp
-var myTrigger = Trigger.Create();
-var myState = State.Create(0);
+public class Adder : SpokeBehaviour {
 
-SpokeTree.Spawn(new Effect(s => {
-    s.Effect(s => {
-        Debug.Log($"myState is {myState.Now}");
-    }, myTrigger, myState); // any number of dependencies in final args
-}));
+    [SerializeField] UState<int> num1 = new(0);
+    [SerializeField] UState<int> num2 = new(0);
 
-// Instantiating effect Prints: myState is 0
-
-myTrigger.Invoke(); // Prints: myState is 0
-myState.Set(1);     // Prints: myState is 1
+    protected override void Init(EffectBuilder s) {
+        s.Effect(s => {
+            // ISignal.Now reads the current value
+            Debug.Log($"Result is: {num1.Now + num2.Now}");
+        }, num1, num2); // Dependencies given explicitely as parameters
+    }
+}
 ```
 
-Any number of `ITrigger` can be given explicitly to the `Effect` constructor.
+Explicit dependencies are anything extending `ITrigger`.
 
-- **Advantages**: Works with `ITrigger`, can give more control and clarity
-- **Disadvantages**: More verbose, requires more discipline, easy to forget a dependency
+This option is least preferred, because it's less flexible and easy to put the wrong dependencies. But it's sometimes necessary, because this option can bind to triggers. The dynamic option only works with signals.
 
 ---
 
@@ -105,46 +173,48 @@ Dynamic dependencies are defined by calling a method from the `EffectBuilder`:
 `T D<T>(ISignal<T> signal);`
 
 ```csharp
-var name = State.Create("Spokey");
-var age = State.Create(0);
+public class Adder : SpokeBehaviour {
 
-SpokeTree.Spawn(new Effect(s => {
-    s.Effect(s => {
-        Debug.Log($"name: {s.D(name)}, age: {s.D(age)}");
-    });
-});
+    [SerializeField] UState<int> num1 = new(0);
+    [SerializeField] UState<int> num2 = new(0);
 
-// Instantiating effect Prints: name: Spokey, age: 0
-
-name.Set("Reacts"); // Prints: name: Reacts, age: 0
-age.Set(1);         // Prints: name: Reacts, age 1
+    protected override void Init(EffectBuilder s) {
+        s.Effect(s => {
+            Debug.Log($"Result is: {s.D(num1) + s.D(num2)}");
+        });
+    }
+}
 ```
 
-`D()` is a method that wraps a `ISignal`. It makes that `ISignal` a dynamic dependency and then returns `ISignal.Now`.
+`s.D()` wraps an `ISignal`, binds it as a dynamic dependency, and then returns `ISignal.Now`.
 
-If the `Effect` remounts, it will clear its dynamic dependencies, and then discover dependencies again on its next run. Dynamic dependencies can change on each run.
+Dynamic dependencies are rebound each time the effect runs:
 
-```csharp
-SpokeTree.Spawn(new Effect(s => {
-    s.Effect(s => {
-        // Totally fine
-        if (s.D(condition)) {
-            DoSomething(s.D(foo));
-        } else {
-            SomethingElse(s.D(bar));
-        }
-    });
-});
+```cs
+public class Adder : SpokeBehaviour {
+
+    [SerializeField] UState<int> num1 = new(0);
+    [SerializeField] UState<int> num2 = new(0);
+    [SerializeField] UState<bool> addThird = new(true);
+    [SerializeField] UState<int> num3 = new(0);
+
+    protected override void Init(EffectBuilder s) {
+        s.Effect(s => {
+            if (s.D(addThird)) {
+                Debug.Log($"Result is: {s.D(num1) + s.D(num2) + s.D(num3)}");
+            } else {
+                Debug.Log($"Result is: {s.D(num1) + s.D(num2)}");
+            }
+        });
+    }
+}
 ```
 
-- **Advantages**: Better ergonomics, more flexible, more powerful.
-- **Disadvantages**: Only supports `ISignal`, easier to misuse.
+> Depending on the value of `addThird`, the effect may or may not declare `num3` as a dependency. This is a big advantage of dynamic dependencies. Expressing this with explicit dependencies is awkward.
 
-I personally prefer dynamic dependencies. They feel better. They're more fun. And they handle complex logic more elegantly, like poking into nested signals.
+Dynamic dependencies are the preferred approach. Their only limitation is that they only work with signals. They can't bind to raw triggers. But this use case is much more rare.
 
-That said, there are times where explicit dependencies are needed. Like if you need to remount an `Effect` from a pure event. Dynamic dependencies won’t catch pure events — only explicit dependencies will work in this case.
-
-You can combine both styles freely — Spoke will track dynamic dependencies _and_ honor any explicit `ITrigger`s you pass in.
+If you want you can combine both styles. An effect can have a mixture of explicit and dynamic dependencies. Although for clarity, it's probably best to choose one or the other.
 
 ---
 
