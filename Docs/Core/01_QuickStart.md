@@ -238,7 +238,7 @@ public class SpellBreakerController : SpokeBehaviour {
             dock.Drop(actor);
         });
         s.Effect(s => {
-            spellBreakerUI.SetActive(s.d(numberOfSpellCasts) > 0);
+            spellBreakerUI.SetActive(s.D(numberOfSpellCasts) > 0);
         });
     }
 
@@ -265,4 +265,5 @@ I've introduced a lot of new concepts here and not expecting it to be quickly un
 Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions.
 
 The patterns above give immediate value and serve as an onboarding ramp for diving deeper.
+
 
