@@ -68,7 +68,7 @@ public class MyBehaviour : SpokeBehaviour {
 
 Effects come in two distinct pieces.
 
-First there is the the `Effect` class:
+First there is the `Effect` class:
 
 ```cs
 new Effect(/*...*/);
