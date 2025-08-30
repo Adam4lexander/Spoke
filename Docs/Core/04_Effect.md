@@ -377,17 +377,25 @@ public class MyBehaviour : SpokeBehaviour {
     [SerializeField] UState<int> myState = new(0);
 
     protected override void Init(EffectBuilder s) {
+
         s.Effect(s => {
-            Debug.Log($"Effect-1: {s.D(myState)}");
-            s.OnCleanup(() => Debug.Log("Effect-1 cleaned up"));
+            Debug.Log($"Outer-1: {s.D(myState)}");
+            s.OnCleanup(() => Debug.Log("Outer-1 cleaned up"));
+
+            s.Effect(s => {
+                Debug.Log($"Inner-1: {s.D(myState)}");
+                s.OnCleanup(() => Debug.Log("Inner-1 cleaned up"));
+            });
         });
+
         s.Effect(s => {
-            Debug.Log($"Effect-2: {s.D(myState)}");
-            s.OnCleanup(() => Debug.Log("Effect-2 cleaned up"));
-        });
-        s.Effect(s => {
-            Debug.Log($"Effect-3: {s.D(myState)}");
-            s.OnCleanup(() => Debug.Log("Effect-3 cleaned up"));
+            Debug.Log($"Outer-2: {s.D(myState)}");
+            s.OnCleanup(() => Debug.Log("Outer-2 cleaned up"));
+
+            s.Effect(s => {
+                Debug.Log($"Inner-2: {s.D(myState)}");
+                s.OnCleanup(() => Debug.Log("Inner-2 cleaned up"));
+            });
         });
     }
 }
@@ -396,26 +404,29 @@ public class MyBehaviour : SpokeBehaviour {
 Run the script and you'll see:
 
 ```
-Effect-1: 0
-Effect-2: 0
-Effect-3: 0
+Outer-1: 0
+Inner-1: 0
+Outer-2: 0
+Inner-2: 0
 ```
 
 Change the number to `1` in the inspector and you'll see:
 
 ```
-Effect-3 cleaned up
-Effect-2 cleaned up
-Effect-1 cleaned up
+Inner-1 cleaned up
+Outer-1 cleaned up
+Outer-1: 1
+Inner-1: 1
 
-Effect-1: 1
-Effect-2: 1
-Effect-3: 1
+Inner-2 cleaned up
+Outer-2 cleaned up
+Outer-2: 1
+Inner-2: 1
 ```
 
-This is a core design principle of the Spoke runtime. The tree is built up in an imperative order, and its cleaned up in the reverse order. When many effects in the tree are triggered simultaneously, you can always predict the order things will run.
+This is a core design principle of the Spoke runtime. Changes cascade by walking the tree in an imperative order. When an effect reruns, it disposes its subtree first in reverse attach order.
 
-The [Spoke Runtime Docs](./00_SpokeRuntime.md) explain it in detail if you're curious. But it's not necessary to understand exactly how it works. Just know that you can use the same intuitions you have from imperative, procedural programming. No surprises from things randomly running out-of-order.
+The [Spoke Runtime Docs](./00_SpokeRuntime.md) explain this in detail if you're curious. But it's not necessary to understand exactly how it works. Just know that you can use the same intuitions you have from imperative, procedural programming. No surprises from things randomly running out-of-order.
 
 ---
 
