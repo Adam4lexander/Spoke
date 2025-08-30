@@ -15,7 +15,7 @@
 
 ## Setup
 
-For Unity, you'll need **`Spoke.Runtime/`**, **`Spoke.Reactive/`** and **`Spoke.Unity/`** in your project. Either copy the folders somewhere in your projects **`Assets/`** directory, or clone Spoke there directly.
+For Unity, you'll need **`Spoke.Runtime/`**, **`Spoke.Reactive/`** and **`Spoke.Unity/`** in your project. Either copy the folders somewhere in your project's **`Assets/`** directory, or clone Spoke there directly.
 
 ---
 
@@ -51,9 +51,9 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-> `IsEnabled` and `IsStarted` are reactive signals. They hold a bool, and notify subscribers when its value changes. `Phase` is a function that runs when its signal becomes true, and cleans up when the signal becomes false.
+> `IsEnabled` and `IsStarted` are reactive signals. They hold a `bool` and notify subscribers when their value changes. `Phase` runs when its signal becomes `true` and cleans up when the signal becomes `false`.
 
-`Phase` is composable. They can be re-ordered and nested however you like:
+Phases are composable. You can reorder and nest them however you like:
 
 ```cs
 public class MyBehaviour : SpokeBehaviour {
@@ -77,7 +77,7 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-The mental model is a tree. When a `Phase` cleans up because its signal becomes false, it unwinds and cleans up its subtree.
+The mental model is a tree. When a `Phase` cleans up because its signal becomes `false`, it unwinds and cleans up its subtree.
 
 ---
 
@@ -105,7 +105,7 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-> Automatically unsubscribes when the block is cleaned up.
+> Subscriptions are automatically removed when the block is cleaned up.
 
 ---
 
@@ -155,7 +155,7 @@ public class MyCalculator : SpokeBehaviour {
 }
 ```
 
-> `s.D(...)` means: read this signal, and make it a dependency. So if the signal changes value, the code-block reruns automatically. The concise syntax was chosen because `s.D()` is used alot. Think of it as a hieroglyph instead of a method name.
+> `s.D(...)` means: read this signal, **and** make it a dependency. If the signal changes, the block reruns automatically. The concise syntax was chosen because `s.D()` is used alot. Think of it like a hieroglyph instead of a method name.
 
 ---
 
@@ -260,8 +260,8 @@ public class SpellBreakerController : SpokeBehaviour {
 }
 ```
 
-I've introduced a lot of new concepts here and not expecting it to be quickly understandable. I just wanted to show a complex use-case that Spoke is well suited for.
+I've introduced a lot of new concepts here and not expecting it to be quickly understandable. The goal is to show a complex use case that Spoke is well‑suited for.
 
-Once you're familiar with Spoke you can write code like this very quickly. It may be short, but its handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions.
+Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions.
 
-The patterns I showed earlier can give some immediate value, and serve as an onboarding ramp for diving deeper.
+The patterns above give immediate value and serve as an onboarding ramp for diving deeper.
