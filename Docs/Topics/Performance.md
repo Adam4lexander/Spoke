@@ -1,6 +1,38 @@
-# ⚙️ Performance
+# Performance
 
-This page shows how Spoke performs — both in terms of CPU time and memory usage — and where the costs come from.
+This page shows how Spoke performs, in terms of CPU usage and GC allocations.
+
+---
+
+## Table of Contents
+
+- [Philosophy](#philosophy)
+- [Scenario 1: Flush Loop Stress Test](#scenario-1-flush-loop-stress-test)
+- [Scenario 2: Forcing GC](#scenario-2-forcing-gc)
+- [Scenario 3: Unstable Dynamic Dependencies](#scenario-3-unstable-dynamic-dependencies)
+- [Allocation Cheat Sheet](#allocation-cheat-sheet)
+
+---
+
+## Philosophy
+
+First, I'll cover Spoke's performance philosophy.
+
+Spoke was born inside a VR MechWarrior-style immersive sim that runs on the Meta Quest.
+
+Its role is to orchestrate long-lived behaviours that spawn when the conditions are right, and that tear down when those conditions change. Basically, it's a lifecycle manager for behaviours that exist across frames, and that interact in emergent, dynamic ways.
+
+For this use case, I found cognitive complexity to be a far greater bottleneck than CPU usage. On a given frame, not many lifecycle events occur, but those that do require careful orchestration to setup and tear down safely.
+
+Spoke isn't intended to implement frame-by-frame logic; instead, it should orchestrate the systems that do. By starting them up, keeping them in sync with runtime state, and safely tearing them down.
+
+Here are Spoke's guiding principles:
+
+1. Prioritize an intuitive mental model and expressive syntax over micro-performance.
+
+2. GC allocations are OK if they come from irregular lifecycle events (not every frame).
+
+3. GC should be avoided at the tree leaves, where lifecycle events tend to be more frequent.
 
 ---
 
@@ -15,10 +47,10 @@ public class FlushLoopStressTest : SpokeBehaviour {
 
         const int nIterations = 100;
 
-        var splitLeft = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
+        var splitLeft  = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
         var splitRight = s.Memo(s => Mathf.CeilToInt(s.D(counter) / 2f));
-        var recombine = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
-        var isDone = s.Memo(s => s.D(recombine) >= nIterations);
+        var recombine  = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
+        var isDone     = s.Memo(s => s.D(recombine) >= nIterations);
 
         s.Effect(s => {
             if (s.D(isDone)) return;
@@ -32,12 +64,7 @@ public class FlushLoopStressTest : SpokeBehaviour {
 }
 ```
 
-Pressing **spacebar** resets the counter to `0`, which kicks off a cascade of updates:
-
-- A single flush is started.
-- Each `counter.Update` increments the value and retriggers the flush loop — causing **100 total cycles.**
-- Each cycle recomputes **four memos** and executes **one effect**.
-- Every cycle runs dynamic dependencies, topological sort, and effect scheduling.
+Pressing **spacebar** kicks off a cascade of 500 updates (4 memos, 1 effect, 100 iterations). For Spoke's use case, this is a lot. Typical usage might have tens of computations on a frame, not hundreds.
 
 Measured results:
 
@@ -46,17 +73,19 @@ Measured results:
 -    0KB GC alloc
 ```
 
-This is intentionally non-idiomatic usage — Spoke is designed to respond to meaningful, infrequent state changes, not to run tight computation loops.
+> Measured on my laptop, in the Unity 2021 Editor
 
-In real-world usage, a typical flush might involve **1–10 recomputations**, not hundreds. This test forces Spoke through **500+ recomputations** in rapid succession, purely to probe the worst-case overhead.
+Why no GC?
 
-It’s a pathological case — but it provides a useful stress baseline and demonstrates that Spoke remains stable, fast, and allocation-free even under extreme churn.
+Because the allocations already happened when `FlushLoopStressTest` was initialized. The reactive flow was set up before the spacebar was pressed.
+
+The effect and the memos are all tree leaves. They will re-run without allocations, assuming there are no allocations inside their code blocks.
 
 ---
 
-## Scenario 2: Dynamic Scope Mounting
+## Scenario 2: Forcing GC
 
-This example reuses the same logic as before — but instead of being initialized once, it's mounted dynamically when a trigger fires:
+_This example intentionally forces allocations to show the cost when subtrees are rebuilt._
 
 ```csharp
 public class DynamicScopeMounting : SpokeBehaviour {
@@ -64,16 +93,16 @@ public class DynamicScopeMounting : SpokeBehaviour {
     Trigger runTestCommand = Trigger.Create();
 
     protected override void Init(EffectBuilder s) {
-        s.UseEffect(RunTest(100), runTestCommand);
+        s.Effect(RunTest(100), runTestCommand);
     }
 
     EffectBlock RunTest(int nIterations) => s => {
         var counter = State.Create(0);
 
-        var splitLeft = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
+        var splitLeft  = s.Memo(s => Mathf.FloorToInt(s.D(counter) / 2f));
         var splitRight = s.Memo(s => Mathf.CeilToInt(s.D(counter) / 2f));
-        var recombine = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
-        var isDone = s.Memo(s => s.D(recombine) >= nIterations);
+        var recombine  = s.Memo(s => s.D(splitLeft) + s.D(splitRight));
+        var isDone     = s.Memo(s => s.D(recombine) >= nIterations);
 
         s.Effect(s => {
             if (s.D(isDone)) return;
@@ -87,7 +116,9 @@ public class DynamicScopeMounting : SpokeBehaviour {
 }
 ```
 
-Pressing **spacebar** now mounts a _fresh scope_ with new reactive state. This means all `Memo` and `Effect` objects — as well as the backing `State` — are constructed at runtime.
+This tweaks the previous test case. The reactive flow is wrapped in an effect that re-runs when you press **spacebar**, instantiating a fresh subtree.
+
+This lets us see how much GC was allocated by the **Init** phase in the previous test.
 
 Measured results:
 
@@ -96,13 +127,16 @@ Measured results:
 - 13.2KB GC alloc
 ```
 
-This is where you pay the price: **allocations occur when you call functions like `UseEffect` and `UseMemo`, which create new reactive objects.** Once mounted, the system runs allocation-free — just like the previous example.
+GC is allocated when tree branches are rebuilt. The allocation sources are:
+
+- Instantiating `Effect` and `Memo` classes.
+- Capturing closures for `EffectBlock` and `MemoBlock`.
 
 ---
 
 ## Scenario 3: Unstable Dynamic Dependencies
 
-This is a subtle source of GC worth mentioning — and one that’s easy to miss.
+This is a subtle source of GC worth mentioning.
 
 ```csharp
 s.Effect(s => {
@@ -112,30 +146,28 @@ s.Effect(s => {
 });
 ```
 
-Now imagine the following sequence:
+Imagine this sequence:
 
-- On the first run, `cond1.Now` is `false`, so only `cond1` is accessed.
-- On the second run, `cond1` is `true`, so `cond2` is accessed for the first time.
+- On the first run, `cond1` is `false`, so only `cond1` is bound as a dependency.
+- On the second run, `cond1` is `true`, so `cond2` is bound for the first time.
 
-Because the set of accessed dependencies has changed, Spoke needs to track a new one. Internally, this involves creating a small closure for each newly discovered dependency — which results in a GC allocation.
+Between runs, the list of dynamic dependencies changes. For newly bound dependencies, Spoke allocates a small closure to track them, causing a small GC allocation.
 
 If the same dependencies are accessed in the same order across runs, Spoke reuses its previous setup and avoids any new allocations.
 
 ---
 
-## 🧠 Takeaway
+## Allocation Cheat Sheet
 
 Spoke allocates when you:
 
 - Call `State.Create`, `s.Memo`, `s.Effect`, or similar functions.
-- Change dynamic dependencies on remount.
+- Change dynamic dependencies on rerun.
 
-It does **not** allocate:
+It does **not** allocate when you:
 
-- State updates (`State.Update`, `State.Set`).
-- Flush cycles and dependency propagation.
-- Subscriptions (`UseSubscribe` and similar).
-
-This gives you predictable cost boundaries: **mounting logic has a setup cost**, but once active, reactive flows stay **allocation-free.**
+- Update state (`State.Update(...)`, `State.Set(...)`).
+- Re-run effects or memos.
+- Subscribe / unsubscribe from triggers.
 
 > **Note:** Closures (e.g. in `s.OnCleanup(() => { ... })`) will allocate if they capture local variables.

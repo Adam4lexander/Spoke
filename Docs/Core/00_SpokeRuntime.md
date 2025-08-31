@@ -9,7 +9,6 @@ This page explains the core `Spoke.Runtime` package. It's the engine that `Spoke
 - [Abstract](#abstract)
 - [Foreword: When to extend Spoke.Runtime](#foreword-when-to-extend-spokeruntime)
 - [Closures](#closures)
-- [Performance and GC churn](#performance-and-gc-churn)
 - [Primitives](#primitives)
   - [Epoch](#epoch)
     - [Epoch attachments](#epoch-attachments)
@@ -69,16 +68,6 @@ counter();  // Prints: Counter is 2
 This example has a very simple closure. When you call `CreateCounter()` it's almost like instantiating a class with a private `counter` variable and a single method to increment it.
 
 In all of Spoke's code examples you'll see a lot of nested lambdas, which results in nested closures. This is done very intentionally. Spoke wouldn't be nearly as expressive without closures. They're the backbone for Spoke, and it's recommended to have a solid understanding of them to use Spoke comfortably.
-
----
-
-## Performance and GC churn
-
-This documentation may give the impression that Spoke has a large performance and GC cost. Frequently tearing down and rebuilding the tree will cause a large amount of GC churn. Instantiating epochs and creating closures are both a source of GC.
-
-In practical usage though, this cost can be managed. Higher frequency rebuilds tend to be pushed towards the leaves of the tree, where allocations are minimized or avoided completely. Big structural rebuilds of the tree are often results of big structural changes in game logic, like changing from one game mode to another. Also, Spoke isn't designed to be ticked every frame. It's best used to orchestrate the subsystems that do tick each frame, by wiring them up and configuring them to match changing application state.
-
-By keeping Spoke focused on the architectural shape of the code, instead of frame-by-frame logic, it can pay for itself through improved clarity and enabling optimizations that would be too complex to express without it. In my own game, Spoke was a massive improvement to performance. Not because Spoke is fast, its not, but because it let me move so much logic out of Update() loops into event chains that only run when necessary.
 
 ---
 
