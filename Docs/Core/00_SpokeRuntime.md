@@ -7,7 +7,7 @@ This page explains the core `Spoke.Runtime` package. It's the engine that `Spoke
 ## Table of Contents
 
 - [Abstract](#abstract)
-- [Foreword: When to extent Spoke.Runtime](#foreword-when-to-extend-spokeruntime)
+- [Foreword: When to extend Spoke.Runtime](#foreword-when-to-extend-spokeruntime)
 - [Closures](#closures)
 - [Performance and GC churn](#performance-and-gc-churn)
 - [Primitives](#primitives)
@@ -276,7 +276,7 @@ If you catch the exception before it reaches the SpokeTree then you can contain 
 
 #### Exports and Imports
 
-Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by another further down the tree. This lets you share common dependencies without having to explicitely feed it down through the tree via epoch constructor props.
+Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by another further down the tree. This lets you share common dependencies without having to ly feed it down through the tree via epoch constructor props.
 
 In Spoke, exports are lexically scoped. Which may be surprising if you're familiar with React. Epochs import resources, not just from their direct ancestors, but also their earlier siblings, their parents earlier siblings and so on. It's equivalent to variable scoping rules in programming languages.
 
@@ -640,6 +640,6 @@ dock.Call("key", new LambdaEpoch(s => {
 dock.Drop("key"); // Will print: Docked epoch detached
 ```
 
-> If you `Dock.Call()` and re-use the key of an existing docked epoch, that existing epoch will first be attached. Before the new one is attached.
+> If you `Dock.Call()` and re-use the key of an existing docked epoch, that existing epoch will first be detached. Before the new one is attached.
 
 Docks are dynamic containers for epochs. They're very often used for event handlers. For example, say you have an event that triggers when an enemy is nearby, and you want to attach an epoch to track that enemy. You would need to use a dock. Because the event would have been triggered outside the parents mutation window.

@@ -58,7 +58,9 @@ namespace Spoke {
 
         void DoInit() {
             root = SpokeTree.Spawn($"{GetType().Name}:SpokeTree", new Effect("Init", Init), new UnitySpokeLogger(this));
-            sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { if (scene == gameObject.scene) DoTeardown(); });
+            sceneTeardown = SpokeTeardown.Scene.Subscribe(scene => { 
+                if (scene == gameObject.scene) DoTeardown(); 
+            });
             appTeardown = SpokeTeardown.App.Subscribe(() => DoTeardown());
             isAwake.Set(true);
         }

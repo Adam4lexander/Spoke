@@ -1,104 +1,237 @@
 # SpokeTree
 
-The `SpokeTree` is an implementation of `Ticker`, whose behaviour is described in detail here: [Tree-Based Execution](./00_MentalModel.md#tree-based-execution). Therefore this page will only cover `SpokeTree` specific behaviour that's not already covered.
+## Table of Contents
 
-When epochs are attached to a call-tree, they schedule themselves on the nearest `Ticker`. Unless you're hacking deep in Spoke, this will be a `SpokeTree`, and it will be the root of the tree.
+- [Overview](#overview)
+- [Usage with SpokeBehaviour](#usage-with-spokebehaviour)
+- [Standalone Usage](#standalone-usage)
+- [Flushing Model](#flushing-model)
+  - [Two Universes](#two-universes)
+- [Batching](#batching)
 
-When the SpokeTree begins a flush, it will synchronously execute all scheduled epochs until nothing remains to be done. The SpokeTree can be configured to flush immediately when an epoch is scheduled, or it can be controlled manually.
+---
+
+## Overview
+
+`SpokeTree` is the root node for a tree of effects.
+
+Its role is an execution scheduler. When an effect or memo needs to be re-run, `SpokeTree` is what drives those executions.
+
+`SpokeTree` is explained in detail in the [Spoke Runtime docs](./00_SpokeRuntime.md#spoketree). This page will give a high-level overview of how it relates to `Spoke.Reactive`. Just enough to reveal the "why" so the model feels intuitive.
 
 ---
 
 ## Usage with SpokeBehaviour
 
-Each `SpokeBehaviour` creates it's own personal `SpokeTree`, that it mounts the `Init` Effect to. This default SpokeTree is configured with `FlushMode.Auto`.
+Every `SpokeBehaviour` creates its own distinct `SpokeTree`. It's created in `Awake`, and it attaches a root effect that hosts `Init`. If you didn't want to use `SpokeBehaviour`, you could replicate this pattern in any `MonoBehaviour`:
+
+```cs
+using UnityEngine;
+using Spoke;
+
+public abstract class CustomSpokeBehaviour : MonoBehaviour {
+    // Create a signal to reflect if I'm enabled/disabled
+    State<bool> isEnabled = new(false);
+
+    // Expose it as an ISignal (read-only interface)
+    public ISignal<bool> IsEnabled => isEnabled;
+
+    // We'll store the tree so we can dispose it in OnDestroy
+    SpokeTree tree;
+
+    // // Subclasses provide the root EffectBlock
+    protected abstract void Init(EffectBuilder s);
+
+    void Awake() {
+        // Spawn the SpokeTree, create its root Effect, and give Init as the EffectBlock
+        // The tree is now live; it will flush scheduled descendants automatically
+        tree = SpokeTree.Spawn(new Effect("Init", Init));
+    }
+
+    void OnDestroy() {
+        // Dispose the tree, it will unwind and detach all descendants
+        tree.Dispose();
+    }
+
+    void OnEnable() => isEnabled.Set(true);
+    void OnDisable() => isEnabled.Set(false);
+}
+```
+
+> This replicates almost everything `SpokeBehaviour` does. The built-in behaviour has a little extra machinery, but not much.
+
+Because every `SpokeBehaviour` has its own `SpokeTree`, there can be many trees alive at once. The Spoke runtime schedules and orchestrates them if multiple trees request flushing at the same time.
+
+---
+
+## Standalone Usage
+
+You can spawn `SpokeTree`s anywhere:
+
+```cs
+var tree = SpokeTree.Spawn(new Effect("Init", s => {
+    s.Effect(s => {
+        Debug.Log("Effect-1 ran");
+    });
+    s.Effect(s => {
+        Debug.Log("Effect-2 ran");
+    });
+}));
+
+// Don't forget to dispose it somewhere
+tree.Dispose();
+```
+
+`Spoke.Reactive` and `Spoke.Runtime` have no dependency on Unity. The `Spoke.Unity` package is a thin, optional integration layer. `SpokeBehaviour` is provided for convenience, but you can roll your own integration.
+
+---
+
+## Flushing Model
+
+`SpokeTree` is the execution scheduler for its descendants. Effects and memos schedule themselves to run on their `SpokeTree`. When a tree receives pending work, it schedules itself on the global Spoke runtime.
+
+This triggers a flush, starting at the runtime layer (which drains every pending tree), then within each scheduled `SpokeTree` (which drains every pending descendant). When there is no pending work left, control returns to user code.
+
+```cs
+// Create a signal to trigger work in the tree
+State<bool> shouldRunTree = new(false);
+
+// Spawn a SpokeTree. Host a Phase at the top that runs only when shouldRunTree=true
+var tree = SpokeTree.Spawn(new Effect("Init", s => {
+    s.Phase(shouldRunTree, s => {
+        Debug.Log("Init ran");
+        s.Effect(s => {
+            Debug.Log("Inner Effect ran");
+        });
+    });
+}));
+
+Debug.Log("Before set shouldRunTree=true");
+shouldRunTree.Set(true);
+Debug.Log("After set shouldRunTree=true");
+
+tree.Dispose();
+```
+
+Logs:
+
+```
+Before set shouldRunTree=true
+Init ran
+Inner Effect ran
+After set shouldRunTree=true
+```
+
+On `shouldRunTree.Set(true)`, Spoke takes control of the thread and flushes all work before returning control. There's nothing fancy happening, the `Phase` subscribed a callback on the `shouldRunTree` signal.
+
+---
+
+### Two Universes
+
+It's helpful to think of your code running in one of two universes:
+
+- **User code**: code that runs while Spoke is idle
+- **Spoke code**: Spoke is flushing and running `EffectBlock`s / `MemoBlock`s
+
+General flow:
+
+1. User code updates a signal or invokes a trigger
+2. Spoke takes control and flushes all pending effects and memos
+3. Control returns to user code, continuing where it left off
+
+User code sees only the final result of the flush. When it regains control, Spoke has already updated everything.
+
+Spoke code is actively performing the updates and is subject to Spoke's execution rules.
+
+Consider setting `shouldRunTree` **inside** Spoke code:
+
+```cs
+SpokeTree.Spawn(new Effect("Init", s => {
+    // Create the signal inside an EffectBlock this time
+    State<bool> shouldRunTree = new(false);
+
+    // Run the Phase when shouldRunTree == true
+    s.Phase(shouldRunTree, s => {
+        Debug.Log("Outer Phase ran");
+        s.Effect(s => {
+            Debug.Log("Inner Effect ran");
+        });
+    });
+
+    // Set the signal from within the EffectBlock
+    Debug.Log("Before set shouldRunTree=true");
+    shouldRunTree.Set(true);
+    Debug.Log("After set shouldRunTree=true");
+}));
+```
+
+Logs:
+
+```
+Before set shouldRunTree=true
+After set shouldRunTree=true
+Outer Phase ran
+Inner Effect ran
+```
+
+This is the same scenario described on the [Effect page: deferred execution](./04_Effect.md#deferred-execution). `SpokeTree` runs its descendants in **imperative order**, one unit after another. It won't pre-empt an effect mid-way to run another. Calling `shouldRunTree.Set(true)` schedules the Phase, but it runs only after _Init_ has completed.
+
+You can make it run earlier by updating `shouldRunTree` in its own effect:
+
+```cs
+SpokeTree.Spawn(new Effect("Init", s => {
+    State<bool> shouldRunTree = new(false);
+
+    s.Phase(shouldRunTree, s => {
+        Debug.Log("Outer Phase ran");
+        s.Effect(s => {
+            Debug.Log("Inner Effect ran");
+        });
+    });
+
+    // Wrap in Effects, so the logic is scheduled instead of immediate
+    s.Effect(s => {
+        Debug.Log("Before set shouldRunTree=true");
+        shouldRunTree.Set(true);
+    });
+
+    // The Phase runs before this Effect, because it appears earlier by imperative order
+    s.Effect(s => {
+        Debug.Log("After set shouldRunTree=true");
+    });
+}));
+```
+
+Think of each `Effect`, `Phase`, `Reaction`, and `Memo` as a **unit of work**. The `SpokeTree` orchestrates these units and ensures an imperative ordering. Once a unit starts, it completes without interruption.
+
+> For details on nested flushes, priorities, and cross-tree orchestration, see the runtime docs.
 
 ---
 
 ## Batching
 
-_Batching_ means grouping multiple reactive updates together before the `SpokeTree` flushes any computations.
-Put simply, batching tells the runtime: **"Don't flush yet."**
+Sometimes you'll want to update multiple signals before letting Spoke flush. Use `SpokeRuntime.Batch(...)`:
 
-In Spoke, batching happens in two ways:
+```cs
+State<string> firstName = new("");
+State<string> lastName = new("");
 
-1. **Explicit Batching** – You call `SpokeRuntime.Batch(() => { ... })` to group updates manually.
-2. **Internal Deferral** – The runtime automatically defers flushing during certain internal operations (like `Trigger.Invoke`) to ensure safety and consistency.
-
-Both mechanisms cause the runtime to **defer a flush**.
-Both are essential for keeping your logic efficient and deterministic.
-
-Let's break them down.
-
----
-
-### Explicit Batching
-
-First let's see the problem it's trying to solve:
-
-```csharp
-var className = State.Create("Warrior");
-var level = State.Create(1);
-
-SpokeTree.Spawn(new Effect(s => {
-    s.Effect(s => {
-        Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
+SpokeTree.Spawn(new Effect("Init", s => {
+    var isNonEmpty = s.Memo(s => s.D(firstName) != "" || s.D(lastName) != "");
+    s.Phase(isNonEmpty, s => {
+        Debug.Log($"Fullname is {s.D(firstName)} {s.D(lastName)}");
     });
-}); // Prints: class: Warrior, lvl: 1
+}));
 
-className.Set("Paladin"); // Prints: class: Paladin, lvl: 1
-level.Set(2);             // Prints: class: Paladin, lvl: 2
-```
-
-Creating the `Effect` caused a flush. So did each call to `Set(...)`.
-Result: **3 flushes, 3 recomputations, 3 logs.**
-
-Now let’s say you want to update both values together, and flush only once:
-
-```csharp
 SpokeRuntime.Batch(() => {
-    className.Set("Paladin");
-    level.Set(2);
-});                       // Prints: class: Paladin, lvl: 2
+    firstName.Set("Max");
+    lastName.Set("Payne");
+});
+// Logs: Fullname is Max Payne
+
+// Without batching:
+firstName.Set("Humpty"); // Logs: Fullname is Humpty Payne
+lastName.Set("Dumpty");  // Logs: Fullname is Humpty Dumpty
 ```
 
-**Batching is necessary** when **non-reactive code** wants to make multiple state updates as a single atomic operation.
-In the next section, I'll explain why I emphasize **non-reactive code**.
-
----
-
-### Internal Deferral
-
-Let's look at that same logic, but inside a reactive scope:
-
-```csharp
-public class MyBehaviour : SpokeBehaviour {
-
-    protected override void Init(EffectBuilder s) {
-
-        var className = State.Create("Warrior");
-        var level = State.Create(1);
-
-        s.Effect(s => {
-            Debug.Log($"class: {s.D(className)}, lvl: {s.D(level)}");
-        });
-
-        className.Set("Paladin");
-        level.Set(2);
-    }
-}
-```
-
-This prints a **single message**:
-`class: Paladin, lvl: 2` — even though I didn’t call `Batch()`.
-
-Why?
-
-Because we're already **inside a flush**.
-The `Init` method is an `EffectBlock`, which means it only runs **during** a flush.
-And during a flush, **all Effects and Memos are automatically deferred**.
-Every `EffectBlock` is effectively inside its own `FlushEngine.Batch()`.
-
-That's why **manual batching only matters outside Spoke** — in external logic, like button handlers or coroutine steps.
-Once a reactive trigger causes the engine to flush, **control will not return** until every computation in the queue has been drained.
-
----
+`SpokeRuntime.Batch` defers the start of a flush until the delefgate completes.
