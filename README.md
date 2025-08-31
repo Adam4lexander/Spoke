@@ -111,6 +111,8 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
+[Or spawn a SpokeTree in your own scripts.](./Docs/Core/07_SpokeTree.md#usage-with-spokebehaviour)
+
 [Read the Quickstart →](./Docs/Core/01_QuickStart.md)
 
 ---
