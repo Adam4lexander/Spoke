@@ -1,34 +1,17 @@
 # 🔘 Spoke - _A reactive framework for simulated worlds_
 
 **Spoke** is a tiny reactivity engine for Unity.
+It makes indirect, entangled logic feel imperative, with **automatic lifecycle management** and **self-cleaning reactivity.**
 
-It lets you write gameplay logic that reacts to state automatically: no flag-checking, no brittle events, no manual cleanup.
+No flag-checking. No brittle events. No manual cleanup.<br>
+Just _stateful blocks of logic_ that mount and unmount on their own.
 
-Instead of scattering logic across `Update()`, `OnEnable()`, and coroutines, Spoke structures it into **scoped, self-cleaning blocks** that mount and unmount on their own. For eventful logic, **you can often remove** `Update()` completely.
-
-- ✨ **Control complexity** — simplifies eventful, state-driven logic
+- ✨ **Control complexity** — write clear, reactive gameplay logic
 - 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
 
 ---
 
-## 💡 Why Spoke?
-
-Spoke was built to solve recurring pain points in Unity:
-
-- Spaghetti logic across `Awake`, `OnEnable`, `OnDisable` and `OnDestroy`
-- Difficulty managing initialization order between dependent components
-- Scene teardown chaos: accessing destroyed objects in `OnDisable`
-- Polling state in `Update` to detect and respond to changes
-- Gameplay systems that grow brittle as complexity increases
-- Solving them with the smallest possible framework
-
-Spoke enables a programming paradigm called _reactive programming_. It makes eventful, state-driven logic easier to express.
-
-You write logic like this:
-
-> "When this state exists — run this behaviour — and clean it up afterward."
-
-Here's an example:
+## ⚡ Example
 
 _When an enemy is nearby, turn my head to face them. When no enemy, face forwards._
 
@@ -70,21 +53,35 @@ void Init(EffectBuilder s) {
 }
 ```
 
-The vanilla Unity version splits logic across multiple methods, with edge cases and bookkeeping. In Spoke, everything lives in one expressive block: **setup, reaction, and teardown**.
-
-It's not just shorter. It's **closer to how you actually think.**
-
-- Code is easier to understand
-- Fewer edge cases and lifecycle bugs
-- You can scale logic without losing clarity
+👉 In Spoke, the entire behaviour lives in one expressive block. Setup, reaction, and cleanup happen automatically.
 
 ---
 
-## 🔰 Getting Started
+## 💡 Why Spoke?
 
-Copy **Spoke.Runtime**, **Spoke.Reactive** and **Spoke.Unity** into your project (or just clone this repo).
+Unity’s lifecycle makes it easy for logic to get scattered:
 
-Then create a new script and subclass `SpokeBehaviour` instead of `MonoBehaviour`:
+- Systems spread across `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`
+- Polling state in `Update` just to detect changes
+- Brittle event chains with manual subscription cleanup
+- Initialization order bugs between dependent components
+- Scene teardown chaos: accessing destroyed objects
+
+Spoke collapses those problems into **scoped, self-cleaning windows of logic.**<br>
+You write: _"When this state exists — run this behaviour — and clean it up afterward.”_
+
+---
+
+## 🔰 Install
+
+Clone this repo or copy **Spoke.Runtime**, **Spoke.Reactive** and **Spoke.Unity** into your project.<br>
+No dependencies, no setup.
+
+---
+
+## 🚀 Getting Started
+
+Subclass `SpokeBehaviour` instead of `MonoBehaviour`:
 
 ```csharp
 using Spoke;
@@ -94,10 +91,10 @@ public class MyBehaviour : SpokeBehaviour {
     // Replaces Awake, OnEnable, Start, OnDisable, OnDestroy
     protected override void Init(EffectBuilder s) {
 
-        // Run Awake logic here
+        // Awake logic here
 
         s.OnCleanup(() => {
-            // Run OnDestroy logic here
+            // OnDestroy logic here
         });
 
         s.Phase(IsEnabled, s => {
@@ -114,7 +111,7 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-[Read the Quickstart Guide →](./Docs/Core/01_QuickStart.md)
+[Read the Quickstart →](./Docs/Core/01_QuickStart.md)
 
 ---
 
@@ -130,27 +127,30 @@ The reactive model behind Spoke is built around a few simple primitives:
 
 ---
 
-## 🤔 What is Spoke-style Reactivity?
+## 🤔 "Spoke-style" reactivity?
 
-Spoke shares DNA with frontend reactivity engines like `React` and `SolidJS`. The mental model is the same, but instead of managing a DOM tree, you're sculpting simulation logic: behaviour trees, system interactions, and stateful gameplay.
+Spoke shares DNA with frameworks like **React** and **SolidJS**<br>
+Instead of managing a DOM tree, you're sculpting **simulation logic:** behaviour trees, stateful systems, emergent gameplay.
 
-These frameworks transformed how we write UI. Spoke applies the same reactivity model to general game logic. Once it clicks, it unlocks a new level of clarity and control.
+These frameworks transformed how we write UI.<br>
+Spoke applies the same principles to **gameplay logic.**
 
 ---
 
 ## 🎮 Origins
 
-Spoke was developed to support my passion project: **_Power Grip Dragoons_** — a VR mech game that leans heavily into systems, emergent behaviour and vehicle modularity. This game has brutal requirements for dynamic, eventful logic. Over 6 years I refined an architecture to express it. Architecture is a priority for me to keep development fun and engaging. It's a passion project after all, not a job.
-
-From the outset, I designed Spoke to simplify two patterns I had everywhere in my code:
+Spoke was born out of necessity while building my VR mech game, **Power Grip Dragoons**. The game has brutal demands for dynamic, event-driven logic on Meta Quest hardware. Over 6 years I refined this architecture until it became the foundation I now use everywhere. Spoke is the result.
 
 ---
 
+## 🔍 Real-World Patterns
+
 ### Scattered Resource Management
 
+Managing disposables in Unity usually means spreading logic across lifecycle methods.
+
 ```cs
-// ----------------------------- MonoBehaviour Version ---------------------
-// There are 3 separate code-points to manage the lifecycle of myResource.
+// --- MonoBehaviour
 public class MyBehaviour : MonoBehaviour {
 
     IDisposable myResource;
@@ -164,8 +164,7 @@ public class MyBehaviour : MonoBehaviour {
     }
 }
 
-// ----------------------------- Spoke Version -----------------------------
-// In Spoke, resource and lifecycle management collapses into one coherent bundle.
+// --- Spoke
 public class MySpokeBehaviour : SpokeBehaviour {
 
     protected override void Init(EffectBuilder s) {
@@ -176,14 +175,19 @@ public class MySpokeBehaviour : SpokeBehaviour {
 }
 ```
 
+In Spoke, resource allocation and cleanup collapse into one scoped block. No more lifecycle bugs scattered across methods.
+
 ---
 
 ### Chained Event Subscriptions
 
+Nested event subscriptions (`EnemyDetected → EnemyDestroyed`) get messy fast.
+
 ```cs
-// ----------------------------- MonoBehaviour Version ---------------------
 // When an enemy is detected on radar, and it becomes destroyed. Then the
 // cockpit voice (BitchinBetty) should speak the phrase: "Enemy Destroyed".
+
+// --- MonoBehaviour
 public class MyBehaviour : MonoBehaviour {
 
     public UnityEvent<RadarBlip> EnemyDetected;
@@ -212,8 +216,7 @@ public class MyBehaviour : MonoBehaviour {
     }
 }
 
-// ----------------------------- Spoke Version -----------------------------
-// Again, Spoke collapses the problem into one cohesive bundle
+// --- Spoke
 public class MySpokeBehaviour : SpokeBehaviour {
 
     public UnityEvent<RadarBlip> EnemyDetected;
@@ -229,11 +232,11 @@ public class MySpokeBehaviour : SpokeBehaviour {
 }
 ```
 
-The first pattern: _Scattered Resource Management_, is annoying, but manageable. The second pattern can be soul-crushing. Chaining event subscriptions gets complicated very quickly. Spoke makes it effortless.
+In Spoke, the entire subscription chain lives in one cohesive block. Setup and teardown are automatic. No missed unsubscribes.
 
-Both these patterns are manifestations of the same core shape. They are lifecycle windows. OnEnable/OnDisable is a window, and so is EnemyDetected/EnemyLost. With Spoke, you declare what behaviour should exist in a window, how the windows are nested, and how to clean up when the window ends. It's all expressed in one cohesive bundle, and it feels as simple as writing imperative code.
+---
 
-These problems prompted Spoke's creation, and I keep finding new and surprising ways to use it. Today, it powers everything in my game, from CPU-budgeted task management to procedural generation. For me, it's unlocked a way of programming I've always wanted — where I'm sculpting logic instead of fighting complexity. In simulation-heavy code, it makes a big difference.
+Both patterns are really the same thing, they're lifecycle windows. With Spoke, you declare what happens in a window, how windows nest, and how to clean up when they end.
 
 ---
 
