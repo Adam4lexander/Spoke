@@ -248,7 +248,7 @@ Both patterns are really the same thing, they're lifecycle windows. With Spoke, 
 
 ---
 
-## 🚀 Performance
+## 🔬 Performance
 
 [See performance notes →](./Docs/Topics/Performance.md)
 
