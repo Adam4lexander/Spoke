@@ -13,7 +13,7 @@ namespace Spoke.Examples {
         public void CloneMat() { _ = renderer.material; }
     }
 
-    public class SpokeEffect : SpokeBehaviour {
+    public class Effect_Example : SpokeBehaviour {
 
         [Header("References")]
         [SerializeField] Sphere effectSphere;

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples {
     
-    public class Lifecycle : SpokeBehaviour {
+    public class Lifecycle_Example : SpokeBehaviour {
      
         protected override void Init(EffectBuilder s) {
 

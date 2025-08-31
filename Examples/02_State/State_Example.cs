@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples {
 
-    public class SpokeState : SpokeBehaviour {
+    public class State_Example : SpokeBehaviour {
 
         [Header("References")]
         [SerializeField] MeshRenderer Sphere;
