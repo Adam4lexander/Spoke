@@ -1,5 +1,19 @@
 # Signal
 
+## Table of Contents
+
+- [Overview](#overview)
+- [`ISignal<T>`](#isignalt)
+  - [Example](#example)
+- [`State<T>`](#statet)
+  - [Example](#example-1)
+  - [`UState<T>`](#ustatet)
+- [Advanced Notes](#advanced-notes)
+
+---
+
+## Overview
+
 A signal is a kind of trigger that additionally holds a value. It's a reactive data container that notifies subscribers when its value changes.
 
 Triggers may be the fundamental primitive in Spoke, but signals are the objects you'll work with most often.

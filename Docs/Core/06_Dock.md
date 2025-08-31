@@ -9,6 +9,8 @@
 - [Ownership and Execution Order](#ownership-and-execution-order)
 - [Example](#example)
 
+---
+
 ## Overview
 
 A `Dock` is a dynamic container for keyed subtrees that lets you attach and detach effects at any time, outside the normal mutation windows. It's a powerful primitive in Spoke that completes its feature set.

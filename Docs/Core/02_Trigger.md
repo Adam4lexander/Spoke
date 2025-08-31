@@ -1,5 +1,23 @@
 # Trigger
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Types](#types)
+  - [`ITrigger` / `ITrigger<T>`](#itrigger--itriggert)
+- [Subscribing](#subscribing)
+  - [Preferred: Subscribe + Dispose](#preferred-subscribe--dispose)
+  - [Alternative: Subscribe / Unsubscribe](#alternative-subscribe--unsubscribe)
+- [Creating a Trigger](#creating-a-trigger)
+  - [`Trigger<T>`](#triggert)
+  - [`Trigger`](#trigger-1)
+- [Combining with delegates or UnityEvent](#combining-with-delegates-or-unityevent)
+- [Advanced Notes](#advanced-notes)
+
+---
+
+## Overview
+
 A trigger is an event broadcaster. It can be subscribed to and can notify subscribers with optional event data. It's conceptually similar to `UnityEvent` or a C# `event`.
 
 In Spoke, a trigger is also the **core primitive** that drives reactive computation. When a trigger is invoked, all its dependants are notified and re-executed.
