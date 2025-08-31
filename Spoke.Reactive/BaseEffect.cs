@@ -138,7 +138,7 @@ namespace Spoke {
         public static void Effect(this Dock dock, object key, EffectBlock block, params ITrigger[] triggers)
             => dock.Call(key, new Effect("Effect", block, triggers));
             
-        public static void Effect(this Dock dock, string name, object key, EffectBlock block, params ITrigger[] triggers)
+        public static void Effect(this Dock dock, object key, string name, EffectBlock block, params ITrigger[] triggers)
             => dock.Call(key, new Effect(name, block, triggers));
     }
 }
