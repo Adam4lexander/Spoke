@@ -234,4 +234,5 @@ firstName.Set("Humpty"); // Logs: Fullname is Humpty Payne
 lastName.Set("Dumpty");  // Logs: Fullname is Humpty Dumpty
 ```
 
-`SpokeRuntime.Batch` defers the start of a flush until the delefgate completes.
+`SpokeRuntime.Batch` defers the start of a flush until the delegate completes.
+
