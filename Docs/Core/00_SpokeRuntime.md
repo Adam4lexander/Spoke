@@ -265,7 +265,7 @@ If you catch the exception before it reaches the SpokeTree then you can contain 
 
 #### Exports and Imports
 
-Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by another further down the tree. This lets you share common dependencies without having to ly feed it down through the tree via epoch constructor props.
+Spoke implements a simple kind of dependency injection, where resources can be exported from one epoch, and then imported by another further down the tree. This lets you share common dependencies without having to feed it down the tree via epoch constructor props.
 
 In Spoke, exports are lexically scoped. Which may be surprising if you're familiar with React. Epochs import resources, not just from their direct ancestors, but also their earlier siblings, their parents earlier siblings and so on. It's equivalent to variable scoping rules in programming languages.
 
@@ -296,7 +296,7 @@ public class MainEpoch : Epoch {
         s.Call(new ImportingEpoch());       // Will log: Context is Foobar
         s.Export(new ContextData("Baz"));
         return s => {
-            s.Call(new ImportingEpoch());    // Will log: Context is Baz
+            s.Call(new ImportingEpoch());   // Will log: Context is Baz
         };
     }
 }
