@@ -1,10 +1,15 @@
 # 🔘 Spoke - _A reactive framework for simulated worlds_
 
-**Spoke** is a tiny reactivity engine for Unity.
-It makes indirect, entangled logic feel imperative, with **automatic lifecycle management** and **self-cleaning reactivity.**
+**Spoke** is a tiny reactivity engine for **C#** and **Unity**. <br>
+It’s tree-shaped and declarative, with imperative-ordered execution, and built to tame the chaos when many systems interact in dynamic, emergent ways.
+
+- Start and stop behaviours at the right time, keeping them in sync with runtime state.
+- Manage deeply nested logic while keeping it cohesive and clear.
+
+Inspired by React, Spoke adds strict guarantees on execution order, making it suitable for game logic. It makes indirect, entangled logic feel imperative, with **automatic lifecycle management** and **self-cleaning reactivity.**
 
 No flag-checking. No brittle events. No manual cleanup.<br>
-Just _stateful blocks of logic_ that mount and unmount on their own.
+Just _stateful blocks of logic_, expressed as a tree, that mount and unmount on their own.
 
 - ✨ **Control complexity** — write clear, reactive gameplay logic
 - 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
@@ -13,31 +18,25 @@ Just _stateful blocks of logic_ that mount and unmount on their own.
 
 ## ⚡ Example
 
-_When an enemy is nearby, turn my head to face them. When no enemy, face forwards._
+_Spawn a HUD over the nearest enemy_
 
 ### 🟧 Vanilla Unity:
 
 ```csharp
-void OnEnable() {
-    OnNearestEnemyChanged.AddEventListener(OnNearestEnemyChangedHandler);
-    if (NearestEnemy != null) {
-        OnNearestEnemyChangedHandler(NearestEnemy);
-    }
+GameObject currHUD;
+
+void Awake() {
+    OnNearestEnemyChanged.AddEventListener(NearestEnemyChangedHandler);
 }
 
-void OnDisable() {
-    OnNearestEnemyChanged.RemoveEventListener(OnNearestEnemyChangedHandler);
-    if (NearestEnemy != null) {
-        OnNearestEnemyChangedHandler(null);
-    }
+void OnDestroy() {
+    OnNearestEnemyChanged.RemoveEventListener(NearestEnemyChangedHandler);
+    if (currHUD != null) Destroy(currHUD);
 }
 
-void OnNearestEnemyChangedHandler(GameObject toEnemy) {
-    if (toEnemy != null) {
-        FaceEnemy(toEnemy);
-    } else {
-        FaceForwards();
-    }
+void NearestEnemyChangedHandler(GameObject enemy) {
+    if (currHUD != null) Destroy(currHUD);
+    if (enemy != null) currHUD = SpawnHUD(enemy);
 }
 ```
 
@@ -45,11 +44,9 @@ void OnNearestEnemyChangedHandler(GameObject toEnemy) {
 
 ```csharp
 void Init(EffectBuilder s) {
-    s.Phase(IsEnabled, s => {
-        if (s.D(NearestEnemy) == null) return;
-        FaceEnemy(NearestEnemy.Now);
-        s.OnCleanup(() => FaceForwards());
-    });
+    if (s.D(NearestEnemy) == null) return;
+    var hud = SpawnHUD(NearestEnemy.Now);
+    s.OnCleanup(() => Destroy(hud));
 }
 ```
 
