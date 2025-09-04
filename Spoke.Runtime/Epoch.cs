@@ -82,8 +82,11 @@ namespace Spoke {
             // Route tick requests to nearest ticker; ignore if faulted.
             _requestTick = () => {
                 if (Fault != null) return;
-                if (ticker != null) (ticker as Ticker.Friend)?.Schedule(this);
-                else (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(this); // SpokeTree requests ticks from runtime
+                if (ticker != null) {
+                    (ticker as Ticker.Friend)?.Schedule(this);
+                } else if (this is SpokeTree asTree) {
+                    (SpokeRuntime.Local as SpokeRuntime.Friend).Schedule(asTree); // SpokeTree requests ticks from runtime
+                }
             };
             Init(services);
         }

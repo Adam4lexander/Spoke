@@ -64,7 +64,7 @@ namespace Spoke {
             ports = s.Ports;
 
             s.OnTick(s => {
-                const long maxPasses = 1000; // Infinite loop guard. Maximum number of oscillations
+                const long maxPasses = 1000; // Infinite loop guard. Max number of oscillations
                 if (command == CommandKind.None) {
                     return;
                 }
@@ -75,7 +75,7 @@ namespace Spoke {
                 // Drive ticks according to command: single step or full flush
                 while (ports.HasPending) {
                     if (passCount > maxPasses) {
-                        throw new Exception("Exceed iteration limit - possible infinite loop");
+                        throw new Exception("Exceed oscillation limit - possible infinite loop");
                     }
                     try {
                         // If the next epoch comes before the last one by tree-coord order, we increment passcount

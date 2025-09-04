@@ -17,7 +17,7 @@ namespace Spoke {
             void Pop(); 
             void Hold(); 
             void Release(); 
-            void Schedule(Epoch epoch); 
+            void Schedule(SpokeTree tree); 
             void TickTree(SpokeTree tree); 
         }
         
@@ -89,10 +89,7 @@ namespace Spoke {
         }
 
         // Schedules a tree for flushing, and attempts to flush
-        void Friend.Schedule(Epoch epoch) {
-            if (!(epoch is SpokeTree tree)) {
-                throw new Exception("SpokeRuntime can only schedule trees");
-            }
+        void Friend.Schedule(SpokeTree tree) {
             scheduledTrees.Enqueue(tree); 
             TryFlush();
         }
@@ -100,14 +97,33 @@ namespace Spoke {
         // Attempts to flush pending trees, if we're not being held and there are trees scheduled.
         // May be called recursively. If more trees are schedule during a flush, then decide if they flush nested.
         void TryFlush() {
+            const long maxPasses = 100; // Infinite loop guard. Max number of oscillations.
             if (holdCount > 0 || !scheduledTrees.Has) return;
+            var passCount = 0;
+            SpokeTree prev = null;
             do {
+                if (passCount >= maxPasses) {
+                    SpokeError.Log($"SpokeRuntime exceeded oscillation limit. Pending SpokeTree's are cleared to avoid infinite loops. The next scheduled tree was {scheduledTrees.Peek()}", null);
+                    while (scheduledTrees.Has) scheduledTrees.Pop();
+                    break;
+                }
                 var top = scheduledTrees.Peek();
                 var isPendingEagerTick = (top as SpokeTree.Friend).IsPendingEagerTick();
                 // Newly spawned trees may flush nested inside trees of equal flush layer
                 if (isPendingEagerTick && top.FlushLayer > layer) return;
                 // Or else it must have a higher priority flush layer for nested flush
                 else if (!isPendingEagerTick && top.FlushLayer >= layer) return;
+
+                if (prev != null && prev.CompareTo(top) > 0) {
+                    // The next tree would have been ordered before the prev, an oscillation has happened
+                    passCount++;
+                }
+                if (!isPendingEagerTick) {
+                    // Ignore eager-ticked trees, because their ordering changes after first tick. Which would make
+                    // it look like a new pass started, when it didn't.
+                    prev = top;
+                }
+
                 // Tick the tree. SpokeTree always flushes in Auto mode
                 (this as Friend).TickTree(scheduledTrees.Pop());
             } while (scheduledTrees.Has);
