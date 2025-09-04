@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 - 2025-09-04
+
+This is the real v1.0, I'm happy where `Spoke.Runtime` has ended up, and don't expect to make any more big structural changes.
+
+`Spoke.Reactive` isn't impacted if its being used via `SpokeBehaviour`. The `FlushEngine` was removed, and its capabilities put in `SpokeTree`.
+
+ChangeList:
+
+- `SpokeTree`, in the `Spoke.Runtime` module is the root ticker of the tree. It can be auto-flushed by the runtime (taking over from `FlushEngine`), and it can be incrementally ticked by user code.
+- Rewrote all documentation, both for `Spoke.Reactive` and `Spoke.Runtime`.
+- Split all code into separate files, and commented them. To make the code more readable and understandable.
+- Added infinite loop guards to `SpokeRuntime`.
+
 ## 1.1.3 - 2025-08-20
 
 Many big changes in `Spoke.Runtime`, although the `Spoke.Reactive` APIs are unchanged. This release adds better logging, a virtual Spoke stack trace, and introspection abilities. The global flush engine from the previous release has been removed. I found a way to make nested flushes safe and predictable.
