@@ -18,7 +18,8 @@ namespace Spoke {
             void Hold(); 
             void Release(); 
             void Schedule(SpokeTree tree); 
-            void TickTree(SpokeTree tree); 
+            void TickTree(SpokeTree tree);
+            void TryScopedLayerBoost(SpokeTree tree, Action onPopped);
         }
         
         // Intended for this to become a ThreadStatic in the future. So trees can be driven on multiple threads.
@@ -108,20 +109,15 @@ namespace Spoke {
                     break;
                 }
                 var top = scheduledTrees.Peek();
-                var isPendingEagerTick = (top as SpokeTree.Friend).IsPendingEagerTick();
+                var isLayerBoosted = (top as SpokeTree.Friend).IsLayerBoosted();
                 // Newly spawned trees may flush nested inside trees of equal flush layer
-                if (isPendingEagerTick && top.FlushLayer > layer) return;
+                if (isLayerBoosted && top.FlushLayer > layer) return;
                 // Or else it must have a higher priority flush layer for nested flush
-                else if (!isPendingEagerTick && top.FlushLayer >= layer) return;
+                else if (!isLayerBoosted && top.FlushLayer >= layer) return;
 
                 if (prev != null && prev.CompareTo(top) > 0) {
                     // The next tree would have been ordered before the prev, an oscillation has happened
                     passCount++;
-                }
-                if (!isPendingEagerTick) {
-                    // Ignore eager-ticked trees, because their ordering changes after first tick. Which would make
-                    // it look like a new pass started, when it didn't.
-                    prev = top;
                 }
 
                 // Tick the tree. SpokeTree always flushes in Auto mode
@@ -144,6 +140,21 @@ namespace Spoke {
             if (frames.Count == 0) {
                 TryFlush();
             }
+        }
+
+        void Friend.TryScopedLayerBoost(SpokeTree tree, Action onPopped) {
+            // Boosted trees only possible when we're already flushing and the incoming tree's
+            // FlushLayer has equal or greater priority then the currently flushing tree.
+            // Smaller numbers are higher priority
+            var isPossible = Frames.Count > 0 && tree.FlushLayer <= layer;
+            if (!isPossible) {
+                onPopped();
+                return;
+            }
+            // Incoming tree may eager tick as many times it wants, up until the frame it was
+            // created in is popped from the stack.
+            var topHandle = new Handle(this, frames.Count - 1, versions[versions.Count - 1]);
+            topHandle.OnPopSelf(onPopped);
         }
 
         public enum FrameKind : byte { None, Init, Tick, Dock, Bootstrap }

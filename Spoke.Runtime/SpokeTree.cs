@@ -39,7 +39,8 @@ namespace Spoke {
                 (this as Ticker.Friend).SetToManual();  // Stops me requesting ticks from Spoke runtime
             } else { 
                 command = CommandKind.Flush;            // Auto trees always have command=Flush
-                isPendingEagerTick = true;              // Boosts flush layer priority for initial tick
+                isLayerBoosted = true;                  // Boosts flush layer priority inside creators scope
+                (SpokeRuntime.Local as SpokeRuntime.Friend).TryScopedLayerBoost(this, () => isLayerBoosted = false);
             }
 
             // Reflect the spawn on the virtual stack
@@ -68,7 +69,6 @@ namespace Spoke {
                 if (command == CommandKind.None) {
                     return;
                 }
-                isPendingEagerTick = false;
                 var passCount = 0;
                 Epoch prev = null;
 
@@ -142,7 +142,7 @@ namespace Spoke {
     public abstract class SpokeTree : Ticker, IDisposable, SpokeTree.Friend {
         
         new internal interface Friend { 
-            bool IsPendingEagerTick(); 
+            bool IsLayerBoosted(); 
         }
 
         // Convenience spawners. See docs: Spawn (default), SpawnEager (higher priority), SpawnManual (user-driven).
@@ -170,10 +170,10 @@ namespace Spoke {
         public int FlushLayer { get; protected set; }
         
         protected long TimeStamp = -1;      // capture of SpokeRuntime.Local.TimeStamp at spawn
-        protected bool isPendingEagerTick;  // true exactly once for a newly spawned auto tree
+        protected bool isLayerBoosted;      // when true, may flush nested in equal flush layers
 
-        bool Friend.IsPendingEagerTick() 
-            => isPendingEagerTick;
+        bool Friend.IsLayerBoosted() 
+            => isLayerBoosted;
 
         /// <summary>
         /// Defines ordering among trees when the runtime chooses who flushes next.
@@ -186,10 +186,10 @@ namespace Spoke {
             if (FlushLayer != other.FlushLayer) {
                 return FlushLayer.CompareTo(other.FlushLayer);
             }
-            if (isPendingEagerTick == other.isPendingEagerTick) {
+            if (isLayerBoosted == other.isLayerBoosted) {
                 return TimeStamp.CompareTo(other.TimeStamp);
             }
-            return isPendingEagerTick ? -1 : 1;
+            return isLayerBoosted ? -1 : 1;
         }
 
         /// <summary>

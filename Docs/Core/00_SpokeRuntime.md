@@ -506,7 +506,7 @@ Spoke is single-threaded, and it can support multiple trees. That means at a giv
 
 - For any given flush layer, there can be only one tree being flushed at a time. Pending trees are ordered by their creation time, so older trees are flushed before newer trees.
 - If a tree is flushing, and a tree of a higher priority flush layer is scheduled, then a nested flush is initiated. The incoming tree is flushed synchronously, before passing control back to the first one to finish its flush.
-- If a tree is flushing, and a new tree **of equal or higher priority is spawned**, then a nested flush is initiated. This rule overrides the first, and its the only time that a tree can flush nested in another of equal flush layer.
+- If a tree is flushing, and a new tree **of equal or higher priority is spawned**, that tree may flush nested **within the scope it was created**. The new tree is 'boosted' within this scope.
 
 Lets see some examples to drive home how these rules work in practice:
 
