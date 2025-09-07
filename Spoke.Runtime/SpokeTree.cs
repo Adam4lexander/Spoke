@@ -179,7 +179,7 @@ namespace Spoke {
         /// Defines ordering among trees when the runtime chooses who flushes next.
         /// Rules:
         /// 1) FlushLayer: lower first (e.g., eager trees at -1 outrank default 0)
-        /// 2) Eager bit: newly spawned auto trees are serviced before older pending trees of the same layer
+        /// 2) Boosted bit: boosted trees are serviced before unboosted trees of the same layer
         /// 3) TimeStamp: FIFO among equals
         /// </summary>
         public int CompareTo(SpokeTree other) {
