@@ -2,20 +2,9 @@ using System.Collections.Generic;
 using System;
 
 namespace Spoke {
+    public sealed class Heap<T> {
 
-    /// <summary>
-    /// Provides a min-heap for arbitrary types, supporting insert, peek,
-    /// and remove-min operations with caller-defined ordering.
-    /// </summary>
-    internal sealed class Heap<T> {
-
-        public struct Item { 
-            public long ID; 
-            public T V; 
-        }
-
-        long currKey;
-        List<Item> heap = new List<Item>();
+        List<T> heap = new List<T>();
         Comparison<T> comparison;
 
         public int Count => heap.Count;
@@ -24,21 +13,19 @@ namespace Spoke {
             this.comparison = comparison;
         }
 
-        public long Insert(T value) {
-            var item = new Item { ID = currKey++, V = value };
-            heap.Add(item);
+        public void Insert(T value) {
+            heap.Add(value);
             HeapifyUp(heap.Count - 1);
-            return item.ID;
         }
 
-        public Item RemoveMin() {
+        public T RemoveMin() {
             if (heap.Count == 0) throw new InvalidOperationException("Heap is empty");
             var min = heap[0];
             RemoveAt(0);
             return min;
         }
 
-        public Item PeekMin() {
+        public T PeekMin() {
             if (heap.Count == 0) throw new InvalidOperationException("Heap is empty");
             return heap[0];
         }
@@ -53,7 +40,7 @@ namespace Spoke {
         void HeapifyUp(int index) {
             var item = heap[index];
             var parent = (index - 1) / 2;
-            while (index > 0 && comparison(item.V, heap[parent].V) < 0) {
+            while (index > 0 && comparison(item, heap[parent]) < 0) {
                 heap[index] = heap[parent];
                 index = parent;
                 parent = (index - 1) / 2;
@@ -66,9 +53,9 @@ namespace Spoke {
                 var leftChild = 2 * index + 1;
                 var rightChild = 2 * index + 2;
                 var smallest = index;
-                if (leftChild < heap.Count && comparison(heap[leftChild].V, heap[smallest].V) < 0)
+                if (leftChild < heap.Count && comparison(heap[leftChild], heap[smallest]) < 0)
                     smallest = leftChild;
-                if (rightChild < heap.Count && comparison(heap[rightChild].V, heap[smallest].V) < 0)
+                if (rightChild < heap.Count && comparison(heap[rightChild], heap[smallest]) < 0)
                     smallest = rightChild;
                 if (smallest == index)
                     break;
@@ -77,10 +64,10 @@ namespace Spoke {
             }
         }
 
-        void Swap(int i, int j) { 
-            var tmp = heap[i]; 
-            heap[i] = heap[j]; 
-            heap[j] = tmp; 
+        void Swap(int i, int j) {
+            var tmp = heap[i];
+            heap[i] = heap[j];
+            heap[j] = tmp;
         }
     }
 }

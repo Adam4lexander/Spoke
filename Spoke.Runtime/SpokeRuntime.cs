@@ -108,7 +108,7 @@ namespace Spoke {
                     while (scheduledTrees.Count > 0) scheduledTrees.RemoveMin();
                     break;
                 }
-                var top = scheduledTrees.PeekMin().V;
+                var top = scheduledTrees.PeekMin();
                 var isLayerBoosted = (top as SpokeTree.Friend).IsLayerBoosted();
                 // Newly spawned trees may flush nested inside trees of equal flush layer
                 if (isLayerBoosted && top.FlushLayer > layer) return;
@@ -121,7 +121,7 @@ namespace Spoke {
                 }
 
                 // Tick the tree. SpokeTree always flushes in Auto mode
-                (this as Friend).TickTree(scheduledTrees.RemoveMin().V);
+                (this as Friend).TickTree(scheduledTrees.RemoveMin());
             } while (HasPending());
         }
 
@@ -158,7 +158,7 @@ namespace Spoke {
         }
 
         bool HasPending() {
-            while (scheduledTrees.Count > 0 && scheduledTrees.PeekMin().V.IsDetached) {
+            while (scheduledTrees.Count > 0 && scheduledTrees.PeekMin().IsDetached) {
                 scheduledTrees.RemoveMin();
             }
             return scheduledTrees.Count > 0;

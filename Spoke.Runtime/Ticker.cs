@@ -74,7 +74,7 @@ namespace Spoke {
                 throw new Exception("TickNext() must be called from within an OnTick block");
             } 
             didContinue = true; // TickNext was called at least once
-            var ticked = pending.RemoveMin().V;
+            var ticked = pending.RemoveMin();
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
@@ -104,7 +104,7 @@ namespace Spoke {
         }
 
         bool HasPending() {
-            while (pending.Count > 0 && pending.PeekMin().V.IsDetached) {
+            while (pending.Count > 0 && pending.PeekMin().IsDetached) {
                 pending.RemoveMin();
             }
             return pending.Count > 0;
@@ -114,7 +114,7 @@ namespace Spoke {
         internal struct Mutator {
             public Ticker Ticker { get; }
             public bool HasPending => Ticker?.HasPending() ?? false;
-            public Epoch Next => Ticker?.pending.PeekMin().V;
+            public Epoch Next => Ticker?.pending.PeekMin();
 
             public Mutator(Ticker ticker) {
                 Ticker = ticker;
