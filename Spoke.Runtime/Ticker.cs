@@ -19,7 +19,7 @@ namespace Spoke {
         }
         
         // Priority queue of pending epochs that requested a tick.
-        OrderedWorkStack<Epoch> pending = new((a, b) => b.CompareTo(a));
+        Heap<Epoch> pending = new((a, b) => a.CompareTo(b));
         // List of OnTick callbacks, declared in Bootstrap()
         List<Action<TickContext>> onTick = new();
         Action requestTick;
@@ -51,7 +51,7 @@ namespace Spoke {
             s.Call(root); // Attach the epoch returned by Bootstrap
             // Declare a TickBlock that invokes each OnTick callback in order, once per tick.
             return s => {
-                if (isPaused || !pending.Has) return;
+                if (isPaused || !HasPending()) return;
                 didContinue = false;
                 foreach (var fn in onTick) {
                     if (!isPaused) {
@@ -62,7 +62,7 @@ namespace Spoke {
                     throw new Exception("Ticker must TickNext() or Pause() during OnTick, or it risks infinite flushes.");
                 }
                 // After processing OnTick callbacks, if there are still pending epochs, request another tick.
-                if (pending.Has && !isPaused) {
+                if (HasPending() && !isPaused) {
                     requestTick?.Invoke();
                 }
             };
@@ -74,16 +74,16 @@ namespace Spoke {
                 throw new Exception("TickNext() must be called from within an OnTick block");
             } 
             didContinue = true; // TickNext was called at least once
-            var ticked = pending.Pop();
+            var ticked = pending.RemoveMin().V;
             (ticked as Epoch.Friend).Tick();
             return ticked;
         }
 
         // Epochs schedule themselves by calling this method on their nearest ancestor ticker.
         void Friend.Schedule(Epoch epoch) {
-            var prevHasPending = pending.Has;
-            pending.Enqueue(epoch);
-            if (!isTicking && !prevHasPending && pending.Has && !isPaused) {
+            var prevHasPending = HasPending();
+            pending.Insert(epoch);
+            if (!isTicking && !prevHasPending && HasPending() && !isPaused) {
                 requestTick?.Invoke();
             } 
         }
@@ -92,7 +92,7 @@ namespace Spoke {
         void Friend.SetIsPaused(bool value) {
             if (isPaused == value) return;
             isPaused = value;
-            if (value == false && pending.Has && !isTicking) {
+            if (value == false && HasPending() && !isTicking) {
                 // Request a tick if we received pending epochs while paused
                 requestTick?.Invoke();
             }
@@ -103,11 +103,18 @@ namespace Spoke {
             isManual = true;
         }
 
+        bool HasPending() {
+            while (pending.Count > 0 && pending.PeekMin().V.IsDetached) {
+                pending.RemoveMin();
+            }
+            return pending.Count > 0;
+        }
+
         // Exposes mutation operations available during Bootstrap and OnTick blocks.
         internal struct Mutator {
             public Ticker Ticker { get; }
-            public bool HasPending => Ticker?.pending.Has ?? false;
-            public Epoch Next => Ticker?.pending.Peek();
+            public bool HasPending => Ticker?.HasPending() ?? false;
+            public Epoch Next => Ticker?.pending.PeekMin().V;
 
             public Mutator(Ticker ticker) {
                 Ticker = ticker;

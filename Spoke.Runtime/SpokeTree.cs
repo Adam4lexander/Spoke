@@ -37,7 +37,7 @@ namespace Spoke {
 
             if (FlushMode == FlushMode.Manual) {
                 (this as Ticker.Friend).SetToManual();  // Stops me requesting ticks from Spoke runtime
-            } else { 
+            } else {
                 command = CommandKind.Flush;            // Auto trees always have command=Flush
                 isLayerBoosted = true;                  // Boosts flush layer priority inside creators scope
                 (SpokeRuntime.Local as SpokeRuntime.Friend).TryScopedLayerBoost(this, () => isLayerBoosted = false);
@@ -140,39 +140,39 @@ namespace Spoke {
     /// Abstract base for the root ticker. 
     /// </summary>
     public abstract class SpokeTree : Ticker, IDisposable, SpokeTree.Friend {
-        
-        new internal interface Friend { 
-            bool IsLayerBoosted(); 
+
+        new internal interface Friend {
+            bool IsLayerBoosted();
         }
 
         // Convenience spawners. See docs: Spawn (default), SpawnEager (higher priority), SpawnManual (user-driven).
-        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch 
+        public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch
             => new SpokeTree<T>("SpokeTree", root, FlushMode.Auto, 0, services);
 
-        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch 
+        public static SpokeTree<T> Spawn<T>(string name, T root, params object[] services) where T : Epoch
             => new SpokeTree<T>(name, root, FlushMode.Auto, 0, services);
 
-        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch 
+        public static SpokeTree<T> SpawnEager<T>(T root, params object[] services) where T : Epoch
             => new SpokeTree<T>("SpokeTree (Eager)", root, FlushMode.Auto, -1, services);
 
-        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch 
+        public static SpokeTree<T> SpawnEager<T>(string name, T root, params object[] services) where T : Epoch
             => new SpokeTree<T>(name, root, FlushMode.Auto, -1, services);
 
-        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch 
+        public static SpokeTree<T> SpawnManual<T>(T root, params object[] services) where T : Epoch
             => new SpokeTree<T>("SpokeTree (Manual)", root, FlushMode.Manual, int.MinValue, services);
-            
-        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch 
+
+        public static SpokeTree<T> SpawnManual<T>(string name, T root, params object[] services) where T : Epoch
             => new SpokeTree<T>(name, root, FlushMode.Manual, int.MinValue, services);
 
         /// <summary>Flush policy for this tree (Auto or Manual).</summary>
         public FlushMode FlushMode { get; protected set; }
         /// <summary>Priority bucket for scheduler ordering. Lower is higher priority; equal layers do not nest.</summary>
         public int FlushLayer { get; protected set; }
-        
+
         protected long TimeStamp = -1;      // capture of SpokeRuntime.Local.TimeStamp at spawn
         protected bool isLayerBoosted;      // when true, may flush nested in equal flush layers
 
-        bool Friend.IsLayerBoosted() 
+        bool Friend.IsLayerBoosted()
             => isLayerBoosted;
 
         /// <summary>
@@ -200,9 +200,9 @@ namespace Spoke {
             var asFriend = (this as Epoch.Friend);
             asFriend.GetControlHandle().OnPopSelf(asFriend.Detach);
         }
-        
+
         public abstract void Flush();
-        
+
         public abstract void Tick();
     }
 }

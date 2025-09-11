@@ -12,16 +12,16 @@ namespace Spoke {
     /// </summary>
     public sealed class SpokeRuntime : SpokeRuntime.Friend {
 
-        internal interface Friend { 
-            Handle Push(Frame frame); 
-            void Pop(); 
-            void Hold(); 
-            void Release(); 
-            void Schedule(SpokeTree tree); 
+        internal interface Friend {
+            Handle Push(Frame frame);
+            void Pop();
+            void Hold();
+            void Release();
+            void Schedule(SpokeTree tree);
             void TickTree(SpokeTree tree);
             void TryScopedLayerBoost(SpokeTree tree, Action onPopped);
         }
-        
+
         // Intended for this to become a ThreadStatic in the future. So trees can be driven on multiple threads.
         internal static SpokeRuntime Local { get; } = new SpokeRuntime();
 
@@ -34,10 +34,10 @@ namespace Spoke {
         /// </summary>
         public static void Batch(Action fn) {
             (Local as SpokeRuntime.Friend).Hold();
-            try { 
-                fn(); 
-            } finally { 
-                (Local as SpokeRuntime.Friend).Release(); 
+            try {
+                fn();
+            } finally {
+                (Local as SpokeRuntime.Friend).Release();
             }
         }
 
@@ -45,7 +45,7 @@ namespace Spoke {
         public long TimeStamp { get; private set; }
 
         // Priority queue of trees pending flush
-        OrderedWorkStack<SpokeTree> scheduledTrees = new((a, b) => b.CompareTo(a));
+        Heap<SpokeTree> scheduledTrees = new((a, b) => a.CompareTo(b));
 
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
@@ -82,7 +82,7 @@ namespace Spoke {
         }
 
         // Decrements the hold count, and if it reaches zero, attempts to flush any pending trees.
-        void Friend.Release() { 
+        void Friend.Release() {
             holdCount--;
             if (holdCount == 0) {
                 TryFlush();
@@ -91,7 +91,7 @@ namespace Spoke {
 
         // Schedules a tree for flushing, and attempts to flush
         void Friend.Schedule(SpokeTree tree) {
-            scheduledTrees.Enqueue(tree); 
+            scheduledTrees.Insert(tree);
             TryFlush();
         }
 
@@ -99,16 +99,16 @@ namespace Spoke {
         // May be called recursively. If more trees are schedule during a flush, then decide if they flush nested.
         void TryFlush() {
             const long maxPasses = 100; // Infinite loop guard. Max number of oscillations.
-            if (holdCount > 0 || !scheduledTrees.Has) return;
+            if (holdCount > 0 || !HasPending()) return;
             var passCount = 0;
             SpokeTree prev = null;
             do {
                 if (passCount >= maxPasses) {
-                    SpokeError.Log($"SpokeRuntime exceeded oscillation limit. Pending SpokeTree's are cleared to avoid infinite loops. The next scheduled tree was {scheduledTrees.Peek()}", null);
-                    while (scheduledTrees.Has) scheduledTrees.Pop();
+                    SpokeError.Log($"SpokeRuntime exceeded oscillation limit. Pending SpokeTree's are cleared to avoid infinite loops. The next scheduled tree was {scheduledTrees.PeekMin()}", null);
+                    while (scheduledTrees.Count > 0) scheduledTrees.RemoveMin();
                     break;
                 }
-                var top = scheduledTrees.Peek();
+                var top = scheduledTrees.PeekMin().V;
                 var isLayerBoosted = (top as SpokeTree.Friend).IsLayerBoosted();
                 // Newly spawned trees may flush nested inside trees of equal flush layer
                 if (isLayerBoosted && top.FlushLayer > layer) return;
@@ -121,20 +121,20 @@ namespace Spoke {
                 }
 
                 // Tick the tree. SpokeTree always flushes in Auto mode
-                (this as Friend).TickTree(scheduledTrees.Pop());
-            } while (scheduledTrees.Has);
+                (this as Friend).TickTree(scheduledTrees.RemoveMin().V);
+            } while (HasPending());
         }
 
         // Delivers a tick to the given tree.
         // Sets the runtimes current flush layer to the tree's flush layer, and restores it afterwards.
         // The runtimes flush layer determines outcome whether TryFlush() flushes nested or not.
         void Friend.TickTree(SpokeTree tree) {
-            var storeLayer = layer; 
+            var storeLayer = layer;
             layer = Math.Min(tree.FlushLayer, layer);
             try {
-                (tree as Epoch.Friend).Tick(); 
-            } catch (Exception e) { 
-                SpokeError.Log($"Uncaught Spoke error", e); 
+                (tree as Epoch.Friend).Tick();
+            } catch (Exception e) {
+                SpokeError.Log($"Uncaught Spoke error", e);
             }
             layer = storeLayer;
             if (frames.Count == 0) {
@@ -157,6 +157,13 @@ namespace Spoke {
             topHandle.OnPopSelf(onPopped);
         }
 
+        bool HasPending() {
+            while (scheduledTrees.Count > 0 && scheduledTrees.PeekMin().V.IsDetached) {
+                scheduledTrees.RemoveMin();
+            }
+            return scheduledTrees.Count > 0;
+        }
+
         public enum FrameKind : byte { None, Init, Tick, Dock, Bootstrap }
 
         /// <summary>
@@ -166,9 +173,9 @@ namespace Spoke {
             public readonly Epoch Epoch;
             public readonly FrameKind Type;
 
-            public Frame(FrameKind type, Epoch epoch) { 
-                Type = type; 
-                Epoch = epoch; 
+            public Frame(FrameKind type, Epoch epoch) {
+                Type = type;
+                Epoch = epoch;
             }
 
             public override string ToString() {
@@ -190,10 +197,10 @@ namespace Spoke {
             public bool IsAlive => Stack != null && Index < Stack.frames.Count && version == Stack.versions[Index];
             public bool IsTop => IsAlive && Index == Stack.frames.Count - 1;
 
-            public Handle(SpokeRuntime stack, int index, long version) { 
-                Stack = stack; 
-                Index = index; 
-                this.version = version; 
+            public Handle(SpokeRuntime stack, int index, long version) {
+                Stack = stack;
+                Index = index;
+                this.version = version;
             }
 
             // Registers a callback to be invoked when this frame is popped, or immediately if it's already dead.
