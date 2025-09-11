@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1 - 2025-09-11
+
+This release brings some minor tweaks and a performance boost.
+
+ChangeList:
+
+- Implemented a min-heap in `Spoke.Runtime`, which gave a decent boost to performance.
+- Tweaked semantics for nested tree flushes. A tree is given a priority boost while the scope it was created in remains on the stack. It can flush nested multiple times during this window, it's not just a one-off eager tick.
+- Tweaked the `SpokeSingleton` so its Init method is abstract, not virtual.
+
 ## 1.2.0 - 2025-09-04
 
 This is the real v1.0, I'm happy where `Spoke.Runtime` has ended up, and don't expect to make any more big structural changes.
