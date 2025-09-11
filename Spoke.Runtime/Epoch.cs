@@ -18,18 +18,18 @@ namespace Spoke {
     public abstract class Epoch : Epoch.Friend, Epoch.Introspect {
 
         // Internal methods used by the runtime/ticker only.
-        internal interface Friend { 
-            void Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services); 
-            void Tick(); 
-            void Detach(); 
-            SpokeRuntime.Handle GetControlHandle(); 
-            Ticker GetTicker(); 
-            void SetFault(SpokeException fault); 
+        internal interface Friend {
+            void Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services);
+            void Tick();
+            void Detach();
+            SpokeRuntime.Handle GetControlHandle();
+            Ticker GetTicker();
+            void SetFault(SpokeException fault);
         }
 
-        internal interface Introspect { 
-            List<Epoch> GetChildren(List<Epoch> storeIn = null); 
-            Epoch GetParent(); 
+        internal interface Introspect {
+            List<Epoch> GetChildren(List<Epoch> storeIn = null);
+            Epoch GetParent();
         }
 
         /// <summary>Coordinate in the epoch tree</summary>
@@ -52,8 +52,9 @@ namespace Spoke {
         TickBlock tickBlock; // delegate returned by Init, called on each tick
         SpokeRuntime.Handle controlHandle;
         Action _requestTick; // bound to nearest ticker/runtime
+        bool isPending;
 
-        public override string ToString() { 
+        public override string ToString() {
             return Name ?? GetType().Name;
         }
 
@@ -69,9 +70,9 @@ namespace Spoke {
             }
         }
 
-        void Friend.Detach() { 
-            DetachFrom(0); 
-            IsDetached = true; 
+        void Friend.Detach() {
+            DetachFrom(0);
+            IsDetached = true;
         }
 
         void Friend.Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services) {
@@ -81,7 +82,8 @@ namespace Spoke {
             this.ticker = ticker;
             // Route tick requests to nearest ticker; ignore if faulted.
             _requestTick = () => {
-                if (Fault != null) return;
+                if (Fault != null || IsDetached || isPending) return;
+                isPending = true;
                 if (ticker != null) {
                     (ticker as Ticker.Friend)?.Schedule(this);
                 } else if (this is SpokeTree asTree) {
@@ -127,6 +129,7 @@ namespace Spoke {
         // Single tick pass. Rolls back prior Tick attachments, then invokes TickBlock to rebuild them.
         void Friend.Tick() {
             if (IsDetached) return;
+            isPending = false;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
             DetachFrom((int)tickCursor.Tail);
             try {
@@ -143,16 +146,16 @@ namespace Spoke {
             }
         }
 
-        SpokeRuntime.Handle Friend.GetControlHandle() { 
-            return controlHandle; 
+        SpokeRuntime.Handle Friend.GetControlHandle() {
+            return controlHandle;
         }
 
-        Ticker Friend.GetTicker() { 
-            return ticker; 
+        Ticker Friend.GetTicker() {
+            return ticker;
         }
 
-        void Friend.SetFault(SpokeException fault) { 
-            Fault = fault; 
+        void Friend.SetFault(SpokeException fault) {
+            Fault = fault;
         }
 
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
@@ -230,14 +233,14 @@ namespace Spoke {
             }
 
             public SpokeHandle Use(SpokeHandle handle) {
-                NoMischief(); 
-                owner.attachEvents.Add(new(handle)); 
+                NoMischief();
+                owner.attachEvents.Add(new(handle));
                 return handle;
             }
 
             public T Use<T>(T disposable) where T : IDisposable {
-                NoMischief(); 
-                owner.attachEvents.Add(new(AttachRecord.Kind.Use, disposable)); 
+                NoMischief();
+                owner.attachEvents.Add(new(AttachRecord.Kind.Use, disposable));
                 return disposable;
             }
 
@@ -281,7 +284,7 @@ namespace Spoke {
             }
 
             public void OnCleanup(Action fn) {
-                NoMischief(); 
+                NoMischief();
                 owner.attachEvents.Add(new(AttachRecord.Kind.Cleanup, fn));
             }
 
@@ -303,32 +306,32 @@ namespace Spoke {
     public struct EpochBuilder {
         Epoch.EpochMutations s;
 
-        internal EpochBuilder(Epoch.EpochMutations s) { 
-            this.s = s; 
+        internal EpochBuilder(Epoch.EpochMutations s) {
+            this.s = s;
         }
 
-        public SpokeHandle Use(SpokeHandle handle) 
+        public SpokeHandle Use(SpokeHandle handle)
             => s.Use(handle);
 
-        public T Use<T>(T disposable) where T : IDisposable 
+        public T Use<T>(T disposable) where T : IDisposable
             => s.Use(disposable);
 
-        public T Call<T>(T epoch) where T : Epoch 
+        public T Call<T>(T epoch) where T : Epoch
             => s.Call(epoch);
 
-        public T Export<T>(T obj) 
+        public T Export<T>(T obj)
             => s.Export(obj);
 
-        public bool TryImport<T>(out T obj) 
+        public bool TryImport<T>(out T obj)
             => s.TryImport(out obj);
-            
-        public T Import<T>() 
+
+        public T Import<T>()
             => s.Import<T>();
 
-        public void OnCleanup(Action fn) 
+        public void OnCleanup(Action fn)
             => s.OnCleanup(fn);
 
-        public void Log(string msg) 
+        public void Log(string msg)
             => s.Call(new LambdaEpoch($"Log: {msg}", s => {
                 if (!s.TryImport<ISpokeLogger>(out var logger)) logger = SpokeError.DefaultLogger;
                 logger?.Log($"{msg}\n\n{SpokeIntrospect.TreeTrace(SpokeRuntime.Frames)}");
@@ -344,11 +347,11 @@ namespace Spoke {
     public struct EpochPorts {
         Epoch.EpochMutations s;
 
-        internal EpochPorts(Epoch.EpochMutations s) { 
-            this.s = s; 
+        internal EpochPorts(Epoch.EpochMutations s) {
+            this.s = s;
         }
 
-        public void RequestTick() 
+        public void RequestTick()
             => s.RequestTick();
     }
 
