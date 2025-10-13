@@ -5,15 +5,10 @@ namespace Spoke {
     /// </summary>
     public sealed class Reaction : BaseEffect {
 
+        protected override bool AutoArmTickAfterInit => false;
+
         public Reaction(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
-            var isFirst = true;
-            this.block = s => {
-                if (!isFirst) {
-                    block?.Invoke(s);
-                } else {
-                    isFirst = false;
-                }
-            };
+            this.block = block;
         }
     }
 }
