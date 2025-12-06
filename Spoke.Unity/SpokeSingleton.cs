@@ -45,7 +45,7 @@ namespace Spoke {
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
-            SpokeTeardown.App.Subscribe(() => isDestroyed.Set(false));
+            UnitySignals.AppTeardown.Subscribe(() => isDestroyed.Set(false));
             SceneManager.sceneUnloaded += scene => {
                 if (scene != instanceScene) return;
                 instanceScene = default;
