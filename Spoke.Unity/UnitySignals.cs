@@ -45,16 +45,24 @@ namespace Spoke {
         /// </summary>
         public static void NotifySceneTeardown(Scene s) => sceneTeardown.Invoke(s);
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void Initialize() => SpokeTree.Spawn("UnitySignals", new Effect("Init", s => {
-            Application.quitting += () => appTeardown.Invoke();
+        static SpokeTree tree;
+
 #if UNITY_EDITOR
-            EditorApplication.playModeStateChanged += state => {
-                isPlaying.Set(Application.isPlaying);
-                if (state == PlayModeStateChange.ExitingPlayMode) appTeardown.Invoke();
-            };
-            AssemblyReloadEvents.beforeAssemblyReload += () => appTeardown.Invoke();
+        [InitializeOnLoadMethod]
 #endif
-        }));
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void Initialize() {
+            if (tree != null) return;
+            tree = SpokeTree.Spawn("UnitySignals", new Effect("Init", s => {
+                Application.quitting += () => appTeardown.Invoke();
+#if UNITY_EDITOR
+                EditorApplication.playModeStateChanged += state => {
+                    isPlaying.Set(Application.isPlaying);
+                    if (state == PlayModeStateChange.ExitingPlayMode) appTeardown.Invoke();
+                };
+                AssemblyReloadEvents.beforeAssemblyReload += () => appTeardown.Invoke();
+#endif
+            }));
+        }
     }
 }
