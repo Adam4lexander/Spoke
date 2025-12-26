@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2 - 2025-12-27
+
+ChangeList:
+
+- Replaced `SpokeTeardown` with `UnitySignals` for handling Unity lifecycle events.
+- `Reaction` now uses `AutoArmTickAfterInit` for cleaner initialization.
+
 ## 1.2.1 - 2025-09-11
 
 This release brings some minor tweaks and a performance boost.
