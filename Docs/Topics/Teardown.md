@@ -1,11 +1,10 @@
 # Teardown
 
-Unity has a frustrating quirk when unloading a scene:
-it calls `OnDisable()` and `OnDestroy()` on all behaviours — but in a **nondeterministic order**
+Unity has a frustrating quirk when unloading a scene: it calls `OnDisable()` and `OnDestroy()` on all behaviours in a **nondeterministic order**.
 
-This means one component may try to access another that’s already been destroyed, resulting in hard-to-track exceptions. To avoid it, you’d need to defensively guard almost every line of teardown logic.
+This means one component may try to access another that's already been destroyed, resulting in hard-to-track exceptions. To avoid it, you'd need to defensively guard almost every line of teardown logic.
 
-Spoke provides a clean solution: `SpokeTeardown` — a small utility built into `SpokeBehaviour` that lets you **tear down scenes safely and deterministically**, without risk of Unity's destruction-order bugs.
+Spoke provides a clean solution: `UnitySignals`. This utility exposes reactive signals for Unity lifecycle events. `SpokeBehaviour` subscribes to these signals, letting you **tear down scenes safely and deterministically**, without risk of Unity's destruction-order bugs.
 
 ---
 
@@ -28,15 +27,15 @@ public class MyMonoBehaviour : MonoBehaviour {
 }
 ```
 
-This works fine most of the time — but if the scene is unloaded, Unity might destroy `myRenderer` **before** `OnDisable()` runs. When that happens, the line accessing `myRenderer.sharedMaterial` throws an exception.
+This works fine most of the time, but if the scene is unloaded, Unity might destroy `myRenderer` **before** `OnDisable()` runs. When that happens, the line accessing `myRenderer.sharedMaterial` throws an exception.
 
-This failure is intermittent — depending entirely on the destruction order Unity chooses.
+This failure is intermittent, depending entirely on the destruction order Unity chooses.
 
 ---
 
 ## The Same Problem in Spoke
 
-Without `SpokeTeardown`, Spoke would run into the same issue:
+Without `UnitySignals`, Spoke would run into the same issue:
 
 ```csharp
 public class MyBehaviour : SpokeBehaviour {
@@ -56,31 +55,31 @@ public class MyBehaviour : SpokeBehaviour {
 }
 ```
 
-Again, when the scene unloads, `OnCleanup` runs — but `myRenderer` may already be gone. Whether this throws an exception depends on timing and destruction order.
+Again, when the scene unloads, `OnCleanup` runs, but `myRenderer` may already be gone. Whether this throws an exception depends on timing and destruction order.
 
 ---
 
-## The Fix: `SpokeTeardown`
+## The Fix: `UnitySignals`
 
-`SpokeTeardown` solves this by letting you **trigger teardown logic before Unity begins destroying objects.**
+`UnitySignals` solves this by letting you **trigger teardown logic before Unity begins destroying objects.**
 
-Here’s what it exposes:
+Here's what it exposes:
 
 ```csharp
-public static class SpokeTeardown {
+public static class UnitySignals {
 
-    public static ITrigger App { get; }
-    public static ITrigger<Scene> Scene { get; }
+    public static ISignal<bool> IsPlaying { get; }
+    public static ITrigger AppTeardown { get; }
+    public static ITrigger<Scene> SceneTeardown { get; }
 
-    public static void SignalScene(Scene scene) { /* ... */ }
-    // ...
+    public static void NotifySceneTeardown(Scene scene) { /* ... */ }
 }
 ```
 
-`SpokeBehaviour` is already integrated with `SpokeTeardown`.
+`SpokeBehaviour` already subscribes to these signals:
 
-- When `SpokeTeardown.App` fires, all `SpokeBehaviour` instances clean themselves up.
-- When `SpokeTeardown.Scene` fires, only behaviours from the given scene clean up.
+- When `UnitySignals.AppTeardown` fires, all `SpokeBehaviour` instances clean themselves up.
+- When `UnitySignals.SceneTeardown` fires, only behaviours from the given scene clean up.
 
 Teardown behaves exactly like natural destruction:
 
@@ -93,22 +92,21 @@ But it happens **before Unity destroys anything**, so you can safely access any 
 
 ### Scene Teardown Caveat
 
-`SpokeTeardown.App` is wired up automatically and fires at the right time.
+`UnitySignals.AppTeardown` is wired up automatically and fires at the right time.
 
-However, Unity provides **no reliable hook** for early scene teardown.<br>
-`SceneManager.sceneUnloaded` fires **too late** — by then, objects may already be destroyed.
+However, Unity provides **no reliable hook** for early scene teardown. `SceneManager.sceneUnloaded` fires **too late**; by then, objects may already be destroyed.
 
-So, if you want to trigger `SpokeTeardown.Scene`, you must **trigger it manually** before unloading:
+So if you want to trigger `UnitySignals.SceneTeardown`, you must **trigger it manually** before unloading:
 
 ```csharp
 public void ChangeScene(string nextScene) {
 
     var currScene = SceneManager.GetActiveScene();
     // Notify Spoke that the currScene is being unloaded
-    SpokeTeardown.SignalScene(currScene);
+    UnitySignals.NotifySceneTeardown(currScene);
 
     SceneManager.LoadScene(nextScene);
 }
 ```
 
-It’s a small cost — and in return, you never have to deal with scene teardown bugs again.
+It's a small cost, and in return you never have to deal with scene teardown bugs again.
