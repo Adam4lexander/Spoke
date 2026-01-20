@@ -22,7 +22,9 @@ namespace Spoke {
         public static Epoch GetParent(Epoch epoch) {
             return (epoch as Epoch.Introspect).GetParent();
         }
-        
+
+        const int TreeSizeThreshold = 50;
+
         internal static string TreeTrace(ReadOnlyList<SpokeRuntime.Frame> frames) {
             if (frames.Count == 0) return "(empty)";
             var sb = new StringBuilder();
@@ -35,22 +37,30 @@ namespace Spoke {
                 if (!roots.Contains(e) && GetParent(e) == null) {
                     roots.Add(e);
                 }
-            } 
-            sb.Append("<------------ Spoke Frame Trace ------------>\n").Append(StackTrace(frames)).Append("\n").Append("<------------ Spoke Tree Trace ------------>\n");
+            }
+            int treeSize = 0;
             foreach (var root in roots) {
-                sb.Append(DumpTree(root, e => {
-                    var label = e.ToString();
-                    if (es.Contains(e)) {
-                        var inds = new List<int>();
-                        for (int i = 0; i < es.Count; i++) if (es[i] == e) inds.Add(i);
-                        label = $"({string.Join(",", inds)})-{label}";
-                    }
-                    if (e.Fault != null) {
-                        label = $"{label} [Faulted: {e.Fault.InnerException.GetType().Name}]";
-                    }
-                    return label;
-                }));
-                sb.Append("\n");
+                treeSize += CountNodes(root);
+            }
+            sb.Append("<------------ Spoke Frame Trace ------------>\n").Append(StackTrace(frames)).Append("\n").Append("<------------ Spoke Tree Trace ------------>\n");
+            if (treeSize > TreeSizeThreshold) {
+                sb.Append($"(tree too large to display - {treeSize} nodes)\n");
+            } else {
+                foreach (var root in roots) {
+                    sb.Append(DumpTree(root, e => {
+                        var label = e.ToString();
+                        if (es.Contains(e)) {
+                            var inds = new List<int>();
+                            for (int i = 0; i < es.Count; i++) if (es[i] == e) inds.Add(i);
+                            label = $"({string.Join(",", inds)})-{label}";
+                        }
+                        if (e.Fault != null) {
+                            label = $"{label} [Faulted: {e.Fault.InnerException.GetType().Name}]";
+                        }
+                        return label;
+                    }));
+                    sb.Append("\n");
+                }
             }
             return sb.ToString();
         }
@@ -79,6 +89,14 @@ namespace Spoke {
             var children = GetChildren(epoch, elPool.Get());
             foreach (var c in children) TraverseRecurs(depth + 1, c, fn);
             elPool.Return(children);
+        }
+
+        static int CountNodes(Epoch root) {
+            int count = 1;
+            var children = GetChildren(root, elPool.Get());
+            foreach (var c in children) count += CountNodes(c);
+            elPool.Return(children);
+            return count;
         }
     }
 }
