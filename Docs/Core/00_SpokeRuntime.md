@@ -1,4 +1,6 @@
-# Spoke Runtime
+---
+title: Spoke Runtime
+---
 
 This page explains the core `Spoke.Runtime` package. It's the engine that `Spoke.Reactive` is built on. You don't need to understand it deeply in order to use Spoke. If you're just starting, you may prefer to skip this page, and refer back later if you're curious.
 

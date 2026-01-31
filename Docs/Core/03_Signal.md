@@ -1,4 +1,6 @@
-# Signal
+---
+title: Signal
+---
 
 ## Table of Contents
 

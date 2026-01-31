@@ -1,4 +1,6 @@
-# Dock
+---
+title: Dock
+---
 
 ## Table of Contents
 

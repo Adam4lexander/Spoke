@@ -1,4 +1,6 @@
-# Trigger
+---
+title: Trigger
+---
 
 ## Table of Contents
 

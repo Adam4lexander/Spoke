@@ -1,4 +1,6 @@
-# Performance
+---
+title: Performance
+---
 
 This page shows how Spoke performs, in terms of CPU usage and GC allocations.
 

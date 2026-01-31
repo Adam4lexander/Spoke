@@ -1,4 +1,6 @@
-# Memo
+---
+title: Memo
+---
 
 ## Table of Contents
 

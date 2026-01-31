@@ -1,4 +1,6 @@
-# Effect
+---
+title: Effect
+---
 
 ## Table of Contents
 

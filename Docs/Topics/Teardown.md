@@ -1,4 +1,6 @@
-# Teardown
+---
+title: Teardown
+---
 
 Unity has a frustrating quirk when unloading a scene: it calls `OnDisable()` and `OnDestroy()` on all behaviours in a **nondeterministic order**.
 
