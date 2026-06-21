@@ -141,5 +141,36 @@ namespace Spoke.Tests {
             }
         }
 
+        [Test]
+        public void SpawnEager_EnablesWriteThenRead_ViaNestedFlush() {
+            // SpawnEager gives a tree a higher-priority flush layer. When a lower-priority (default) tree
+            // mutates a signal the eager tree depends on, the eager tree flushes NESTED — synchronously,
+            // before the default tree's flush continues. That lets the default tree write a signal and
+            // then read a value the eager tree derives from it, fresh, in the same flush ("write-then-read").
+            // Were both trees the same priority, the derived read would be stale (0 here, not 10).
+            var src = State.Create(0);
+            var derived = State.Create(0);
+            var go = State.Create(false);
+            var observed = -1;
+
+            // Eager tree keeps `derived` == src * 2.
+            var eager = SpokeTree.SpawnEager(new Effect("derive", s => derived.Set(s.D(src) * 2)));
+            // Default tree: on `go`, writes src and immediately reads the eager-derived value.
+            var dflt = SpokeTree.Spawn(new Effect("writer", s => {
+                if (s.D(go)) {
+                    src.Set(5);
+                    observed = derived.Now;
+                }
+            }));
+            try {
+                go.Set(true);
+                Assert.AreEqual(10, observed,
+                    "Eager tree must flush nested when src changes, so the default tree reads the fresh derived value");
+            } finally {
+                dflt.Dispose();
+                eager.Dispose();
+            }
+        }
+
     }
 }

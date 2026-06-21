@@ -126,6 +126,27 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Import_NearestExport_ShadowsFarther() {
+            string imported = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                s.Export("from-root");
+                s.Call(new LambdaEpoch(s => {
+                    s.Export("from-child"); // shadows the root's string export for this subtree
+                    s.Call(new LambdaEpoch(s => {
+                        s.TryImport<string>(out imported);
+                        return null;
+                    }));
+                    return null;
+                }));
+                return null;
+            }));
+
+            Assert.AreEqual("from-child", imported,
+                "Import should resolve the nearest export, shadowing a farther one of the same type");
+        }
+
+        [Test]
         public void Import_NotFound_Throws() {
             Exception captured = null;
 

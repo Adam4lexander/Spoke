@@ -139,5 +139,28 @@ namespace Spoke.Tests {
 
             Assert.IsNotNull(tree.Fault, "Tree should be faulted by oscillation guard");
         }
+
+        [Test]
+        public void Dispose_DuringFlush_IsDeferredUntilFlushCompletes() {
+            // Disposing a tree from inside its own flush must NOT tear it down mid-tick — that would
+            // pull the rug out from under the executing epoch. SpokeTree.Dispose defers the detach until
+            // the live flush frame pops, so the current unit of work finishes first, then teardown runs.
+            var log = new List<string>();
+            SpokeTree tree = null;
+
+            tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                s.OnCleanup(() => log.Add("cleanup"));
+                return s => {
+                    log.Add("before-dispose");
+                    tree.Dispose();   // mid-flush: detach must be deferred, not immediate
+                    log.Add("after-dispose"); // proves this tick wasn't torn down underneath us
+                };
+            }));
+
+            tree.Flush();
+
+            CollectionAssert.AreEqual(new[] { "before-dispose", "after-dispose", "cleanup" }, log,
+                "Dispose during a flush must defer teardown until the current flush completes");
+        }
     }
 }
