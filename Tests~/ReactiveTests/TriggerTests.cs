@@ -124,9 +124,9 @@ namespace Spoke.Tests {
 
         [Test]
         public void TriggerInvoke_BatchesStateMutations_NoIntermediateObservation() {
-            // The doc (02_Trigger.md §Batched Notifications) promises that a Trigger.Invoke
-            // wraps in SpokeRuntime.Batch. So state writes inside the subscriber should be
-            // batched — dependents see only the final combined state, never intermediate.
+            // A Trigger.Invoke batches the state mutations its subscribers make: a dependent effect
+            // observes only the final combined value (0 then 30), never an intermediate where v1 has
+            // updated but v2 has not.
             var t = Trigger.Create();
             var v1 = State.Create(0);
             var v2 = State.Create(0);

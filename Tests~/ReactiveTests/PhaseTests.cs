@@ -11,25 +11,21 @@ namespace Spoke.Tests {
             var mounted = 0;
             var cleaned = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Phase("p", gate, s => {
+            using var tree = SpokeTree.Spawn(new Phase("p", gate, s => {
                 mounted++;
                 s.OnCleanup(() => cleaned++);
             }));
-            tree.Flush();
             Assert.AreEqual(0, mounted, "Phase should not mount while gate=false");
 
             gate.Set(true);
-            tree.Flush();
             Assert.AreEqual(1, mounted);
             Assert.AreEqual(0, cleaned);
 
             gate.Set(false);
-            tree.Flush();
             Assert.AreEqual(1, mounted);
             Assert.AreEqual(1, cleaned);
 
             gate.Set(true);
-            tree.Flush();
             Assert.AreEqual(2, mounted);
             Assert.AreEqual(1, cleaned);
         }
@@ -41,20 +37,17 @@ namespace Spoke.Tests {
             var runs = 0;
             var cleanups = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Phase("p", gate, s => {
+            using var tree = SpokeTree.Spawn(new Phase("p", gate, s => {
                 runs++;
                 s.OnCleanup(() => cleanups++);
             }, pulse));
-            tree.Flush();
             Assert.AreEqual(1, runs);
 
             pulse.Invoke();
-            tree.Flush();
             Assert.AreEqual(2, runs);
             Assert.AreEqual(1, cleanups);
 
             pulse.Invoke();
-            tree.Flush();
             Assert.AreEqual(3, runs);
             Assert.AreEqual(2, cleanups);
         }
@@ -65,15 +58,12 @@ namespace Spoke.Tests {
             var pulse = Trigger.Create();
             var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Phase("p", gate, s => runs++, pulse));
-            tree.Flush();
+            using var tree = SpokeTree.Spawn(new Phase("p", gate, s => runs++, pulse));
 
             pulse.Invoke();
-            tree.Flush();
             Assert.AreEqual(0, runs, "Triggers should not cause Phase block to run while gate=false");
 
             gate.Set(true);
-            tree.Flush();
             Assert.AreEqual(1, runs);
         }
     }

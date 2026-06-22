@@ -10,8 +10,7 @@ namespace Spoke.Tests {
             var runs = 0;
             var trigger = Trigger.Create();
 
-            using var tree = SpokeTree.SpawnManual(new Reaction("r", s => runs++, trigger));
-            tree.Flush();
+            using var tree = SpokeTree.Spawn(new Reaction("r", s => runs++, trigger));
 
             Assert.AreEqual(0, runs, "Reaction should skip its initial mount");
         }
@@ -21,16 +20,13 @@ namespace Spoke.Tests {
             var runs = 0;
             var trigger = Trigger.Create();
 
-            using var tree = SpokeTree.SpawnManual(new Reaction("r", s => runs++, trigger));
-            tree.Flush();
+            using var tree = SpokeTree.Spawn(new Reaction("r", s => runs++, trigger));
             Assert.AreEqual(0, runs);
 
             trigger.Invoke();
-            tree.Flush();
             Assert.AreEqual(1, runs);
 
             trigger.Invoke();
-            tree.Flush();
             Assert.AreEqual(2, runs);
         }
     }

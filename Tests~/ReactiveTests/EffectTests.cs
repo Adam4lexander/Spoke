@@ -10,8 +10,7 @@ namespace Spoke.Tests {
         public void Effect_RunsOnMount() {
             var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("test", s => runs++));
-            tree.Flush();
+            using var tree = SpokeTree.Spawn(new Effect("test", s => runs++));
 
             Assert.AreEqual(1, runs);
         }
@@ -22,16 +21,14 @@ namespace Spoke.Tests {
             var runs = 0;
             var lastSeen = -1;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("test", s => {
+            using var tree = SpokeTree.Spawn(new Effect("test", s => {
                 runs++;
                 lastSeen = s.D(state);
             }));
-            tree.Flush();
             Assert.AreEqual(1, runs);
             Assert.AreEqual(0, lastSeen);
 
             state.Set(7);
-            tree.Flush();
             Assert.AreEqual(2, runs);
             Assert.AreEqual(7, lastSeen);
         }
@@ -41,15 +38,13 @@ namespace Spoke.Tests {
             var state = State.Create(0);
             var log = new List<string>();
 
-            using var tree = SpokeTree.SpawnManual(new Effect("test", s => {
+            using var tree = SpokeTree.Spawn(new Effect("test", s => {
                 var v = s.D(state);
                 log.Add($"mount:{v}");
                 s.OnCleanup(() => log.Add($"cleanup:{v}"));
             }));
-            tree.Flush();
 
             state.Set(1);
-            tree.Flush();
 
             CollectionAssert.AreEqual(new[] { "mount:0", "cleanup:0", "mount:1" }, log);
         }
@@ -59,16 +54,13 @@ namespace Spoke.Tests {
             var trigger = Trigger.Create();
             var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("t", s => runs++, trigger));
-            tree.Flush();
+            using var tree = SpokeTree.Spawn(new Effect("t", s => runs++, trigger));
             Assert.AreEqual(1, runs);
 
             trigger.Invoke();
-            tree.Flush();
             Assert.AreEqual(2, runs);
 
             trigger.Invoke();
-            tree.Flush();
             Assert.AreEqual(3, runs);
         }
 
@@ -78,29 +70,24 @@ namespace Spoke.Tests {
             var extra = State.Create(0);
             var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("dyn", s => {
+            using var tree = SpokeTree.Spawn(new Effect("dyn", s => {
                 runs++;
                 if (s.D(gate)) {
                     _ = s.D(extra);
                 }
             }));
-            tree.Flush();
             Assert.AreEqual(1, runs);
 
             extra.Set(1);
-            tree.Flush();
             Assert.AreEqual(2, runs);
 
             gate.Set(false);
-            tree.Flush();
             Assert.AreEqual(3, runs);
 
             extra.Set(2);
-            tree.Flush();
             Assert.AreEqual(3, runs);
 
             gate.Set(true);
-            tree.Flush();
             Assert.AreEqual(4, runs);
         }
 
@@ -109,21 +96,18 @@ namespace Spoke.Tests {
             var state = State.Create(0);
             var childCleanups = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("parent", s => {
+            using var tree = SpokeTree.Spawn(new Effect("parent", s => {
                 _ = s.D(state);
                 s.Effect(s => {
                     s.OnCleanup(() => childCleanups++);
                 });
             }));
-            tree.Flush();
             Assert.AreEqual(0, childCleanups);
 
             state.Set(1);
-            tree.Flush();
             Assert.AreEqual(1, childCleanups);
 
             state.Set(2);
-            tree.Flush();
             Assert.AreEqual(2, childCleanups);
         }
 
@@ -133,7 +117,7 @@ namespace Spoke.Tests {
             var log = new List<string>();
 
             // Two sibling effects, composed under a root Effect that wires them up once.
-            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+            using var tree = SpokeTree.Spawn(new Effect("root", s => {
                 s.Effect(s => {
                     log.Add($"O1:{s.D(state)}");
                     s.OnCleanup(() => log.Add("O1clean"));
@@ -151,29 +135,26 @@ namespace Spoke.Tests {
                     });
                 });
             }));
-            tree.Flush();
             CollectionAssert.AreEqual(new[] { "O1:0", "I1:0", "O2:0", "I2:0" }, log);
 
             log.Clear();
             state.Set(1);
-            tree.Flush();
             CollectionAssert.AreEqual(
                 new[] { "I1clean", "O1clean", "O1:1", "I1:1", "I2clean", "O2clean", "O2:1", "I2:1" },
                 log);
         }
 
         [Test]
-        public void Effect_DeferredExecution_InnerSeesPostMutationValue() {
-            var observed = -1;
+        public void Effect_DeferredExecution_ChildRunsAfterTheAttachingBlock() {
+            var log = new List<string>();
 
-            using var tree = SpokeTree.SpawnManual(new Effect("outer", s => {
-                var n = 10;
-                s.Effect(s => observed = n);
-                n = 20;
+            using var tree = SpokeTree.Spawn(new Effect("outer", s => {
+                log.Add("outer:start");
+                s.Effect(s => log.Add("inner"));
+                log.Add("outer:end");
             }));
-            tree.Flush();
 
-            Assert.AreEqual(20, observed);
+            CollectionAssert.AreEqual(new[] { "outer:start", "outer:end", "inner" }, log);
         }
 
         [Test]
@@ -181,7 +162,7 @@ namespace Spoke.Tests {
             var input = State.Create(1);
             int output = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+            using var tree = SpokeTree.Spawn(new Effect("root", s => {
                 var derived = s.Effect(s => {
                     var doubled = s.Memo(s => s.D(input) * 2);
                     var plusOne = s.Memo(s => s.D(doubled) + 1);
@@ -189,11 +170,9 @@ namespace Spoke.Tests {
                 });
                 s.Effect(s => output = s.D(derived));
             }));
-            tree.Flush();
             Assert.AreEqual(3, output);    // input 1 -> doubled 2 -> plusOne 3
 
             input.Set(5);
-            tree.Flush();
             Assert.AreEqual(11, output);   // input 5 -> doubled 10 -> plusOne 11
         }
 
@@ -207,7 +186,7 @@ namespace Spoke.Tests {
             var triggered = false;
 
             // Three sibling effects, composed under a root Effect that wires them up once.
-            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+            using var tree = SpokeTree.Spawn(new Effect("root", s => {
                 s.Effect(s => log.Add($"E1:{s.D(x)}"));
                 s.Effect(s => {
                     log.Add("E2");
@@ -218,7 +197,6 @@ namespace Spoke.Tests {
                 });
                 s.Effect(s => log.Add($"E3:{s.D(x)}"));
             }));
-            tree.Flush();
 
             CollectionAssert.AreEqual(
                 new[] { "E1:0", "E2", "E1:1", "E3:1" },
@@ -227,20 +205,20 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void Effect_SelfReschedules_UntilTerminationCondition() {
-            // A well-behaved self-loop: effect sets a state it depends on, terminating at a fixed point.
-            // Same-coord transitions don't increment the oscillation passCount (CompareTo == 0),
-            // so the tree doesn't fault.
+        public void Effect_SelfReschedules_WhenItWritesAStateItReads() {
+            // An effect that writes a state it also reads re-runs itself. Here it increments x each
+            // run until x reaches 5, then stops writing — converging to a fixed point.
             var x = State.Create(0);
+            var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("inc", s => {
+            using var tree = SpokeTree.Spawn(new Effect("inc", s => {
+                runs++;
                 var v = s.D(x);
                 if (v < 5) x.Set(v + 1);
             }));
-            tree.Flush();
 
-            Assert.AreEqual(5, x.Now);
-            Assert.IsNull(tree.Fault, "Self-loop with termination must not fault the tree");
+            Assert.AreEqual(5, x.Now, "x converges to the fixed point");
+            Assert.AreEqual(6, runs, "the effect re-ran itself once per value 0..5");
         }
 
         [Test]
@@ -248,10 +226,9 @@ namespace Spoke.Tests {
             EffectBuilder captured = default;
             var threw = false;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("e", s => {
+            using var tree = SpokeTree.Spawn(new Effect("e", s => {
                 captured = s;
             }));
-            tree.Flush();
 
             try {
                 captured.OnCleanup(() => { });
@@ -278,17 +255,15 @@ namespace Spoke.Tests {
             var b = State.Create(-1);
             var runs = 0;
 
-            using var tree = SpokeTree.SpawnManual(new Effect("stale", s => {
+            using var tree = SpokeTree.Spawn(new Effect("stale", s => {
                 var av = s.D(a);   // subscribe to a
                 b.Set(av);         // write b — not subscribed to b yet this run, so this can't re-trigger us
                 _ = s.D(b);        // subscribe to b (happens after the write)
                 runs++;
             }));
-            tree.Flush();
             Assert.AreEqual(1, runs, "sanity: exactly one run on mount");
 
             a.Set(5);
-            tree.Flush();
             Assert.AreEqual(2, runs,
                 "Changing 'a' must cause exactly ONE re-run. Writing 'b' mid-run — before re-reading it — " +
                 "must not schedule a redundant second re-run.");

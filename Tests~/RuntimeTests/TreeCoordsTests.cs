@@ -32,7 +32,7 @@ namespace Spoke.Tests {
 
         [Test]
         public void Compare_NestedOrderingMatchesImperativeWalk() {
-            // Mimics the tree in 00_SpokeRuntime.md §Ordering Epochs by Tree Coords:
+            // A representative epoch tree — coords must sort in depth-first (imperative walk) order:
             //   []          (tree root)
             //   [0]         (Main)
             //   [0,0]       (epoch)
