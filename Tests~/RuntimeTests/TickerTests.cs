@@ -16,7 +16,7 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void OnTick_DoingNothing_FaultsTree() {
+        public void OnTick_DoingNothing_ThrowsFault() {
             Errors.ExpectErrors();
             using var tree = SpokeTree.SpawnManual(new LambdaTicker(s => {
                 s.OnTick(s => {
