@@ -40,7 +40,7 @@ namespace Spoke {
             }
             // Push a stack frame to reflect the docking action
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
-            Drop(key);  // Detach existing epoch at they key, if any
+            Drop(key);  // Detach existing epoch at the key, if any
             dynamicChildren.Add(key, epoch);
             // Monotonically increasing index ensures children ticks ordered by attach-time
             var childCoords = Coords.Extend(childIndex++);
@@ -56,7 +56,9 @@ namespace Spoke {
         /// </summary>
         public void Drop(object key) {
             if (!dynamicChildren.TryGetValue(key, out var child)) return;
-            (child as Epoch.Friend).Detach();
+            // If the child is mid-execution (dropping or re-keying itself), defer its detach until it
+            // finishes so its full teardown still runs; an idle child detaches immediately.
+            (child as Epoch.Friend).GetControlHandle().OnPopSelf((child as Epoch.Friend).Detach);
             dynamicChildren.Remove(key);
         }
 

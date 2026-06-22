@@ -8,8 +8,9 @@ namespace Spoke.Tests {
     public class DockTests : SpokeTestFixture {
 
         [Test]
-        public void Call_AttachesEpoch_AndRunsInit() {
+        public void Call_AttachesEpoch() {
             var attached = false;
+            var ticked = false;
             Dock dock = null;
 
             using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
@@ -19,16 +20,41 @@ namespace Spoke.Tests {
 
             dock.Call("k", new LambdaEpoch(s => {
                 attached = true;
-                return null;
+                return s => {
+                    ticked = true;
+                };
             }));
 
             Assert.IsTrue(attached);
+            Assert.IsFalse(ticked);
+
+            tree.Flush();
+            Assert.IsTrue(ticked);
+        }
+
+        [Test]
+        public void Call_ChildrenTickInAttachOrder() {
+            var ticked = new List<string>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            dock.Call("x", new LambdaEpoch(s => s => ticked.Add("x")));
+            dock.Call("a", new LambdaEpoch(s => s => ticked.Add("a")));
+            dock.Call("m", new LambdaEpoch(s => s => ticked.Add("m")));
+
+            tree.Flush();
+
+            CollectionAssert.AreEqual(new[] { "x", "a", "m" }, ticked,
+                "Children tick in attach order");
         }
 
         [Test]
         public void Call_OnExistingKey_FirstDetachesOldChild() {
-            var firstCleanup = false;
-            var secondAttached = false;
+            var log = new List<string>();
             Dock dock = null;
 
             using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
@@ -37,18 +63,18 @@ namespace Spoke.Tests {
             }));
 
             dock.Call("k", new LambdaEpoch(s => {
-                s.OnCleanup(() => firstCleanup = true);
+                s.OnCleanup(() => log.Add("first-cleanup"));
                 return null;
             }));
-            Assert.IsFalse(firstCleanup);
 
             dock.Call("k", new LambdaEpoch(s => {
-                secondAttached = true;
+                log.Add("second-attached");
                 return null;
             }));
 
-            Assert.IsTrue(firstCleanup, "Old child at key should be detached first");
-            Assert.IsTrue(secondAttached);
+            CollectionAssert.AreEqual(
+                new[] { "first-cleanup", "second-attached" },
+                log);
         }
 
         [Test]
@@ -82,6 +108,55 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Drop_SelfDuringAttach_RunsCleanup_AndDoesNotTick() {
+            var log = new List<string>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            dock.Call("k", new LambdaEpoch(s => {
+                dock.Drop("k");              // drop self while still attaching
+                s.OnCleanup(() => log.Add("cleanup"));
+                return s => log.Add("tick");
+            }));
+
+            tree.Flush();
+
+            Assert.IsNull(tree.Fault);
+            CollectionAssert.AreEqual(new[] { "cleanup" }, log,
+                "the self-dropped epoch runs its cleanup and never ticks");
+        }
+
+        [Test]
+        public void Call_SameKeyDuringOwnAttach_ReplacesSelf() {
+            var log = new List<string>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            dock.Call("k", new LambdaEpoch(s => {
+                s.OnCleanup(() => log.Add("old-cleanup"));
+                dock.Call("k", new LambdaEpoch(s => {   // re-key self with the same key
+                    log.Add("new-attached");
+                    return s => log.Add("new-tick");
+                }));
+                return s => log.Add("old-tick");
+            }));
+
+            tree.Flush();
+
+            CollectionAssert.AreEqual(new[] { "new-attached", "old-cleanup", "new-tick" }, log,
+                "replacement attaches, then the old epoch cleans up once it finishes; the old never ticks");
+            Assert.IsNull(tree.Fault);
+        }
+
+        [Test]
         public void DockCleanup_DetachesChildren_InReverseAttachOrder() {
             var log = new List<string>();
             Dock dock = null;
@@ -91,20 +166,21 @@ namespace Spoke.Tests {
                 return null;
             }));
 
+            dock.Call("x", new LambdaEpoch(s => { s.OnCleanup(() => log.Add("x")); return null; }));
             dock.Call("a", new LambdaEpoch(s => { s.OnCleanup(() => log.Add("a")); return null; }));
-            dock.Call("b", new LambdaEpoch(s => { s.OnCleanup(() => log.Add("b")); return null; }));
-            dock.Call("c", new LambdaEpoch(s => { s.OnCleanup(() => log.Add("c")); return null; }));
+            dock.Call("m", new LambdaEpoch(s => { s.OnCleanup(() => log.Add("m")); return null; }));
 
             tree.Dispose();
 
-            CollectionAssert.AreEqual(new[] { "c", "b", "a" }, log);
+            CollectionAssert.AreEqual(new[] { "m", "a", "x" }, log,
+                "Children detach in reverse attach order (not reverse key order, which would be x, m, a)");
         }
 
         [Test]
         public void CallWhileDetaching_Throws() {
             Exception caught = null;
 
-            using (var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+            var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
                 var dock = s.Call(new Dock());
                 dock.Call("k", new LambdaEpoch(s => {
                     s.OnCleanup(() => {
@@ -117,9 +193,9 @@ namespace Spoke.Tests {
                     return null;
                 }));
                 return null;
-            }))) {
-                // Tree disposes here on scope exit
-            }
+            }));
+
+            tree.Dispose();
 
             Assert.IsNotNull(caught, "Dock.Call during detaching should throw");
         }
