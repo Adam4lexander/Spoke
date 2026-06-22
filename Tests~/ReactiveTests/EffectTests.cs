@@ -177,17 +177,24 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void EffectT_ExposesSignalAndUpdatesOnInnerStateChange() {
-            var inner = State.Create(1);
+        public void EffectT_ComposesInnerReactives_AndExposesDerivedSignal() {
+            var input = State.Create(1);
+            int output = 0;
 
-            var wrapper = new Effect<int>("w", s => inner);
-            using var tree = SpokeTree.SpawnManual(wrapper);
+            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+                var derived = s.Effect(s => {
+                    var doubled = s.Memo(s => s.D(input) * 2);
+                    var plusOne = s.Memo(s => s.D(doubled) + 1);
+                    return plusOne;
+                });
+                s.Effect(s => output = s.D(derived));
+            }));
             tree.Flush();
-            Assert.AreEqual(1, wrapper.Now);
+            Assert.AreEqual(3, output);    // input 1 -> doubled 2 -> plusOne 3
 
-            inner.Set(42);
+            input.Set(5);
             tree.Flush();
-            Assert.AreEqual(42, wrapper.Now);
+            Assert.AreEqual(11, output);   // input 5 -> doubled 10 -> plusOne 11
         }
 
         [Test]
