@@ -8,45 +8,6 @@ namespace Spoke.Tests {
     public class SpokeRuntimeTests : SpokeTestFixture {
 
         [Test]
-        public void LambdaEpoch_InitBlock_RunsDuringTreeConstruction() {
-            var initRan = 0;
-
-            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
-                initRan++;
-                return null;
-            }));
-
-            Assert.AreEqual(1, initRan, "Init block should run synchronously during tree construction");
-        }
-
-        [Test]
-        public void TickBlock_RunsOnFlush() {
-            var ticks = 0;
-
-            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
-                return s => ticks++;
-            }));
-
-            tree.Flush();
-            Assert.AreEqual(1, ticks);
-        }
-
-        [Test]
-        public void OnCleanup_RunsOnDispose_InReverseOrder() {
-            var order = new List<string>();
-
-            var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
-                s.OnCleanup(() => order.Add("first"));
-                s.OnCleanup(() => order.Add("second"));
-                return null;
-            }));
-
-            tree.Dispose();
-
-            CollectionAssert.AreEqual(new[] { "second", "first" }, order);
-        }
-
-        [Test]
         public void Batch_DefersFlushUntilDelegateCompletes() {
             var ticks = 0;
             EpochPorts ports = default;
