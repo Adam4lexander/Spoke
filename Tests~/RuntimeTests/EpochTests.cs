@@ -7,13 +7,10 @@ namespace Spoke.Tests {
     [TestFixture]
     public class EpochTests : SpokeTestFixture {
 
-        sealed class CounterDisposable : IDisposable {
-            public int Disposed;
-            public void Dispose() => Disposed++;
-        }
-
-        sealed class ThrowingDisposable : IDisposable {
-            public void Dispose() => throw new Exception("dispose boom");
+        sealed class Disposable : IDisposable {
+            readonly Action onDispose;
+            public Disposable(Action onDispose) => this.onDispose = onDispose;
+            public void Dispose() => onDispose();
         }
 
         [Test]
@@ -36,7 +33,7 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void TickBlock_NotInvoked_DuringConstruction_OnlyOnFlush() {
+        public void TickBlock_InvokedOnFlush() {
             var initRan = false;
             var tickRan = false;
 
@@ -56,17 +53,69 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void Use_IDisposable_DisposedOnDetach() {
-            var resource = new CounterDisposable();
+        public void RequestTick_ReArmsEpoch_AndCoalescesRepeatRequests() {
+            var ticks = 0;
+            EpochPorts ports = default;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                ports = s.Ports;
+                return s => ticks++;
+            }));
+            tree.Flush();
+            Assert.AreEqual(1, ticks, "ticks once on mount");
+
+            ports.RequestTick();
+            tree.Flush();
+            Assert.AreEqual(2, ticks, "RequestTick re-arms the epoch for another tick");
+
+            ports.RequestTick();
+            ports.RequestTick();
+            ports.RequestTick();
+            tree.Flush();
+            Assert.AreEqual(3, ticks, "repeat RequestTicks before a flush coalesce into a single tick");
+        }
+
+        [Test]
+        public void Tick_RollsBackPriorTickAttachments_ButKeepsInitAttachments() {
+            var log = new List<string>();
+            EpochPorts ports = default;
+            var n = 0;
 
             var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
-                s.Use(resource);
+                s.OnCleanup(() => log.Add("init-cleanup"));   // attached in Init: persists across ticks
+                ports = s.Ports;
+                return s => {
+                    var i = n++;
+                    log.Add($"tick:{i}");
+                    s.OnCleanup(() => log.Add($"tick-cleanup:{i}"));  // attached in Tick: rolled back next tick
+                };
+            }));
+
+            tree.Flush();                       // tick 0
+            ports.RequestTick(); tree.Flush();  // tick 1
+            ports.RequestTick(); tree.Flush();  // tick 2
+            tree.Dispose();
+
+            CollectionAssert.AreEqual(new[] {
+                "tick:0", "tick-cleanup:0",   // tick 1 rolls back tick 0's attachment before rebuilding
+                "tick:1", "tick-cleanup:1",   // tick 2 rolls back tick 1's
+                "tick:2", "tick-cleanup:2",   // dispose rolls back tick 2's
+                "init-cleanup",               // the Init attachment runs only on detach
+            }, log);
+        }
+
+        [Test]
+        public void Use_IDisposable_DisposedOnDetach() {
+            var disposed = 0;
+
+            var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                s.Use(new Disposable(() => disposed++));
                 return null;
             }));
-            Assert.AreEqual(0, resource.Disposed);
+            Assert.AreEqual(0, disposed);
 
             tree.Dispose();
-            Assert.AreEqual(1, resource.Disposed);
+            Assert.AreEqual(1, disposed);
         }
 
         [Test]
@@ -211,17 +260,15 @@ namespace Spoke.Tests {
         [Test]
         public void Detach_RunsAttachmentsInReverseOrder_AcrossMixedTypes() {
             var log = new List<string>();
-            var resourceA = new CounterDisposable();
-            var resourceB = new CounterDisposable();
 
             var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
                 s.Call(new LambdaEpoch(s => {
                     s.OnCleanup(() => log.Add("childA-cleanup"));
                     return null;
                 }));
-                s.Use(resourceA);
+                s.Use(new Disposable(() => log.Add("resourceA")));
                 s.OnCleanup(() => log.Add("cleanup-mid"));
-                s.Use(resourceB);
+                s.Use(new Disposable(() => log.Add("resourceB")));
                 s.Call(new LambdaEpoch(s => {
                     s.OnCleanup(() => log.Add("childB-cleanup"));
                     return null;
@@ -232,10 +279,8 @@ namespace Spoke.Tests {
             tree.Dispose();
 
             CollectionAssert.AreEqual(
-                new[] { "childB-cleanup", "cleanup-mid", "childA-cleanup" },
+                new[] { "childB-cleanup", "resourceB", "cleanup-mid", "resourceA", "childA-cleanup" },
                 log);
-            Assert.AreEqual(1, resourceA.Disposed);
-            Assert.AreEqual(1, resourceB.Disposed);
         }
 
         [Test]
@@ -244,13 +289,13 @@ namespace Spoke.Tests {
             Errors.ExpectErrors();
 
             var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                s.OnCleanup(() => lastRan = true);          // runs after the throwing one (reverse order)
                 s.OnCleanup(() => throw new Exception("boom"));
-                s.OnCleanup(() => lastRan = true);
                 return null;
             }));
             tree.Dispose();
 
-            Assert.IsTrue(lastRan, "Later OnCleanup should run even when a sibling cleanup throws");
+            Assert.IsTrue(lastRan, "A cleanup that runs after a throwing one should still run");
             Assert.Greater(Errors.Entries.Count, 0, "The runtime should have logged at least one entry");
         }
 
@@ -260,13 +305,13 @@ namespace Spoke.Tests {
             Errors.ExpectErrors();
 
             var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
-                s.Use(new ThrowingDisposable());
-                s.OnCleanup(() => lastRan = true);
+                s.OnCleanup(() => lastRan = true);          // runs after the throwing dispose (reverse order)
+                s.Use(new Disposable(() => throw new Exception("dispose boom")));
                 return null;
             }));
             tree.Dispose();
 
-            Assert.IsTrue(lastRan);
+            Assert.IsTrue(lastRan, "A cleanup that runs after a throwing dispose should still run");
             Assert.Greater(Errors.Entries.Count, 0);
         }
 
