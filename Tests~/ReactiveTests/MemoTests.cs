@@ -9,9 +9,11 @@ namespace Spoke.Tests {
         [Test]
         public void Memo_Now_ReturnsComputedValue() {
             var src = State.Create(5);
+            ISignal<int> doubled = null;
 
-            var doubled = new Memo<int>("d", s => s.D(src) * 2);
-            using var tree = SpokeTree.SpawnManual(doubled);
+            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+                doubled = s.Memo(s => s.D(src) * 2);
+            }));
             tree.Flush();
             Assert.AreEqual(10, doubled.Now);
 
@@ -24,9 +26,11 @@ namespace Spoke.Tests {
         public void Memo_RecomputesOnDependencyChange() {
             var a = State.Create(2);
             var b = State.Create(3);
+            ISignal<int> sum = null;
 
-            var sum = new Memo<int>("sum", s => s.D(a) + s.D(b));
-            using var tree = SpokeTree.SpawnManual(sum);
+            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+                sum = s.Memo(s => s.D(a) + s.D(b));
+            }));
             tree.Flush();
             Assert.AreEqual(5, sum.Now);
 
@@ -72,11 +76,13 @@ namespace Spoke.Tests {
             var src = State.Create(0);
             var log = new List<string>();
 
-            using var tree = SpokeTree.SpawnManual(new Memo<int>("m", s => {
-                var v = s.D(src);
-                log.Add($"compute:{v}");
-                s.OnCleanup(() => log.Add($"cleanup:{v}"));
-                return v;
+            using var tree = SpokeTree.SpawnManual(new Effect("root", s => {
+                s.Memo(s => {
+                    var v = s.D(src);
+                    log.Add($"compute:{v}");
+                    s.OnCleanup(() => log.Add($"cleanup:{v}"));
+                    return v;
+                });
             }));
             tree.Flush();
 
@@ -87,10 +93,10 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void Memo_AndInnerEffect_AttachedInOuterTick_TickInTreeCoordOrderAfterOuter() {
-            // Per the docs' "Deferred Execution" rule: nodes attached during a tick don't run inside
-            // that same tick — they're queued and ticked by the SpokeTree in tree-coord order after
-            // the outer tick returns. Within that order: Memo (attached first) ticks before Effect.
+        public void Memo_Recompute_PropagatesToDependentEffect() {
+            // A Memo feeding a dependent Effect. On mount, both run after the outer that created them
+            // (deferred) and in tree-coord order (memo before effect). When src changes, the memo
+            // recomputes and the dependent effect re-runs with the new value.
             var log = new List<string>();
             var src = State.Create(0);
 
