@@ -49,3 +49,7 @@ Thumbs.db
 /Examples.meta
 /Docs.meta
 /Docs/**/*.meta
+
+# The hand-authored test project lives in the Unity-ignored Tests~ folder.
+# It is NOT an auto-generated csproj, so re-include it despite the *.csproj rule above.
+!/Tests~/Spoke.Tests.csproj
