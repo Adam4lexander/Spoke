@@ -268,5 +268,32 @@ namespace Spoke.Tests {
                 "Changing 'a' must cause exactly ONE re-run. Writing 'b' mid-run — before re-reading it — " +
                 "must not schedule a redundant second re-run.");
         }
+
+        [Test]
+        public void EffectT_BlockReturnsNull_ExposesDefault() {
+            var observed = -1;
+
+            using var tree = SpokeTree.Spawn(new Effect("root", s => {
+                var derived = s.Effect<int>(s => null);
+                s.Effect(s => observed = s.D(derived));
+            }));
+
+            Assert.AreEqual(0, observed);
+        }
+
+        [Test]
+        public void EffectT_BlockReturnsNullAfterValue_ResetsToDefault() {
+            var hasValue = State.Create(true);
+            var observed = -1;
+
+            using var tree = SpokeTree.Spawn(new Effect("root", s => {
+                var derived = s.Effect<int>(s => s.D(hasValue) ? s.Memo(s => 7) : null);
+                s.Effect(s => observed = s.D(derived));
+            }));
+            Assert.AreEqual(7, observed);
+
+            hasValue.Set(false);
+            Assert.AreEqual(0, observed);
+        }
     }
 }

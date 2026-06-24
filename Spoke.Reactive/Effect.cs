@@ -33,7 +33,7 @@ namespace Spoke {
             if (result is ISignal<T> signal) {
                 s.Subscribe(signal, x => state.Set(x));
             }
-            s.Call(new LambdaEpoch("Deferred Initializer", s => s => state.Set(result.Now)));
+            s.Call(new LambdaEpoch("Deferred Initializer", s => s => state.Set(result != null ? result.Now : default)));
         };
 
         public SpokeHandle Subscribe(Action action) 
