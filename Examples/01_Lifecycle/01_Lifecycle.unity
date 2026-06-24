@@ -217,7 +217,7 @@ GameObject:
   - component: {fileID: 1469477500}
   - component: {fileID: 1469477499}
   m_Layer: 0
-  m_Name: HelloSpoke
+  m_Name: Lifecycle_Example
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

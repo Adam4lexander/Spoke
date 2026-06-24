@@ -96,7 +96,7 @@ namespace Spoke {
         }
 
         // Attempts to flush pending trees, if we're not being held and there are trees scheduled.
-        // May be called recursively. If more trees are schedule during a flush, then decide if they flush nested.
+        // May be called recursively. If more trees are scheduled during a flush, then decide if they flush nested.
         void TryFlush() {
             const long maxPasses = 100; // Infinite loop guard. Max number of oscillations.
             if (holdCount > 0 || !HasPending()) return;
@@ -104,7 +104,7 @@ namespace Spoke {
             SpokeTree prev = null;
             do {
                 if (passCount >= maxPasses) {
-                    SpokeError.Log($"SpokeRuntime exceeded oscillation limit. Pending SpokeTree's are cleared to avoid infinite loops. The next scheduled tree was {scheduledTrees.PeekMin()}", null);
+                    SpokeError.Log($"SpokeRuntime exceeded oscillation limit. Pending SpokeTrees are cleared to avoid infinite loops. The next scheduled tree was {scheduledTrees.PeekMin()}", null);
                     while (scheduledTrees.Count > 0) scheduledTrees.RemoveMin();
                     break;
                 }
@@ -126,8 +126,8 @@ namespace Spoke {
         }
 
         // Delivers a tick to the given tree.
-        // Sets the runtimes current flush layer to the tree's flush layer, and restores it afterwards.
-        // The runtimes flush layer determines outcome whether TryFlush() flushes nested or not.
+        // Sets the runtime's current flush layer to the tree's flush layer, and restores it afterwards.
+        // The runtime's flush layer determines whether TryFlush() flushes nested or not.
         void Friend.TickTree(SpokeTree tree) {
             var storeLayer = layer;
             layer = Math.Min(tree.FlushLayer, layer);
@@ -144,14 +144,14 @@ namespace Spoke {
 
         void Friend.TryScopedLayerBoost(SpokeTree tree, Action onPopped) {
             // Boosted trees only possible when we're already flushing and the incoming tree's
-            // FlushLayer has equal or greater priority then the currently flushing tree.
+            // FlushLayer has equal or greater priority than the currently flushing tree.
             // Smaller numbers are higher priority
             var isPossible = Frames.Count > 0 && tree.FlushLayer <= layer;
             if (!isPossible) {
                 onPopped();
                 return;
             }
-            // Incoming tree may eager tick as many times it wants, up until the frame it was
+            // Incoming tree may eager tick as many times as it wants, up until the frame it was
             // created in is popped from the stack.
             var topHandle = new Handle(this, frames.Count - 1, versions[versions.Count - 1]);
             topHandle.OnPopSelf(onPopped);

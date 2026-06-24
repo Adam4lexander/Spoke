@@ -45,7 +45,7 @@ namespace Spoke {
     }
 
     /// <summary>
-    /// Efficiently encodes up to 16 tree layers, with 256 nodes per layer. For Fast array sorting.
+    /// Efficiently encodes up to 16 tree layers, with 256 nodes per layer. For fast array sorting.
     /// </summary>
     public readonly struct PackedTreeCoords128 : IComparable<PackedTreeCoords128> {
 

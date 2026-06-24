@@ -13,7 +13,7 @@ namespace Spoke {
             List<Epoch> GetChildren(List<Epoch> storeIn = null); 
         }
         
-        // Attached epochs are stored in this dictionary, instead of Epochs normal attachment list.
+        // Attached epochs are stored in this dictionary, instead of Epoch's normal attachment list.
         Dictionary<object, Epoch> dynamicChildren = new();
         bool isDetaching;
         long childIndex;  // Monotonically increasing index for assigning tree-coords to attachments
@@ -30,12 +30,12 @@ namespace Spoke {
         /// Attaches an epoch, bound to the given key.
         /// If the key already maps to an existing epoch, that epoch is detached first.
         /// The key can be anything: a string, object reference.. Whatever is convenient.
-        /// Epochs are structural descendants of the dock, they extend from the docks tree-coords, 
+        /// Epochs are structural descendants of the dock, they extend from the dock's tree-coords,
         /// and they're assigned the same ticker used by the dock.
         /// </summary>
         public T Call<T>(object key, T epoch) where T : Epoch {
             if (isDetaching) {
-                // In case a childs cleanup function tries to attach more epochs
+                // In case a child's cleanup function tries to attach more epochs
                 throw new Exception("Cannot Call while detaching");
             }
             // Push a stack frame to reflect the docking action

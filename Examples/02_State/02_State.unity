@@ -314,7 +314,7 @@ GameObject:
   - component: {fileID: 1469477500}
   - component: {fileID: 1469477501}
   m_Layer: 0
-  m_Name: HelloState
+  m_Name: State_Example
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

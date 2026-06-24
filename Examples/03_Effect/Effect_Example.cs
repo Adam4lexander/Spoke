@@ -41,27 +41,30 @@ namespace Spoke.Examples {
             // Effect: Mounts immediately and remounts when any dependency is triggered
             s.Effect(FlashSphere("Effect", effectSphere), flashCommand);
 
-            // Phase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency changes.
+            // Phase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency triggers.
             s.Phase(mountOuterPhase, s => {
 
-                // This effect is scoped to the outer phase. It mounts when the outer phase is mounted.
+                // This effect is nested in the phase. It's mounted when the phase is mounted.
                 s.Effect(FlashSphere("Phase (Outer)", outerPhaseSphere));
 
-                // This inner phase only mounts while `mountInnerPhase` is true, and will remount on trigger
+                // This inner phase only mounts while `mountInnerPhase` is true
                 s.Phase(mountInnerPhase, FlashSphere("Phase (Inner)", innerPhaseSphere), flashCommand);
 
             }, flashCommand);
 
-            // Reaction: Does *not* mount until a dependency is triggered.
-            // It runs only when triggered -- perfect for one-shot logic that doesn't need to persist
+            // Reaction: Does not mount until a dependency is triggered.
             s.Reaction(FlashSphere("Reaction", reactionSphere), flashCommand);
         }
 
-        // EffectBlock is a core Spoke abstraction — it's just:
-        //     public delegate void EffectBlock(EffectBuilder s);
+        // EffectBlock is a function delegate type given to effect/phase/reaction.
+        // When you see `s.Effect(s => { })`, the `s => { }` is an EffectBlock.
         //
-        // You can return them like functions, allowing modular, parameterized logic.
-        // This one blinks a sphere green, waits 0.5s, then turns it blue. On cleanup, resets to red.
+        // Sometimes we want to extract the EffectBlock instead of declaring them inline.
+        // So it's re-usable, parameterisable, and Init won't become a huge nested structure.
+        //
+        // FlashSphere is a double lambda. A function returning a function.
+        // This pattern lets us return a parameterised EffectBlock, with `label` and `sphere`
+        // parameters captured in a closure.
         EffectBlock FlashSphere(string label, Sphere sphere) => s => {
 
             var origLabel = sphere.label.text;

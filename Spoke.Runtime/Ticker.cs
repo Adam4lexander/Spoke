@@ -34,9 +34,9 @@ namespace Spoke {
         protected override sealed bool AutoArmTickAfterInit => false;
 
         /// <summary>
-        /// Override to configure and wire up the tickers behaviour. Bootstrap is called during Init,
-        /// and it's passed a builder DSL thats only valid during the bootstrap block.
-        /// The returned epoch is attached directly under the ticker, and it's the root of the tickers managed tree.
+        /// Override to configure and wire up the ticker's behaviour. Bootstrap is called during Init,
+        /// and it's passed a builder DSL that's only valid during the bootstrap block.
+        /// The returned epoch is attached directly under the ticker, and it's the root of the ticker's managed tree.
         /// </summary>
         protected abstract Epoch Bootstrap(TickerBuilder s);
 
