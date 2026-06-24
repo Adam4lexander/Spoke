@@ -19,7 +19,7 @@ namespace Spoke {
 
     /// <summary>
     /// A State is a read-write reactive value with event subscriptions
-    /// Its invokes subscribers with the new value when it changes
+    /// It invokes subscribers with the new value when it changes
     /// </summary>
     public interface IState<T> : ISignal<T> {
         void Set(T value);
@@ -36,7 +36,7 @@ namespace Spoke {
 
     /// <summary>
     /// A State is a read-write reactive value with event subscriptions
-    /// Its invokes subscribers with the new value when it changes
+    /// It invokes subscribers with the new value when it changes
     /// </summary>
     public class State<T> : IState<T> {
         T value;

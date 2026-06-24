@@ -4,9 +4,9 @@ using System;
 namespace Spoke {
 
     /// <summary>
-    /// When an uncaught exception is thrown in the tree, its wrapped in a SpokeException and bubbles
+    /// When an uncaught exception is thrown in the tree, it's wrapped in a SpokeException and bubbles
     /// up the chain of tickers, marking each as faulted on the way.
-    /// Creates a snapshot of Spokes virtual call stack, for debugging.
+    /// Creates a snapshot of Spoke's virtual call stack, for debugging.
     /// </summary>
     public sealed class SpokeException : Exception {
         // TODO: Remove strong refs to Epoch instances. Take data snapshot, enough for toString() of

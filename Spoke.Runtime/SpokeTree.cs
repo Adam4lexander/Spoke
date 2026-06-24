@@ -7,8 +7,8 @@ namespace Spoke {
     /// <summary>
     /// Root ticker for a Spoke tree.
     /// It hosts the top-most epoch (Main) and serves as the entrypoint for driving ticks into the tree.
-    /// In Auto mode, its orchestrated by the Spoke runtime.
-    /// In Manual mode, ticks are delivered explicitely via user code.
+    /// In Auto mode, it's orchestrated by the Spoke runtime.
+    /// In Manual mode, ticks are delivered explicitly via user code.
     /// </summary>
     public sealed class SpokeTree<T> : SpokeTree where T : Epoch {
 
@@ -39,7 +39,7 @@ namespace Spoke {
                 (this as Ticker.Friend).SetToManual();  // Stops me requesting ticks from Spoke runtime
             } else {
                 command = CommandKind.Flush;            // Auto trees always have command=Flush
-                isLayerBoosted = true;                  // Boosts flush layer priority inside creators scope
+                isLayerBoosted = true;                  // Boosts flush layer priority inside creator's scope
                 (SpokeRuntime.Local as SpokeRuntime.Friend).TryScopedLayerBoost(this, () => isLayerBoosted = false);
             }
 
@@ -109,7 +109,7 @@ namespace Spoke {
         /// </summary>
         public override void Flush() {
             if (FlushMode != FlushMode.Manual) {
-                throw new Exception("Only trees with Manual flush policy can be explicitely flushed");
+                throw new Exception("Only trees with Manual flush policy can be explicitly flushed");
             }
             if ((this as Epoch.Friend).GetControlHandle().IsAlive) {
                 throw new Exception("Re-entrant flush detected");
@@ -125,7 +125,7 @@ namespace Spoke {
         /// </summary>
         public override void Tick() {
             if (FlushMode != FlushMode.Manual) {
-                throw new Exception("Only trees with Manual flush policy can be explicitely ticked");
+                throw new Exception("Only trees with Manual flush policy can be explicitly ticked");
             }
             if ((this as Epoch.Friend).GetControlHandle().IsAlive) {
                 throw new Exception("Re-entrant flush detected");
@@ -193,7 +193,7 @@ namespace Spoke {
         }
 
         /// <summary>
-        /// Disposes the entire tree, but detaching all of its descendants.
+        /// Disposes the entire tree, by detaching all of its descendants.
         /// If the tree is flushing, disposal is deferred immediately after the flush completes.
         /// </summary>
         public void Dispose() {

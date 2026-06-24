@@ -14,7 +14,7 @@ namespace Spoke {
 
     /// <summary>
     /// An Effect<T> is similar to Memo<T>, in that it's a reactive signal
-    /// However, it's EffectBlock<T> returns an ISignal<T>, and not a raw T value like memos do
+    /// However, its EffectBlock<T> returns an ISignal<T>, and not a raw T value like memos do
     /// It's also capable of attaching its own sub-effects, memos or cleanup logic
     /// This makes Effect<T> nestable and composable
     /// </summary> 

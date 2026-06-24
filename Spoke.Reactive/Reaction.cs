@@ -1,7 +1,7 @@
 namespace Spoke {
 
     /// <summary>
-    /// An Effect that skips its first invocation, only running when a trigger explicitely fires
+    /// An Effect that skips its first invocation, only running when a trigger explicitly fires
     /// </summary>
     public sealed class Reaction : BaseEffect {
 

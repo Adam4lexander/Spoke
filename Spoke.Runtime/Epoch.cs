@@ -11,7 +11,7 @@ namespace Spoke {
     /// They have three lifecycle phases: Attach, Tick and Detach
     /// 
     /// They maintain their own list of sub-attachments.
-    /// Init adds attachments which persist over the epochs lifetime. And Tick adds ephemeral
+    /// Init adds attachments which persist over the epoch's lifetime. And Tick adds ephemeral
     /// attachments that exist until the next Tick.
     /// When detaching, the epoch unwinds its list of attachments, detaching each one in turn.
     /// </summary>
@@ -172,7 +172,7 @@ namespace Spoke {
             return parent;
         }
 
-        // An attachment record in the attachment list. Its a fake union-type. All the
+        // An attachment record in the attachment list. It's a fake union-type. All the
         // kinds of attachment are represented by this struct. Not all fields are relevant
         // for each.
         readonly struct AttachRecord {
