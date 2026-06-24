@@ -1290,7 +1290,7 @@ GameObject:
   - component: {fileID: 1469477500}
   - component: {fileID: 1469477501}
   m_Layer: 0
-  m_Name: HelloEffect
+  m_Name: Effect_Example
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

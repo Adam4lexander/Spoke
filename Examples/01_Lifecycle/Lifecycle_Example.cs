@@ -6,11 +6,9 @@ namespace Spoke.Examples {
      
         protected override void Init(EffectBuilder s) {
 
-            // Runs while the behaviour is Awake (from Awake to OnDestroy)
-            s.Phase(IsAwake, s => {
-                Debug.Log("IsAwake Mounted");
-                s.OnCleanup(() => Debug.Log("Disposing IsAwake"));
-            });
+            // Init is mounted in Awake, and cleaned up in OnDestroy
+            Debug.Log("Awake Mounted");
+            s.OnCleanup(() => Debug.Log("Disposing Awake"));
 
             // Runs while the behaviour is Enabled (from OnEnable to OnDisable)
             s.Phase(IsEnabled, s => {
@@ -23,10 +21,6 @@ namespace Spoke.Examples {
                 Debug.Log("IsStarted Mounted");
                 s.OnCleanup(() => Debug.Log("Disposing IsStarted"));
             });
-
-            // Init runs first -- before Awake -- and behaves like a permanent effect
-            Debug.Log("Init Mounted");
-            s.OnCleanup(() => Debug.Log("Disposing Init"));
         }
     }
 }

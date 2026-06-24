@@ -15,9 +15,9 @@ namespace Spoke.Examples {
 
         protected override void Init(EffectBuilder s) {
 
-            // Memo<T> represents *derived* state.
+            // Memo<T> represents derived state.
             // It automatically tracks dependencies and recalculates only when they change.
-            // Unlike State<T>, you can't Set() it manually — its value is *computed*.
+            // Unlike State<T>, you can't Set() it manually -- its value is computed.
             //
             // Here, `evenOdd` is a derived value that updates whenever `count` changes.
             var evenOdd = s.Memo(s => s.D(count) % 2 == 0 ? "Even" : "Odd");
