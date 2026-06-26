@@ -21,7 +21,7 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
 
-            var mesh = s.Effect(InitMesh);
+            var mesh = s.Effect("InitMesh", InitMesh);
 
             var circles = s.Memo(s => {
                 var list = new List<Circle>();
@@ -52,13 +52,13 @@ namespace Spoke.Examples.BaseDefence {
             var mesh = new Mesh { name = "RangeArea" };
             mesh.MarkDynamic();
             meshFilterNow.sharedMesh = mesh;
-            s.Effect(WithSafeDestroy(mesh));
+            s.Effect("WithSafeDestroy", WithSafeDestroy(mesh));
 
             var material = new Material(Shader.Find("Sprites/Default"));
             meshRendererNow.sharedMaterial = material;
-            s.Effect(WithSafeDestroy(material));
+            s.Effect("WithSafeDestroy", WithSafeDestroy(material));
 
-            s.Effect(s => {
+            s.Effect("SyncColour", s => {
                 var colourNow = s.D(colour);
                 colourNow.a = 1f;
                 material.color = colourNow;
