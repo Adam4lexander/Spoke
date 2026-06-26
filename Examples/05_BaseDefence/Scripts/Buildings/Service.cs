@@ -17,21 +17,17 @@ namespace Spoke.Examples.BaseDefence {
         State<int> hop = new(int.MaxValue);
 
         protected override void Init(EffectBuilder s) {
-
             if (!building.IsCore) {
                 s.Subscribe(resettle, () => hop.Set(int.MaxValue));
             }
 
-            var position = s.Effect(WatchPosition);
-
             s.Phase(IsEnabled, s => {
-                var positionNow = s.D(position);
+                var positionNow = s.D(building.Position);
                 var rangeNow = s.D(range);
 
                 s.OnCleanup(() => {
                     if (hop.Now != int.MaxValue) resettle.Invoke();
                 });
-
                 s.Effect(Propagate(positionNow), resettle);
 
                 var reachable = s.Memo(s => s.D(hop) != int.MaxValue);
@@ -40,21 +36,6 @@ namespace Spoke.Examples.BaseDefence {
                 });
             });
         }
-
-        EffectBlock<Vector3> WatchPosition => s => {
-            var position = State.Create(transform.position);
-
-            IEnumerator onUpdate() {
-                while (true) {
-                    position.Set(transform.position);
-                    yield return null;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
-
-            return position;
-        };
 
         EffectBlock Propagate(Vector3 position) => s => {
             if (building.IsCore) {

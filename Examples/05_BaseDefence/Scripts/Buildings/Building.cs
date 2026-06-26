@@ -10,22 +10,58 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float radius = 0.6f;
         [SerializeField] float maxHp = 5;
         [SerializeField] bool isCore = false;
+        [SerializeField] UState<float> unservicedDim = new(0.35f);
 
         public bool IsCore => isCore;
 
         State<bool> hasService = new(false);
         public ISignal<bool> HasService => hasService;
 
+        State<Vector3> position = new();
+        public ISignal<Vector3> Position => position;
+
         protected override void Init(EffectBuilder s) {
-            s.Effect(ControlHasService);
+            s.Phase(IsEnabled, s => {
+                s.Effect(WatchPosition);
+                s.Effect(WatchHasService);
+                s.Effect(DimWhenUnserviced);
+            });
         }
 
-        // A building has service while any active service zone covers it. The service
-        // network decides which zones are live (see Service); a building just consumes.
-        // The core reads as serviced too, since its own always-on zone covers it.
-        EffectBlock ControlHasService => s => {
-            var watch = s.Use(GameState.Instance.ServiceZone.Watch(new Circle(transform.position, radius)));
+        EffectBlock WatchPosition => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    position.Set(transform.position);
+                    yield return null;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
+
+        EffectBlock WatchHasService => s => {
+            var watch = s.Use(GameState.Instance.ServiceZone.Watch(new Circle(s.D(Position), radius)));
             s.Effect(s => hasService.Set(s.D(watch.Items).Count > 0));
+        };
+
+        EffectBlock DimWhenUnserviced => s => {
+            var renderers = GetComponentsInChildren<Renderer>();
+            var block = new MaterialPropertyBlock();
+
+            foreach (var renderer in renderers) {
+                var litColour = renderer.sharedMaterial.color;
+                s.Effect(s => {
+                    if (s.D(hasService)) return;
+                    var colour = litColour * s.D(unservicedDim);
+                    colour.a = litColour.a;
+                    renderer.GetPropertyBlock(block);
+                    block.SetColor("_Color", colour);
+                    renderer.SetPropertyBlock(block);
+                    s.OnCleanup(() => {
+                        renderer.SetPropertyBlock(null);
+                    });
+                });
+            }
         };
 
         void OnDrawGizmosSelected() {
