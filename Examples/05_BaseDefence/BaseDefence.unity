@@ -318,6 +318,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb6413ca59998d94ebcbbcbbe39854fc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  debugMode:
+    value: 0
+  debugColour:
+    value: {r: 1, g: 0.7372549, b: 0, a: 1}
 --- !u!4 &822357750
 Transform:
   m_ObjectHideFlags: 0

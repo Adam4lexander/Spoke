@@ -11,6 +11,8 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float maxHp = 5;
         [SerializeField] bool isCore = false;
 
+        public bool IsCore => isCore;
+
         State<bool> hasService = new(false);
         public ISignal<bool> HasService => hasService;
 
@@ -18,11 +20,12 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(ControlHasService);
         }
 
+        // A building has service while any active service zone covers it. The service
+        // network decides which zones are live (see Service); a building just consumes.
+        // The core reads as serviced too, since its own always-on zone covers it.
         EffectBlock ControlHasService => s => {
-            if (isCore) {
-                hasService.Set(true);
-                return;
-            }
+            var watch = s.Use(GameState.Instance.ServiceZone.Watch(new Circle(transform.position, radius)));
+            s.Effect(s => hasService.Set(s.D(watch.Items).Count > 0));
         };
 
         void OnDrawGizmosSelected() {
