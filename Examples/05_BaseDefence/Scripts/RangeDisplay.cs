@@ -23,10 +23,20 @@ namespace Spoke.Examples.BaseDefence {
 
             var mesh = s.Effect(InitMesh);
 
+            var circles = s.Memo(s => {
+                var list = new List<Circle>();
+                if (s.D(buildings) != null) {
+                    foreach (var building in s.D(buildings)) {
+                        list.Add(new Circle(building.transform.position, s.D(building.Range)));
+                    }
+                }
+                return list;
+            });
+
             s.Phase(IsEnabled, s => {
                 var meshNow = s.D(mesh);
                 if (meshNow == null) return;
-                s.Effect(SyncMeshGeom(meshNow));
+                s.Effect(SyncMeshGeom(meshNow, s.D(circles)));
             });
         }
 
@@ -42,17 +52,11 @@ namespace Spoke.Examples.BaseDefence {
             var mesh = new Mesh { name = "RangeArea" };
             mesh.MarkDynamic();
             meshFilterNow.sharedMesh = mesh;
-            s.OnCleanup(() => {
-                if (Application.isPlaying) Destroy(mesh);
-                else DestroyImmediate(mesh);
-            });
+            s.Effect(WithSafeDestroy(mesh));
 
             var material = new Material(Shader.Find("Sprites/Default"));
             meshRendererNow.sharedMaterial = material;
-            s.OnCleanup(() => {
-                if (Application.isPlaying) Destroy(material);
-                else DestroyImmediate(material);
-            });
+            s.Effect(WithSafeDestroy(material));
 
             s.Effect(s => {
                 var colourNow = s.D(colour);
@@ -63,22 +67,30 @@ namespace Spoke.Examples.BaseDefence {
             return State.Create(mesh);
         };
 
-        EffectBlock SyncMeshGeom(Mesh mesh) => s => {
-            if (s.D(buildings) == null || s.D(buildings).Count == 0) return;
+        EffectBlock WithSafeDestroy(Object obj) => s => {
+            s.OnCleanup(() => {
+                if (obj == null) return;
+                if (Application.isPlaying) Destroy(obj);
+                else DestroyImmediate(obj);
+            });
+        };
+
+        EffectBlock SyncMeshGeom(Mesh mesh, List<Circle> circles) => s => {
+            if (circles == null || circles.Count == 0) return;
 
             var verts = new List<Vector3>();
             var tris = new List<int>();
 
-            foreach (var building in s.D(buildings)) {
-                if (s.D(building.Range) <= 0f) return;
+            foreach (var circle in circles) {
+                if (circle.Radius <= 0f) return;
 
                 var center = verts.Count;
-                verts.Add(transform.InverseTransformPoint(building.transform.position));
+                verts.Add(transform.InverseTransformPoint(circle.Center));
 
                 var ringStart = verts.Count;
                 for (var i = 0; i < s.D(segmentsPerCircle); i++) {
                     var a = (i / (float)s.D(segmentsPerCircle)) * Mathf.PI * 2f;
-                    var world = building.transform.position + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * s.D(building.Range);
+                    var world = circle.Center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * circle.Radius;
                     verts.Add(transform.InverseTransformPoint(world));
                 }
 
