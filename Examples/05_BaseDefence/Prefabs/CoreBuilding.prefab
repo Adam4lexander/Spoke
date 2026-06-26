@@ -176,6 +176,7 @@ GameObject:
   m_Component:
   - component: {fileID: 203692540748043042}
   - component: {fileID: 6561391522022659384}
+  - component: {fileID: 4874990117497117971}
   m_Layer: 0
   m_Name: CoreBuilding
   m_TagString: Untagged
@@ -216,6 +217,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   radius: 0.6
   maxHp: 5
+  isCore: 1
+--- !u!114 &4874990117497117971
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6501176794181837326}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3fdd49a471fc1b6488dd71d7d301293a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  building: {fileID: 6561391522022659384}
+  range: 4
 --- !u!1 &7970535231448366522
 GameObject:
   m_ObjectHideFlags: 0
