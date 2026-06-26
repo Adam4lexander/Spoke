@@ -3,91 +3,74 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Draws the combined coverage of all buildings as one opaque area.
-    // Each building contributes a filled circle (a triangle fan on the ground plane).
-    [ExecuteAlways]
-    public class RangeDisplay : SpokeBehaviour {
+    // Renders a set of circles as one merged opaque coverage area.
+    // It creates and owns its own GameObject + mesh + material, all torn down on cleanup,
+    // and rebuilds the mesh whenever the circles signal changes.
+    public static class RangeDisplay {
 
-        [Header("References")]
-        [SerializeField] UState<MeshFilter> meshFilter;
-        [SerializeField] UState<MeshRenderer> meshRenderer;
+        const int segmentsPerCircle = 48;
 
-        [Header("Attributes")]
-        [SerializeField] UState<int> segmentsPerCircle = new(48);
+        public static EffectBlock Draw(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
 
-        [Header("Inputs")]
-        [SerializeField] UState<List<Circle>> circles = new();
-        [SerializeField] UState<Color> colour = new();
+            var go = new GameObject("RangeDisplay");
+            go.transform.position = Vector3.up * 0.01f;
+            s.Effect("WithSafeDestroy", WithSafeDestroy(go));
 
-        protected override void Init(EffectBuilder s) {
-
-            var mesh = s.Effect("InitMesh", InitMesh);
-
-            s.Phase(IsEnabled, s => {
-                var meshNow = s.D(mesh);
-                if (meshNow == null) return;
-                s.Effect(SyncMeshGeom(meshNow, s.D(circles)));
-            });
-        }
-
-        EffectBlock<Mesh> InitMesh => s => {
-            var meshFilterNow = s.D(meshFilter);
-            var meshRendererNow = s.D(meshRenderer);
-
-            if (meshFilterNow == null || meshRendererNow == null) return null;
-
-            meshRendererNow.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            meshRendererNow.receiveShadows = false;
+            var meshFilter = go.AddComponent<MeshFilter>();
+            var meshRenderer = go.AddComponent<MeshRenderer>();
+            meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            meshRenderer.receiveShadows = false;
 
             var mesh = new Mesh { name = "RangeArea" };
             mesh.MarkDynamic();
-            meshFilterNow.sharedMesh = mesh;
+            meshFilter.sharedMesh = mesh;
             s.Effect("WithSafeDestroy", WithSafeDestroy(mesh));
 
             var material = new Material(Shader.Find("Sprites/Default"));
-            meshRendererNow.sharedMaterial = material;
+            meshRenderer.sharedMaterial = material;
             s.Effect("WithSafeDestroy", WithSafeDestroy(material));
 
-            s.Effect("SyncColour", s => {
+            s.Effect(s => {
                 var colourNow = s.D(colour);
                 colourNow.a = 1f;
                 material.color = colourNow;
             });
 
-            return State.Create(mesh);
+            s.Effect("SyncMeshGeom", SyncMeshGeom(mesh, circles));
         };
 
-        EffectBlock WithSafeDestroy(Object obj) => s => {
+        static EffectBlock WithSafeDestroy(Object obj) => s => {
             s.OnCleanup(() => {
                 if (obj == null) return;
-                if (Application.isPlaying) Destroy(obj);
-                else DestroyImmediate(obj);
+                if (Application.isPlaying) Object.Destroy(obj);
+                else Object.DestroyImmediate(obj);
             });
         };
 
-        EffectBlock SyncMeshGeom(Mesh mesh, List<Circle> circles) => s => {
-            if (circles == null || circles.Count == 0) return;
+        static EffectBlock SyncMeshGeom(Mesh mesh, ISignal<List<Circle>> circles) => s => {
+            var circlesNow = s.D(circles);
+            if (circlesNow == null || circlesNow.Count == 0) return;
 
             var verts = new List<Vector3>();
             var tris = new List<int>();
 
-            foreach (var circle in circles) {
+            foreach (var circle in circlesNow) {
                 if (circle.Radius <= 0f) return;
 
                 var center = verts.Count;
-                verts.Add(transform.InverseTransformPoint(circle.Center));
+                verts.Add(circle.Center);
 
                 var ringStart = verts.Count;
-                for (var i = 0; i < s.D(segmentsPerCircle); i++) {
-                    var a = (i / (float)s.D(segmentsPerCircle)) * Mathf.PI * 2f;
+                for (var i = 0; i < segmentsPerCircle; i++) {
+                    var a = (i / (float)segmentsPerCircle) * Mathf.PI * 2f;
                     var world = circle.Center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * circle.Radius;
-                    verts.Add(transform.InverseTransformPoint(world));
+                    verts.Add(world);
                 }
 
-                for (var i = 0; i < s.D(segmentsPerCircle); i++) {
+                for (var i = 0; i < segmentsPerCircle; i++) {
                     tris.Add(center);
                     tris.Add(ringStart + i);
-                    tris.Add(ringStart + (i + 1) % s.D(segmentsPerCircle));
+                    tris.Add(ringStart + (i + 1) % segmentsPerCircle);
                 }
             }
 
