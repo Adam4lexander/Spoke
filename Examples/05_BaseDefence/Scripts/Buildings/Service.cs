@@ -12,10 +12,9 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] Building building;
 
         [Header("Attributes")]
-        [SerializeField] float range = 5f;
+        [SerializeField] UState<float> range = new(5f);
 
         State<int> hop = new(int.MaxValue);
-        public ISignal<int> Hop => hop;
 
         protected override void Init(EffectBuilder s) {
 
@@ -23,23 +22,42 @@ namespace Spoke.Examples.BaseDefence {
                 s.Subscribe(resettle, () => hop.Set(int.MaxValue));
             }
 
+            var position = s.Effect(WatchPosition);
+
             s.Phase(IsEnabled, s => {
+                var positionNow = s.D(position);
+                var rangeNow = s.D(range);
 
                 s.OnCleanup(() => {
                     if (hop.Now != int.MaxValue) resettle.Invoke();
                 });
 
-                s.Effect(Propagate, resettle);
+                s.Effect(Propagate(positionNow), resettle);
 
                 var reachable = s.Memo(s => s.D(hop) != int.MaxValue);
                 s.Phase(reachable, s => {
                     var zone = GameState.Instance.ServiceZone;
-                    s.Use(zone.Add(this, new Circle(transform.position, range)));
+                    s.Use(zone.Add(this, new Circle(positionNow, rangeNow)));
                 });
             });
         }
 
-        EffectBlock Propagate => s => {
+        EffectBlock<Vector3> WatchPosition => s => {
+            var position = State.Create(transform.position);
+
+            IEnumerator onUpdate() {
+                while (true) {
+                    position.Set(transform.position);
+                    yield return null;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+
+            return position;
+        };
+
+        EffectBlock Propagate(Vector3 position) => s => {
             var zone = GameState.Instance.ServiceZone;
 
             if (building.IsCore) {
@@ -47,20 +65,20 @@ namespace Spoke.Examples.BaseDefence {
                 return;
             }
 
-            var watch = s.Use(zone.Watch(new Circle(transform.position, 0f)));
+            var watch = s.Use(zone.Watch(new Circle(position, 0f)));
 
             s.Effect(s => {
                 var nearest = int.MaxValue;
                 foreach (var entry in s.D(watch.Items)) {
                     if (ReferenceEquals(entry.RefObject, this)) continue;
-                    nearest = Mathf.Min(nearest, s.D(entry.RefObject.Hop));
+                    nearest = Mathf.Min(nearest, s.D(entry.RefObject.hop));
                 }
                 hop.Set(nearest == int.MaxValue ? int.MaxValue : nearest + 1);
             });
         };
 
         void OnDrawGizmosSelected() {
-            var circle = new Circle(transform.position, range);
+            var circle = new Circle(transform.position, range.Now);
             circle.DrawGizmo(Color.red);
         }
     }
