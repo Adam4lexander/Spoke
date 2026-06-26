@@ -11,6 +11,11 @@ namespace Spoke.Examples.BaseDefence {
             Service = 1
         }
 
+        [Header("Level")]
+        [SerializeField] Vector2 dimensions = new Vector2(40f, 40f);
+
+        public Bounds LevelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0f, dimensions.y));
+
         [Header("Debug")]
         [SerializeField] UState<DebugModes> debugMode = new();
         [SerializeField] UState<Color> debugColour = new(Color.green);
@@ -33,5 +38,11 @@ namespace Spoke.Examples.BaseDefence {
             });
             s.Effect(RangeDisplay.Draw(circles, debugColour));
         };
+
+        void OnDrawGizmosSelected() {
+            var bounds = LevelBounds;
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(bounds.center, bounds.size);
+        }
     }
 }
