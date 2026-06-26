@@ -36,8 +36,7 @@ namespace Spoke.Examples.BaseDefence {
 
                 var reachable = s.Memo(s => s.D(hop) != int.MaxValue);
                 s.Phase(reachable, s => {
-                    var zone = GameState.Instance.ServiceZone;
-                    s.Use(zone.Add(this, new Circle(positionNow, rangeNow)));
+                    s.Use(GameState.Instance.ServiceZone.Add(this, new Circle(positionNow, rangeNow)));
                 });
             });
         }
@@ -58,14 +57,12 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock Propagate(Vector3 position) => s => {
-            var zone = GameState.Instance.ServiceZone;
-
             if (building.IsCore) {
                 hop.Set(0);
                 return;
             }
 
-            var watch = s.Use(zone.Watch(new Circle(position, 0f)));
+            var watch = s.Use(GameState.Instance.ServiceZone.Watch(new Circle(position, 0f)));
 
             s.Effect(s => {
                 var nearest = int.MaxValue;
