@@ -5,7 +5,8 @@ using UnityEngine;
 namespace Spoke.Examples.BaseDefence {
 
     public class Power : Building {
-        
 
+        [Header("Attributes")]
+        [SerializeField] int powerPips;
     }
 }

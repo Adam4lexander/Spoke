@@ -154,6 +154,7 @@ MonoBehaviour:
   range:
     value: 1.5
   maxHp: 10
+  powerPips: 0
 --- !u!4 &9068463
 Transform:
   m_ObjectHideFlags: 0
@@ -267,7 +268,7 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 162196441}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!21 &245067991
+--- !u!21 &339148106
 Material:
   serializedVersion: 8
   m_ObjectHideFlags: 0
@@ -304,7 +305,7 @@ Material:
     - _Flip: {r: 1, g: 1, b: 1, a: 1}
     - _RendererColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
---- !u!43 &256006092
+--- !u!43 &735583568
 Mesh:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -563,7 +564,7 @@ GameObject:
   - component: {fileID: 822357750}
   - component: {fileID: 822357749}
   m_Layer: 0
-  m_Name: GameState
+  m_Name: '[!---GameState---!]'
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -825,7 +826,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 245067991}
+  - {fileID: 339148106}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -869,7 +870,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1918691271}
-  m_Mesh: {fileID: 256006092}
+  m_Mesh: {fileID: 735583568}
 --- !u!1 &1953472523
 GameObject:
   m_ObjectHideFlags: 0
@@ -959,6 +960,7 @@ MonoBehaviour:
   range:
     value: 1.5
   maxHp: 10
+  powerPips: 0
 --- !u!4 &2040492075
 Transform:
   m_ObjectHideFlags: 0
