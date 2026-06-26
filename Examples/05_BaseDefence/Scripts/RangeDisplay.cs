@@ -16,22 +16,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<int> segmentsPerCircle = new(48);
 
         [Header("Inputs")]
-        [SerializeField] UState<List<Building>> buildings = new();
+        [SerializeField] UState<List<Circle>> circles = new();
         [SerializeField] UState<Color> colour = new();
 
         protected override void Init(EffectBuilder s) {
 
             var mesh = s.Effect("InitMesh", InitMesh);
-
-            var circles = s.Memo(s => {
-                var list = new List<Circle>();
-                if (s.D(buildings) != null) {
-                    foreach (var building in s.D(buildings)) {
-                        list.Add(new Circle(building.transform.position, s.D(building.Range)));
-                    }
-                }
-                return list;
-            });
 
             s.Phase(IsEnabled, s => {
                 var meshNow = s.D(mesh);
