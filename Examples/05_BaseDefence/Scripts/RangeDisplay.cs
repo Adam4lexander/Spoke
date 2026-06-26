@@ -55,7 +55,7 @@ namespace Spoke.Examples.BaseDefence {
             var tris = new List<int>();
 
             foreach (var circle in circlesNow) {
-                if (circle.Radius <= 0f) return;
+                if (circle.Radius <= 0f) continue;
 
                 var center = verts.Count;
                 verts.Add(circle.Center);
