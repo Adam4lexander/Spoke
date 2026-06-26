@@ -7,6 +7,7 @@ namespace Spoke.Examples.BaseDefence {
     public class Turret : SpokeBehaviour {
 
         [Header("References")]
+        [SerializeField] Building building;
         [SerializeField] GameObject pivot;
         [SerializeField] GameObject fireFrom;
 
@@ -19,7 +20,9 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             targetDirection = fireFrom.transform.forward;
 
-            s.Phase(IsEnabled, s => {
+            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
+
+            s.Phase(isRunning, s => {
                 s.Effect(RotateToTarget);
                 s.Effect(IdleBehaviour);
             });

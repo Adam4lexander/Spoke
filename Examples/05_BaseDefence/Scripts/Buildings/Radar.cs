@@ -7,6 +7,7 @@ namespace Spoke.Examples.BaseDefence {
     public class Radar : SpokeBehaviour {
 
         [Header("References")]
+        [SerializeField] Building building;
         [SerializeField] GameObject dishPivot;
 
         [Header("Attributes")]
@@ -14,8 +15,9 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float dishRotationSpeed;
 
         protected override void Init(EffectBuilder s) {
+            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
 
-            s.Phase(IsEnabled, s => {
+            s.Phase(isRunning, s => {
                 s.Effect(DishAnimation);
             });
         }

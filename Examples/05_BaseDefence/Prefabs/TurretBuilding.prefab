@@ -245,6 +245,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   radius: 0.6
   maxHp: 5
+  isCore: 0
+  unservicedDim:
+    value: 0.35
 --- !u!114 &4941254606368316928
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -257,6 +260,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 39562051cfec3fa4ca71f51f5529051f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  building: {fileID: 1199900657066672085}
   pivot: {fileID: 7629657184877623706}
   fireFrom: {fileID: 6221690417680857805}
   range: 6

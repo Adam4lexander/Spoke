@@ -415,6 +415,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   radius: 0.5
   maxHp: 5
+  isCore: 0
+  unservicedDim:
+    value: 0.35
 --- !u!114 &3667207538581651752
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -427,6 +430,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 304023ace68e8614a9f8a0ff08b6d377, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  building: {fileID: 42374699712382174}
   dishPivot: {fileID: 3603570203389529715}
   range: 6
   dishRotationSpeed: 90
