@@ -24,7 +24,12 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(isRunning, s => {
                 s.Effect(RotateToTarget);
-                s.Effect(IdleBehaviour);
+                var target = s.Effect(ChooseEnemy);
+                s.Effect(s => {
+                    var targetNow = s.D(target);
+                    if (targetNow == null) s.Effect(IdleBehaviour);
+                    else s.Effect(AttackBehaviour(targetNow));
+                });
             });
         }
 
@@ -43,6 +48,15 @@ namespace Spoke.Examples.BaseDefence {
             s.OnCleanup(() => StopCoroutine(routine));
         };
 
+        EffectBlock<Enemy> ChooseEnemy => s => {
+            var watch = GameState.Instance.TrackedEnemyZone.Watch(new Circle(s.D(building.Position), range));
+            return s.Memo(s => {
+                var itemsNow = s.D(watch.Items);
+                if (itemsNow.Count == 0) return null;
+                return itemsNow[0].RefObject;
+            });
+        };
+
         EffectBlock IdleBehaviour => s => {
             IEnumerator onUpdate() {
                 const float minInterval = 1f;
@@ -51,6 +65,18 @@ namespace Spoke.Examples.BaseDefence {
                     yield return new WaitForSeconds(Random.Range(minInterval, maxInterval));
                     var angle = Random.Range(0f, Mathf.PI * 2f);
                     targetDirection = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
+
+        EffectBlock AttackBehaviour(Enemy target) => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    if (!target) break;
+                    targetDirection = target.transform.position - pivot.transform.position;
+                    yield return null;
                 }
             }
             var routine = StartCoroutine(onUpdate());
