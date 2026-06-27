@@ -10,6 +10,7 @@ namespace Spoke.Examples.BaseDefence {
             None = 0,
             Service = 1,
             Radar = 2,
+            TrackedEnemy = 3,
         }
 
         [Header("Level")]
@@ -23,6 +24,7 @@ namespace Spoke.Examples.BaseDefence {
 
         public SpatialIndex<Service> ServiceZone { get; } = new();
         public SpatialIndex<Radar> RadarZone { get; } = new();
+        public SpatialIndex<Enemy> TrackedEnemyZone { get; } = new();
 
         protected override void Init(EffectBuilder s) {
             s.Effect(RunDebugMode);
@@ -41,6 +43,14 @@ namespace Spoke.Examples.BaseDefence {
                 }
                 if (debugModeNow == DebugModes.Radar) {
                     var watch = s.Use(RadarZone.Watch(new Circle(Vector3.zero, float.PositiveInfinity)));
+                    return s.Memo(s => {
+                        var list = new List<Circle>();
+                        foreach (var entry in s.D(watch.Items)) list.Add(entry.Circle);
+                        return list;
+                    });
+                }
+                if (debugModeNow == DebugModes.TrackedEnemy) {
+                    var watch = s.Use(TrackedEnemyZone.Watch(new Circle(Vector3.zero, float.PositiveInfinity)));
                     return s.Memo(s => {
                         var list = new List<Circle>();
                         foreach (var entry in s.D(watch.Items)) list.Add(entry.Circle);
