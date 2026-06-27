@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,17 +9,17 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] GameObject fireFrom;
+        [SerializeField] GameObject showOnTracked;
 
         [Header("Attributes")]
         [SerializeField] float radius;
 
-        State<bool> isTracked = new(false);
-        public ISignal<bool> IsTracked => isTracked;
-
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 var position = s.Effect(WatchPosition);
-                s.Effect(WatchIsTracked(position));
+                var isTracked = s.Effect(WatchIsTracked(position));
+
+                s.Effect(s => showOnTracked.SetActive(s.D(isTracked)));
                 s.Phase(isTracked, s => {
                     s.Use(GameState.Instance.TrackedEnemyZone.Add(this, new Circle(s.D(position), radius)));
                 });
@@ -38,12 +39,15 @@ namespace Spoke.Examples.BaseDefence {
             return position;
         };
 
-        EffectBlock WatchIsTracked(ISignal<Vector3> position) => s => {
-            var watch = s.Use(GameState.Instance.RadarZone.Watch(new Circle(s.D(position), radius)));
+        EffectBlock<bool> WatchIsTracked(ISignal<Vector3> position) => s => {
+            var isTracked = State.Create(false);
             s.Effect(s => {
-                isTracked.Set(s.D(watch.Items).Count > 0);
+                var watch = s.Use(GameState.Instance.RadarZone.Watch(new Circle(s.D(position), radius)));
+                s.Effect(s => {
+                    isTracked.Set(s.D(watch.Items).Count > 0);
+                });
             });
-            s.OnCleanup(() => isTracked.Set(false));
+            return isTracked;
         };
 
         void OnDrawGizmosSelected() {
