@@ -1,6 +1,10 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Spoke {
 
     /// <summary>
@@ -22,18 +26,18 @@ namespace Spoke {
                     return null;
                 }
                 EnsureStaticInit();
-                if (!IsDestroyed.Now && !instance.Now) {
+                if (!IsDestroyed.Now && !instance) {
                     FindOrCreateInstance();
                 }
-                return instance.Now;
+                return instance;
             }
         }
 
         public static ISignal<bool> IsDestroyed => isDestroyed;
 
-        static State<T> instance = State.Create<T>();
         static State<bool> isDestroyed = State.Create(false);
         static bool isInitialized = false;
+        static T instance;
         static Scene instanceScene;
 
         // Override to change default 'DontDestroyOnLoad' behaviour
@@ -45,7 +49,11 @@ namespace Spoke {
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
-            UnitySignals.AppTeardown.Subscribe(() => isDestroyed.Set(false));
+#if UNITY_EDITOR
+            EditorApplication.playModeStateChanged += state => {
+                if (state == PlayModeStateChange.EnteredEditMode) isDestroyed.Set(false);
+            };
+#endif
             SceneManager.sceneUnloaded += scene => {
                 if (scene != instanceScene) return;
                 instanceScene = default;
@@ -64,23 +72,23 @@ namespace Spoke {
             } else {
                 nextInstance = managers[0];
             }
-            instance.Set(nextInstance);
+            instance = nextInstance;
         }
 
         protected override void Awake() {
-            if (instance.Now != null && instance.Now != this) {
+            if (instance != null && instance != this) {
                 Debug.LogError($"Deleting duplicate instance of singleton {typeof(T).Name}");
                 Destroy(gameObject);
                 return;
             }
             instanceScene = gameObject.scene;
-            instance.Set(this as T);
+            instance = this as T;
             base.Awake();
         }
 
         protected override void OnDestroy() {
             base.OnDestroy();
-            if (instance.Now == this) isDestroyed.Set(true);
+            if (instance == this) isDestroyed.Set(true);
         }
     }
 }
