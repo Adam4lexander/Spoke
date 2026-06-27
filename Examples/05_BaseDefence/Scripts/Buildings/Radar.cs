@@ -11,7 +11,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] GameObject dishPivot;
 
         [Header("Attributes")]
-        [SerializeField] float range;
+        [SerializeField] UState<float> range = new(5f);
         [SerializeField] float dishRotationSpeed;
 
         protected override void Init(EffectBuilder s) {
@@ -19,6 +19,9 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(isRunning, s => {
                 s.Effect(DishAnimation);
+                s.Effect(s => {
+                    s.Use(GameState.Instance.RadarZone.Add(this, new Circle(s.D(building.Position), s.D(range))));
+                });
             });
         }
 
@@ -34,7 +37,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         void OnDrawGizmosSelected() {
-            var circle = new Circle(transform.position, range);
+            var circle = new Circle(transform.position, range.Now);
             circle.DrawGizmo(Color.red);
         }
     }
