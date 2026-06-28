@@ -18,6 +18,8 @@ namespace Spoke.Examples.BaseDefence {
             return (Center - other.Center).sqrMagnitude < reach * reach;
         }
 
+        public Bounds Bounds => new(Center, new Vector3(Radius * 2f, 0f, Radius * 2f));
+
         public void DrawGizmo(Color colour) {
             const int segments = 48;
             var previousColour = Gizmos.color;
