@@ -19,7 +19,7 @@ namespace Spoke.Examples.BaseDefence {
                 var position = s.Effect(WatchPosition);
 
                 var sensor = s.Use(GameState.RadarZone.AddSensor(new Circle(position.Now, radius)));
-                s.Effect(s => sensor.Area = new Circle(s.D(position), radius));
+                s.Effect(s => sensor.Circle = new Circle(s.D(position), radius));
                 var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
 
                 s.Effect(s => showOnTracked.SetActive(s.D(isTracked)));

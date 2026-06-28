@@ -42,7 +42,7 @@ namespace Spoke.Examples.BaseDefence {
                 return;
             }
             var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(building.Position.Now, 0f)));
-            s.Effect(s => sensor.Area = new Circle(s.D(building.Position), 0f));
+            s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), 0f));
             s.Effect(s => {
                 var nearest = int.MaxValue;
                 foreach (var collider in sensor.Overlaps) {

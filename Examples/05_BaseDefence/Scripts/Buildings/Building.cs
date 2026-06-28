@@ -41,7 +41,7 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock WatchHasService => s => {
             var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
-            s.Effect(s => sensor.Area = new Circle(s.D(Position), radius));
+            s.Effect(s => sensor.Circle = new Circle(s.D(Position), radius));
             var covered = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
             s.Effect(s => hasService.Set(s.D(covered)));
         };
