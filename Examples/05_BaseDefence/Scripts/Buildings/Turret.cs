@@ -24,7 +24,11 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(isRunning, s => {
                 s.Effect(RotateToTarget);
-                var target = s.Effect(ChooseEnemy);
+
+                var sensor = s.Use(GameState.TrackedEnemyZone.AddSensor(new Circle(building.Position.Now, range)));
+                s.Effect(s => sensor.Area = new Circle(s.D(building.Position), range));
+                var target = s.Memo(s => sensor.Overlaps.Count == 0 ? null : sensor.Overlaps[0].Payload, sensor.Changed);
+
                 s.Effect(s => {
                     var targetNow = s.D(target);
                     if (targetNow == null) s.Effect(IdleBehaviour);
@@ -46,15 +50,6 @@ namespace Spoke.Examples.BaseDefence {
             }
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
-        };
-
-        EffectBlock<Enemy> ChooseEnemy => s => {
-            var watch = GameState.Instance.TrackedEnemyZone.Watch(new Circle(s.D(building.Position), range));
-            return s.Memo(s => {
-                var itemsNow = s.D(watch.Items);
-                if (itemsNow.Count == 0) return null;
-                return itemsNow[0].RefObject;
-            });
         };
 
         EffectBlock IdleBehaviour => s => {

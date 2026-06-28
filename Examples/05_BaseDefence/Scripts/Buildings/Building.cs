@@ -40,8 +40,10 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock WatchHasService => s => {
-            var watch = s.Use(GameState.Instance.ServiceZone.Watch(new Circle(s.D(Position), radius)));
-            s.Effect(s => hasService.Set(s.D(watch.Items).Count > 0));
+            var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
+            s.Effect(s => sensor.Area = new Circle(s.D(Position), radius));
+            var covered = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
+            s.Effect(s => hasService.Set(s.D(covered)));
         };
 
         EffectBlock DimWhenUnserviced => s => {

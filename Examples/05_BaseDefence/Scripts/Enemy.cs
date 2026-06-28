@@ -17,11 +17,15 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 var position = s.Effect(WatchPosition);
-                var isTracked = s.Effect(WatchIsTracked(position));
+
+                var sensor = s.Use(GameState.RadarZone.AddSensor(new Circle(position.Now, radius)));
+                s.Effect(s => sensor.Area = new Circle(s.D(position), radius));
+                var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
 
                 s.Effect(s => showOnTracked.SetActive(s.D(isTracked)));
                 s.Phase(isTracked, s => {
-                    s.Use(GameState.Instance.TrackedEnemyZone.Add(this, new Circle(s.D(position), radius)));
+                    var collider = s.Use(GameState.TrackedEnemyZone.AddCollider(this, new Circle(position.Now, radius)));
+                    s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
                 });
             });
         }
@@ -37,17 +41,6 @@ namespace Spoke.Examples.BaseDefence {
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
             return position;
-        };
-
-        EffectBlock<bool> WatchIsTracked(ISignal<Vector3> position) => s => {
-            var isTracked = State.Create(false);
-            s.Effect(s => {
-                var watch = s.Use(GameState.Instance.RadarZone.Watch(new Circle(s.D(position), radius)));
-                s.Effect(s => {
-                    isTracked.Set(s.D(watch.Items).Count > 0);
-                });
-            });
-            return isTracked;
         };
 
         void OnDrawGizmosSelected() {

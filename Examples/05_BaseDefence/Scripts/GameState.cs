@@ -22,41 +22,30 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<DebugModes> debugMode = new();
         [SerializeField] UState<Color> debugColour = new(Color.green);
 
-        public SpatialIndex<Service> ServiceZone { get; } = new();
-        public SpatialIndex<Radar> RadarZone { get; } = new();
-        public SpatialIndex<Enemy> TrackedEnemyZone { get; } = new();
+        readonly CollisionWorld<Service> serviceZone = new();
+        readonly CollisionWorld<Radar> radarZone = new();
+        readonly CollisionWorld<Enemy> trackedEnemyZone = new();
+
+        public static CollisionWorld<Service> ServiceZone => Instance.serviceZone;
+        public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
+        public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
 
         protected override void Init(EffectBuilder s) {
             s.Effect(RunDebugMode);
         }
 
+        void LateUpdate() {
+            serviceZone.Tick();
+            radarZone.Tick();
+            trackedEnemyZone.Tick();
+        }
+
         EffectBlock RunDebugMode => s => {
             var circles = s.Effect(s => {
-                var debugModeNow = s.D(debugMode);
-                if (debugModeNow == DebugModes.Service) {
-                    var watch = s.Use(ServiceZone.Watch(new Circle(Vector3.zero, float.PositiveInfinity)));
-                    return s.Memo(s => {
-                        var list = new List<Circle>();
-                        foreach (var entry in s.D(watch.Items)) list.Add(entry.Circle);
-                        return list;
-                    });
-                }
-                if (debugModeNow == DebugModes.Radar) {
-                    var watch = s.Use(RadarZone.Watch(new Circle(Vector3.zero, float.PositiveInfinity)));
-                    return s.Memo(s => {
-                        var list = new List<Circle>();
-                        foreach (var entry in s.D(watch.Items)) list.Add(entry.Circle);
-                        return list;
-                    });
-                }
-                if (debugModeNow == DebugModes.TrackedEnemy) {
-                    var watch = s.Use(TrackedEnemyZone.Watch(new Circle(Vector3.zero, float.PositiveInfinity)));
-                    return s.Memo(s => {
-                        var list = new List<Circle>();
-                        foreach (var entry in s.D(watch.Items)) list.Add(entry.Circle);
-                        return list;
-                    });
-                }
+                var mode = s.D(debugMode);
+                if (mode == DebugModes.Service) return s.Effect(DebugCircles(serviceZone));
+                if (mode == DebugModes.Radar) return s.Effect(DebugCircles(radarZone));
+                if (mode == DebugModes.TrackedEnemy) return s.Effect(DebugCircles(trackedEnemyZone));
                 return null;
             });
 
@@ -64,6 +53,15 @@ namespace Spoke.Examples.BaseDefence {
                 if (s.D(circles) == null) return;
                 s.Effect(RangeDisplay.Draw(circles, debugColour));
             });
+        };
+
+        EffectBlock<List<Circle>> DebugCircles<T>(CollisionWorld<T> zone) => s => {
+            var sensor = s.Use(zone.AddSensor(new Circle(Vector3.zero, float.PositiveInfinity)));
+            return s.Memo(s => {
+                var circles = new List<Circle>();
+                foreach (var collider in sensor.Overlaps) circles.Add(collider.Circle);
+                return circles;
+            }, sensor.Changed);
         };
 
         void OnDrawGizmosSelected() {
