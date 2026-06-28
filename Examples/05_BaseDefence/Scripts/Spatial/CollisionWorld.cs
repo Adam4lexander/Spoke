@@ -3,22 +3,40 @@ using System.Collections.Generic;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A thing that can be detected. Move it by assigning Circle; drop it with Dispose.
+    public interface ICollider<T> : IDisposable {
+        Circle Circle { get; set; }
+        T Payload { get; }
+    }
+
+    // A query region. After each tick Overlaps holds the colliders it covers, nearest first, and
+    // Changed fires whenever that set (membership or order) changed. Move it by assigning Area;
+    // drop it with Dispose.
+    public interface ISensor<T> : IDisposable {
+        Circle Area { get; set; }
+        ReadOnlyList<ICollider<T>> Overlaps { get; }
+        ITrigger Changed { get; }
+    }
+
     // A tiny, self-contained collision world of circles on the XZ plane. It stands in for Unity's
     // physics: register colliders and sensors once and move them in place, then Tick() once per
     // frame to detect overlaps and notify every sensor in a single pass. Unlike Unity it hands a
     // sensor its full current overlap set (nearest first), not just enter/exit deltas, and needs
     // no layers — a separate world per category replaces them.
+    //
+    // Colliders and sensors are handed out as ICollider<T>/ISensor<T>; their plumbing lives on
+    // private nested classes, so nothing outside this world can drive them — not even same-assembly
+    // code. The enclosing world keeps full access to those private members.
     public class CollisionWorld<T> {
 
-        // A thing that can be detected. Move it by assigning Circle; drop it with Dispose.
-        public class Collider : IDisposable {
+        class Collider : ICollider<T> {
 
-            public Circle Circle;
-            public readonly T Payload;
-            internal int index;
+            public Circle Circle { get; set; }
+            public T Payload { get; }
+            public int index;
             CollisionWorld<T> world;
 
-            internal Collider(CollisionWorld<T> world, T payload, Circle circle, int index) {
+            public Collider(CollisionWorld<T> world, T payload, Circle circle, int index) {
                 this.world = world;
                 Payload = payload;
                 Circle = circle;
@@ -32,29 +50,26 @@ namespace Spoke.Examples.BaseDefence {
             }
         }
 
-        // A query region. After each tick Overlaps holds the colliders it covers, nearest first,
-        // and Changed fires whenever that set (membership or order) changed. Move it by assigning
-        // Area; drop it with Dispose.
-        public class Sensor : IDisposable {
+        class Sensor : ISensor<T> {
 
-            public Circle Area;
-            public ReadOnlyList<Collider> Overlaps => new(current);
+            public Circle Area { get; set; }
+            public ReadOnlyList<ICollider<T>> Overlaps => new(current);
             public ITrigger Changed => changed;
 
             readonly Trigger changed = Trigger.Create();
-            readonly List<Collider> current = new();
-            readonly List<Collider> next = new();
-            readonly List<(Collider collider, float dist2)> sortBuffer = new();
-            internal int index;
+            readonly List<ICollider<T>> current = new();
+            readonly List<ICollider<T>> next = new();
+            readonly List<(ICollider<T> collider, float dist2)> sortBuffer = new();
+            public int index;
             CollisionWorld<T> world;
 
-            internal Sensor(CollisionWorld<T> world, Circle area, int index) {
+            public Sensor(CollisionWorld<T> world, Circle area, int index) {
                 this.world = world;
                 Area = area;
                 this.index = index;
             }
 
-            internal bool Recompute(List<Collider> colliders) {
+            public bool Recompute(List<Collider> colliders) {
                 sortBuffer.Clear();
                 foreach (var collider in colliders) {
                     if (Area.Overlaps(collider.Circle)) {
@@ -70,7 +85,7 @@ namespace Spoke.Examples.BaseDefence {
                 return true;
             }
 
-            internal void FireChanged() => changed.Invoke();
+            public void FireChanged() => changed.Invoke();
 
             public void Dispose() {
                 if (world == null) return;
@@ -78,7 +93,7 @@ namespace Spoke.Examples.BaseDefence {
                 world = null;
             }
 
-            static bool Same(List<Collider> a, List<Collider> b) {
+            static bool Same(List<ICollider<T>> a, List<ICollider<T>> b) {
                 if (a.Count != b.Count) return false;
                 for (var i = 0; i < a.Count; i++) {
                     if (!ReferenceEquals(a[i], b[i])) return false;
@@ -91,13 +106,13 @@ namespace Spoke.Examples.BaseDefence {
         readonly List<Sensor> sensors = new();
         readonly List<Sensor> changedThisTick = new();
 
-        public Collider AddCollider(T payload, Circle circle) {
+        public ICollider<T> AddCollider(T payload, Circle circle) {
             var collider = new Collider(this, payload, circle, colliders.Count);
             colliders.Add(collider);
             return collider;
         }
 
-        public Sensor AddSensor(Circle area) {
+        public ISensor<T> AddSensor(Circle area) {
             var sensor = new Sensor(this, area, sensors.Count);
             sensors.Add(sensor);
             return sensor;
