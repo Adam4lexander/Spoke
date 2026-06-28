@@ -18,13 +18,13 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(IsEnabled, s => {
                 var position = s.Effect(WatchPosition);
 
-                var sensor = s.Use(GameState.RadarZone.AddSensor(new Circle(position.Now, radius)));
+                var sensor = s.Use(GameState.RadarZone.Add(default, new Circle(position.Now, radius), detects: true, detectable: false));
                 s.Effect(s => sensor.Circle = new Circle(s.D(position), radius));
                 var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
 
                 s.Effect(s => showOnTracked.SetActive(s.D(isTracked)));
                 s.Phase(isTracked, s => {
-                    var collider = s.Use(GameState.TrackedEnemyZone.AddCollider(this, new Circle(position.Now, radius)));
+                    var collider = s.Use(GameState.TrackedEnemyZone.Add(this, new Circle(position.Now, radius)));
                     s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
                 });
             });

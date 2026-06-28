@@ -56,7 +56,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock<List<Circle>> DebugCircles<T>(CollisionWorld<T> zone) => s => {
-            var sensor = s.Use(zone.AddSensor(new Circle(Vector3.zero, float.PositiveInfinity)));
+            var sensor = s.Use(zone.Add(default, new Circle(transform.position, dimensions.magnitude), detects: true, detectable: false));
             return s.Memo(s => {
                 var circles = new List<Circle>();
                 foreach (var collider in sensor.Overlaps) circles.Add(collider.Circle);

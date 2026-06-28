@@ -1,105 +1,146 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Something the world can detect. Move via Circle; drop with Dispose.
-    public interface ICollider<T> : IDisposable {
+    public interface IBody<T> : IDisposable {
         Circle Circle { get; set; }
         T Payload { get; }
-    }
-
-    // A detector. Overlaps lists the colliders it covers, nearest first; Changed (a Spoke trigger)
-    // fires when that set changes. Move via Circle; drop with Dispose.
-    public interface ISensor<T> : IDisposable {
-        Circle Circle { get; set; }
-        ReadOnlyList<ICollider<T>> Overlaps { get; }
+        ReadOnlyList<IBody<T>> Overlaps { get; }
         ITrigger Changed { get; }
     }
 
-    // A stand-in for Unity physics: circles on the XZ plane.
     public class CollisionWorld<T> {
 
-        const float CellSize = 4f;
+        class Body : IBody<T> {
 
-        // A circle living in the hash: registers on construct, re-buckets when moved, leaves on Dispose.
-        abstract class Body {
-            protected CollisionWorld<T> world;
-            Circle circle;
-            protected Body(CollisionWorld<T> world, Circle circle) {
-                this.world = world;
-                this.circle = circle;
-                world.hash.Insert(this, circle.Bounds);
-            }
+            public T Payload { get; }
             public Circle Circle {
                 get => circle;
-                set { if (value == circle) return; circle = value; world.hash.Move(this, value.Bounds); }
+                set {
+                    if (value == circle) return;
+                    world.Remove(this);
+                    circle = value;
+                    world.Insert(this);
+                }
             }
-            public void Dispose() {
-                if (world == null) return;
-                world.hash.Remove(this);
-                world = null;
-            }
-        }
-
-        class Collider : Body, ICollider<T> {
-            public T Payload { get; }
-            public Collider(CollisionWorld<T> world, T payload, Circle circle) : base(world, circle) => Payload = payload;
-        }
-
-        class Sensor : Body, ISensor<T> {
-
-            public ReadOnlyList<ICollider<T>> Overlaps => new(current);
+            public ReadOnlyList<IBody<T>> Overlaps => new(overlaps);
             public ITrigger Changed => changed;
 
-            readonly Trigger changed = Trigger.Create();
-            readonly List<ICollider<T>> current = new();
-            readonly List<(ICollider<T> collider, float dist2)> sorted = new();
+            readonly bool detects, detectable;
+            readonly Trigger changed;
+            readonly List<IBody<T>> overlaps;
+            readonly List<(Body body, float dist2)> sorted;
+            Circle circle;
+            CollisionWorld<T> world;
 
-            public Sensor(CollisionWorld<T> world, Circle area) : base(world, area) { }
-
-            // Rebuild the nearest-first overlap set from nearby bodies; true if it changed.
-            public bool Recompute(List<Body> candidates) {
-                var area = Circle;
-                sorted.Clear();
-                foreach (var body in candidates)
-                    if (body is Collider c && area.Overlaps(c.Circle))
-                        sorted.Add((c, (c.Circle.Center - area.Center).sqrMagnitude));
-                sorted.Sort((a, b) => a.dist2.CompareTo(b.dist2));
-                if (Unchanged()) return false;
-                current.Clear();
-                foreach (var item in sorted) current.Add(item.collider);
-                return true;
+            public Body(CollisionWorld<T> world, T payload, Circle circle, bool detects, bool detectable) {
+                this.world = world;
+                Payload = payload;
+                this.circle = circle;
+                this.detects = detects;
+                this.detectable = detectable;
+                if (detects) {
+                    changed = Trigger.Create();
+                    overlaps = new();
+                    sorted = new();
+                }
+                world.Insert(this);
             }
 
-            public void FireChanged() => changed.Invoke();
+            public void Dispose() {
+                if (world == null) return;
+                world.Remove(this);
+                world = null;
+            }
 
-            bool Unchanged() {
-                if (current.Count != sorted.Count) return false;
-                for (var i = 0; i < current.Count; i++)
-                    if (!ReferenceEquals(current[i], sorted[i].collider)) return false;
+            // Rebuild the nearest-first overlap set and raise Changed if it shifted (detecting only).
+            public void Recompute() {
+                if (!detects) return;
+                var area = circle;
+                sorted.Clear();
+                foreach (var body in world.Query(area))
+                    if (body.detectable && body != this && area.Overlaps(body.circle))
+                        sorted.Add((body, (body.circle.Center - area.Center).sqrMagnitude));
+                sorted.Sort((a, b) => a.dist2.CompareTo(b.dist2));
+                if (Same()) return;
+                overlaps.Clear();
+                foreach (var s in sorted) overlaps.Add(s.body);
+                changed.Invoke();
+            }
+
+            bool Same() {
+                if (overlaps.Count != sorted.Count) return false;
+                for (var i = 0; i < overlaps.Count; i++)
+                    if (!ReferenceEquals(overlaps[i], sorted[i].body)) return false;
                 return true;
             }
         }
 
-        readonly SpatialHash<Body> hash = new(CellSize);
-        readonly List<Body> dirtyBodies = new();
-        readonly List<Body> candidates = new();
-        readonly List<Sensor> changedThisTick = new();
+        readonly Dictionary<(int x, int z), List<Body>> cells = new();
+        readonly HashSet<(int x, int z)> dirty = new();
+        readonly HashSet<Body> dirtyBodies = new();
+        readonly HashSet<Body> queryBodies = new();
+        readonly List<(int x, int z)> cellBuffer = new();
+        readonly float cellSize;
+        readonly Action step;
 
-        public ICollider<T> AddCollider(T payload, Circle circle) => new Collider(this, payload, circle);
-        public ISensor<T> AddSensor(Circle area) => new Sensor(this, area);
+        public CollisionWorld(float cellSize = 4f) {
+            this.cellSize = cellSize;
+            step = Step;
+        }
 
-        // Recompute every sensor near a change, then notify — so observers see a settled world.
-        public void Tick() {
-            changedThisTick.Clear();
-            hash.CollectDirty(dirtyBodies);
-            foreach (var body in dirtyBodies)
-                if (body is Sensor sensor) {
-                    hash.Query(sensor.Circle.Bounds, candidates);
-                    if (sensor.Recompute(candidates)) changedThisTick.Add(sensor);
-                }
-            foreach (var sensor in changedThisTick) sensor.FireChanged();
+        public IBody<T> Add(T payload, Circle circle, bool detects = false, bool detectable = true)
+            => new Body(this, payload, circle, detects, detectable);
+
+        // The batch holds observer flushes until every body has settled, so a Changed handler never
+        // sees a half-updated world.
+        public void Tick() => SpokeRuntime.Batch(step);
+
+        void Step() {
+            dirtyBodies.Clear();
+            foreach (var cell in dirty)
+                if (cells.TryGetValue(cell, out var list))
+                    foreach (var body in list) dirtyBodies.Add(body);
+            dirty.Clear();
+            foreach (var body in dirtyBodies) body.Recompute();
+        }
+
+        HashSet<Body> Query(Circle c) {
+            queryBodies.Clear();
+            foreach (var cell in Cells(c))
+                if (cells.TryGetValue(cell, out var list))
+                    foreach (var body in list) queryBodies.Add(body);
+            return queryBodies;
+        }
+
+        void Insert(Body b) {
+            foreach (var cell in Cells(b.Circle)) {
+                if (!cells.TryGetValue(cell, out var list)) cells[cell] = list = new();
+                list.Add(b);
+                dirty.Add(cell);
+            }
+        }
+
+        void Remove(Body b) {
+            foreach (var cell in Cells(b.Circle)) {
+                if (cells.TryGetValue(cell, out var list)) list.Remove(b);
+                dirty.Add(cell);
+            }
+        }
+
+        List<(int x, int z)> Cells(Circle c) {
+            cellBuffer.Clear();
+            var r = c.Radius;
+            var minX = Mathf.FloorToInt((c.Center.x - r) / cellSize);
+            var maxX = Mathf.FloorToInt((c.Center.x + r) / cellSize);
+            var minZ = Mathf.FloorToInt((c.Center.z - r) / cellSize);
+            var maxZ = Mathf.FloorToInt((c.Center.z + r) / cellSize);
+            for (var x = minX; x <= maxX; x++)
+                for (var z = minZ; z <= maxZ; z++)
+                    cellBuffer.Add((x, z));
+            return cellBuffer;
         }
     }
 }

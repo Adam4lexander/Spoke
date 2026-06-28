@@ -19,7 +19,7 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(isRunning, s => {
                 s.Effect(DishAnimation);
-                var collider = s.Use(GameState.RadarZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
+                var collider = s.Use(GameState.RadarZone.Add(this, new Circle(building.Position.Now, range.Now)));
                 s.Effect(s => collider.Circle = new Circle(s.D(building.Position), s.D(range)));
             });
         }

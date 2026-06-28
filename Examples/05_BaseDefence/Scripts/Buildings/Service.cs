@@ -30,7 +30,7 @@ namespace Spoke.Examples.BaseDefence {
 
                 var reachable = s.Memo(s => s.D(hop) != int.MaxValue);
                 s.Phase(reachable, s => {
-                    var collider = s.Use(GameState.ServiceZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
+                    var collider = s.Use(GameState.ServiceZone.Add(this, new Circle(building.Position.Now, range.Now)));
                     s.Effect(s => collider.Circle = new Circle(s.D(building.Position), s.D(range)));
                 });
             });
@@ -41,7 +41,7 @@ namespace Spoke.Examples.BaseDefence {
                 hop.Set(0);
                 return;
             }
-            var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(building.Position.Now, 0f)));
+            var sensor = s.Use(GameState.ServiceZone.Add(default, new Circle(building.Position.Now, 0f), detects: true, detectable: false));
             s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), 0f));
             s.Effect(s => {
                 var nearest = int.MaxValue;
