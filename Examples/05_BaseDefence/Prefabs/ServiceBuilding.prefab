@@ -219,6 +219,8 @@ MonoBehaviour:
   radius: 0.4
   maxHp: 5
   isCore: 0
+  unservicedDim:
+    value: 0.35
 --- !u!114 &3547522816358629646
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -232,7 +234,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   building: {fileID: 1289336978666534750}
-  range: 4
+  range:
+    value: 4
 --- !u!1 &2911380533970534444
 GameObject:
   m_ObjectHideFlags: 0

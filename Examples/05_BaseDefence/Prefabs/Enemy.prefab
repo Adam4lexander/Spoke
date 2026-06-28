@@ -295,6 +295,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7300397162719989401}
   - component: {fileID: 3324790760351854321}
+  - component: {fileID: 3383984597874702801}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Untagged
@@ -309,7 +310,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4257122341883944014}
-  m_LocalRotation: {x: -0, y: -0.9918361, z: -0, w: 0.12751974}
+  m_LocalRotation: {x: 0, y: -0.9918356, z: 0, w: 0.1275235}
   m_LocalPosition: {x: 4.44, y: 1.47, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -332,9 +333,30 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 357ba0d61272c52489ab6744274596b0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  health: {fileID: 3383984597874702801}
   fireFrom: {fileID: 8038472188550491902}
   showOnTracked: {fileID: 7890082224323991537}
   radius: 0.3
+--- !u!114 &3383984597874702801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4257122341883944014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32d566f3d4560304da2801b8cb01f8cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxHP:
+    value: 1
+  damage:
+    value: 0
+  hpFrac:
+    value: 1
+  isAlive:
+    value: 1
 --- !u!1 &4608008373106279954
 GameObject:
   m_ObjectHideFlags: 0

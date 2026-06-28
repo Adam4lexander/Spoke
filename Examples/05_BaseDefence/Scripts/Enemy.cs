@@ -8,40 +8,39 @@ namespace Spoke.Examples.BaseDefence {
     public class Enemy : SpokeBehaviour {
 
         [Header("References")]
+        [SerializeField] Health health;
         [SerializeField] GameObject fireFrom;
         [SerializeField] GameObject showOnTracked;
 
         [Header("Attributes")]
         [SerializeField] float radius;
 
-        protected override void Init(EffectBuilder s) {
-            s.Phase(IsEnabled, s => {
-                var position = s.Effect(WatchPosition);
+        State<Vector3> position = new();
 
+        protected override void Init(EffectBuilder s) {
+            position.Set(transform.position);
+
+            var isTrackable = s.Memo(s => s.D(IsEnabled) && s.D(health.IsAlive));
+
+            s.Phase(isTrackable, s => {
                 var sensor = s.Use(GameState.RadarZone.Add(default, new Circle(position.Now, radius), detects: true, detectable: false));
                 s.Effect(s => sensor.Circle = new Circle(s.D(position), radius));
+                
                 var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
 
-                s.Effect(s => showOnTracked.SetActive(s.D(isTracked)));
                 s.Phase(isTracked, s => {
+                    showOnTracked.SetActive(true);
+                    s.OnCleanup(() => showOnTracked.SetActive(false));
+
                     var collider = s.Use(GameState.TrackedEnemyZone.Add(this, new Circle(position.Now, radius)));
                     s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
                 });
             });
         }
 
-        EffectBlock<Vector3> WatchPosition => s => {
-            var position = State.Create(transform.position);
-            IEnumerator onUpdate() {
-                while (true) {
-                    position.Set(transform.position);
-                    yield return null;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
-            return position;
-        };
+        void Update() {
+            position.Set(transform.position);
+        }
 
         void OnDrawGizmosSelected() {
             var circle = new Circle(transform.position, radius);
