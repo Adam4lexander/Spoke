@@ -94,8 +94,6 @@ namespace Spoke.Examples.BaseDefence {
         public IBody<T> Add(T payload, Circle circle, bool detects = false, bool detectable = true)
             => new Body(this, payload, circle, detects, detectable);
 
-        // The batch holds observer flushes until every body has settled, so a Changed handler never
-        // sees a half-updated world.
         public void Tick() => SpokeRuntime.Batch(step);
 
         void Step() {
