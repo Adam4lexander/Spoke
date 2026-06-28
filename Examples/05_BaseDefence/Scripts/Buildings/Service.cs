@@ -23,6 +23,8 @@ namespace Spoke.Examples.BaseDefence {
             }
 
             s.Phase(IsEnabled, s => {
+                if (!s.D(building.HasService)) return;
+
                 s.OnCleanup(() => resettle.Invoke());
                 s.Reaction(s => resettle.Invoke(), building.Position, range);
 

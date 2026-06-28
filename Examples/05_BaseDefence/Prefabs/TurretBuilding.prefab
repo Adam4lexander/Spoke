@@ -203,6 +203,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 169359706472318776}
+  - component: {fileID: 7658322207003012496}
   - component: {fileID: 1199900657066672085}
   - component: {fileID: 4941254606368316928}
   m_Layer: 0
@@ -231,6 +232,26 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7658322207003012496
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3104909201192853156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32d566f3d4560304da2801b8cb01f8cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxHP:
+    value: 5
+  damage:
+    value: 0
+  hpFrac:
+    value: 1
+  isAlive:
+    value: 1
 --- !u!114 &1199900657066672085
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -243,6 +264,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22ee2be9b8c448041ac4f4b58f5e97d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  health: {fileID: 7658322207003012496}
   radius: 0.6
   maxHp: 5
   isCore: 0
