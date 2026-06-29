@@ -10,15 +10,24 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] Building building;
         [SerializeField] GameObject pivot;
         [SerializeField] GameObject fireFrom;
+        [SerializeField] LineRenderer beam;
 
         [Header("Attributes")]
         [SerializeField] float range;
         [SerializeField] float rotationSpeed;
+        [SerializeField] float damage = 1f;
+        [SerializeField] float fireRate = 2f;      // shots per second
+        [SerializeField] float fireAngle = 5f;     // max muzzle-to-target angle (deg) allowed to fire
+        [SerializeField] float beamFlashTime = 0.05f;
 
         Vector3 targetDirection = Vector3.zero;
 
         protected override void Init(EffectBuilder s) {
             targetDirection = fireFrom.transform.forward;
+
+            beam.positionCount = 2;
+            beam.useWorldSpace = true;
+            beam.enabled = false;
 
             var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
 
@@ -68,14 +77,34 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock AttackBehaviour(Enemy target) => s => {
             IEnumerator onUpdate() {
+                var cooldown = 0f;
                 while (true) {
                     if (!target) break;
-                    targetDirection = target.transform.position - pivot.transform.position;
+                    var toTarget = target.transform.position - pivot.transform.position;
+                    targetDirection = toTarget;
+
+                    cooldown -= Time.deltaTime;
+                    var muzzle = Vector3.ProjectOnPlane(fireFrom.transform.forward, Vector3.up);
+                    var aim = Vector3.ProjectOnPlane(toTarget, Vector3.up);
+                    if (cooldown <= 0f && Vector3.Angle(muzzle, aim) <= fireAngle) {
+                        cooldown = 1f / fireRate;
+                        // Flash the beam first, then land the hit — so the killing shot is seen
+                        // before the enemy dies and we retarget.
+                        beam.SetPosition(0, fireFrom.transform.position);
+                        beam.SetPosition(1, target.transform.position);
+                        beam.enabled = true;
+                        yield return new WaitForSeconds(beamFlashTime);
+                        beam.enabled = false;
+                        if (target) target.Health.Damage(damage);
+                    }
                     yield return null;
                 }
             }
             var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.OnCleanup(() => {
+                StopCoroutine(routine);
+                beam.enabled = false;
+            });
         };
 
         void OnDrawGizmosSelected() {

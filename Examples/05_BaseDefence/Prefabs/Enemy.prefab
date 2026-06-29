@@ -352,7 +352,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP:
-    value: 1
+    value: 3
   damage:
     value: 0
   hpFrac:
@@ -373,7 +373,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   meshRoot: {fileID: 3368531516232569017}
   gravity: 9.8
-  blastSpeed: 1
+  blastSpeed: 2
   time: 2
   isStarted:
     value: 0

@@ -18,6 +18,8 @@ namespace Spoke.Examples.BaseDefence {
 
         State<Vector3> position = new();
 
+        public Health Health => health;
+
         protected override void Init(EffectBuilder s) {
             position.Set(transform.position);
 
