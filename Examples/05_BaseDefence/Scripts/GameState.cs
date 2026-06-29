@@ -27,11 +27,13 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<DebugModes> debugMode = new();
         [SerializeField] UState<Color> debugColour = new(Color.green);
 
+        readonly CollisionWorld<Service> edgeZone = new();
         readonly CollisionWorld<Service> serviceZone = new();
         readonly CollisionWorld<Radar> radarZone = new();
         readonly CollisionWorld<Enemy> trackedEnemyZone = new();
         readonly CollisionWorld<Building> buildingZone = new();
 
+        public static CollisionWorld<Service> EdgeZone => Instance.edgeZone;
         public static CollisionWorld<Service> ServiceZone => Instance.serviceZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
@@ -48,6 +50,9 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         void LateUpdate() {
+            // Tick service edges, settle connectivity, then tick the rest of the zones.
+            edgeZone.Tick();
+            Service.UpdateNetwork();
             serviceZone.Tick();
             radarZone.Tick();
             trackedEnemyZone.Tick();

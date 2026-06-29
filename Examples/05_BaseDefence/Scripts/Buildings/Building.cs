@@ -17,6 +17,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<float> unservicedDim = new(0.35f);
 
         public bool IsCore => isCore;
+        public Health Health => health;
 
         State<bool> hasService = new(false);
         public ISignal<bool> HasService => hasService;
@@ -50,10 +51,10 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         EffectBlock<bool> IsInServiceCoverage => s => {
-            var sensor = s.Use(GameState.ServiceZone.Add(default, new Circle(Position.Now, radius), detects: true, detectable: false));
-            s.Effect(s => sensor.Circle = new Circle(s.D(Position), radius));
+            var coverageSensor = s.Use(GameState.ServiceZone.Add(default, new Circle(Position.Now, radius), detects: true, detectable: false));
+            s.Effect(s => coverageSensor.Circle = new Circle(s.D(Position), radius));
 
-            return s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
+            return s.Memo(s => coverageSensor.Overlaps.Count > 0, coverageSensor.Changed);
         };
 
         EffectBlock DimWhenUnserviced => s => {
