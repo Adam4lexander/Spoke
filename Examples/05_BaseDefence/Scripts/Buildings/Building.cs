@@ -28,6 +28,9 @@ namespace Spoke.Examples.BaseDefence {
             position.Set(transform.position);
 
             s.Phase(health.IsAlive, s => {
+                var body = s.Use(GameState.BuildingZone.Add(this, new Circle(Position.Now, radius)));
+                s.Effect(s => body.Circle = new Circle(s.D(Position), radius));
+
                 var inServiceCoverage = s.Effect(IsInServiceCoverage);
                 s.Effect(s => {
                     hasService.Set(IsCore || s.D(inServiceCoverage) && s.D(health.IsAlive));

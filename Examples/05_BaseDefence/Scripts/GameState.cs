@@ -18,6 +18,10 @@ namespace Spoke.Examples.BaseDefence {
 
         public Bounds LevelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0f, dimensions.y));
 
+        [Header("Spawning")]
+        [SerializeField] Enemy enemyPrefab;
+        [SerializeField] float spawnInterval = 2f;
+
         [Header("Debug")]
         [SerializeField] UState<DebugModes> debugMode = new();
         [SerializeField] UState<Color> debugColour = new(Color.green);
@@ -25,20 +29,51 @@ namespace Spoke.Examples.BaseDefence {
         readonly CollisionWorld<Service> serviceZone = new();
         readonly CollisionWorld<Radar> radarZone = new();
         readonly CollisionWorld<Enemy> trackedEnemyZone = new();
+        readonly CollisionWorld<Building> buildingZone = new();
 
         public static CollisionWorld<Service> ServiceZone => Instance.serviceZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
+        public static CollisionWorld<Building> BuildingZone => Instance.buildingZone;
+
+        IBody<Building> buildingsSensor;
+        public static ReadOnlyList<IBody<Building>> Buildings => Instance.buildingsSensor.Overlaps;
 
         protected override void Init(EffectBuilder s) {
             s.Effect(RunDebugMode);
+            s.Effect(SpawnEnemies);
+            // One static, map-covering sensor maintains the list of all buildings for enemies to target.
+            buildingsSensor = s.Use(buildingZone.Add(default, new Circle(LevelBounds.center, LevelBounds.size.magnitude), detects: true, detectable: false));
         }
 
         void LateUpdate() {
             serviceZone.Tick();
             radarZone.Tick();
             trackedEnemyZone.Tick();
+            buildingZone.Tick();
         }
+
+        EffectBlock SpawnEnemies => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    yield return new WaitForSeconds(spawnInterval);
+                    // A random point on the perimeter of the level bounds, at the prefab's height.
+                    var b = LevelBounds;
+                    var y = enemyPrefab.transform.position.y;
+                    var x = Random.Range(b.min.x, b.max.x);
+                    var z = Random.Range(b.min.z, b.max.z);
+                    var edge = Random.Range(0, 4) switch {
+                        0 => new Vector3(b.min.x, y, z),  // west
+                        1 => new Vector3(b.max.x, y, z),  // east
+                        2 => new Vector3(x, y, b.min.z),  // south
+                        _ => new Vector3(x, y, b.max.z),  // north
+                    };
+                    Instantiate(enemyPrefab, edge, Quaternion.identity);
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
 
         EffectBlock RunDebugMode => s => {
             var circles = s.Effect(s => {

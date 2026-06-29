@@ -391,6 +391,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dimensions: {x: 40, y: 40}
+  enemyPrefab: {fileID: 3324790760351854321, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
+  spawnInterval: 2
   debugMode:
     value: 0
   debugColour:
