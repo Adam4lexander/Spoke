@@ -9,6 +9,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
+        [SerializeField] MeshShatterFX shatterFX;
         [SerializeField] GameObject fireFrom;
         [SerializeField] GameObject showOnTracked;
 
@@ -21,7 +22,6 @@ namespace Spoke.Examples.BaseDefence {
             position.Set(transform.position);
 
             var isTrackable = s.Memo(s => s.D(IsEnabled) && s.D(health.IsAlive));
-
             s.Phase(isTrackable, s => {
                 var sensor = s.Use(GameState.RadarZone.Add(default, new Circle(position.Now, radius), detects: true, detectable: false));
                 s.Effect(s => sensor.Circle = new Circle(s.D(position), radius));
@@ -34,6 +34,14 @@ namespace Spoke.Examples.BaseDefence {
 
                     var collider = s.Use(GameState.TrackedEnemyZone.Add(this, new Circle(position.Now, radius)));
                     s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
+                });
+            });
+
+            var isDead = s.Memo(s => !s.D(health.IsAlive));
+            s.Phase(isDead, s => {
+                shatterFX.StartFX();
+                s.Effect(s => {
+                    if (s.D(shatterFX.IsFinished)) Destroy(gameObject);
                 });
             });
         }

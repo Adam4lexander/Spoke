@@ -296,6 +296,7 @@ GameObject:
   - component: {fileID: 7300397162719989401}
   - component: {fileID: 3324790760351854321}
   - component: {fileID: 3383984597874702801}
+  - component: {fileID: 6558335013262634079}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Untagged
@@ -334,6 +335,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   health: {fileID: 3383984597874702801}
+  shatterFX: {fileID: 6558335013262634079}
   fireFrom: {fileID: 8038472188550491902}
   showOnTracked: {fileID: 7890082224323991537}
   radius: 0.3
@@ -357,6 +359,26 @@ MonoBehaviour:
     value: 1
   isAlive:
     value: 1
+--- !u!114 &6558335013262634079
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4257122341883944014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b5173ba85608de44bf80e40578a0bfa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  meshRoot: {fileID: 3368531516232569017}
+  gravity: 9.8
+  blastSpeed: 1
+  time: 2
+  isStarted:
+    value: 0
+  isFinished:
+    value: 0
 --- !u!1 &4608008373106279954
 GameObject:
   m_ObjectHideFlags: 0
