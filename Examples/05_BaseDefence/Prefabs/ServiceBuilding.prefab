@@ -178,6 +178,7 @@ GameObject:
   - component: {fileID: 111459607697218058}
   - component: {fileID: 1289336978666534750}
   - component: {fileID: 3547522816358629646}
+  - component: {fileID: 7383137929261724295}
   m_Layer: 0
   m_Name: ServiceBuilding
   m_TagString: Untagged
@@ -238,6 +239,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   health: {fileID: 111459607697218058}
+  shatterFX: {fileID: 7383137929261724295}
   radius: 0.4
   maxHp: 5
   isCore: 0
@@ -258,6 +260,26 @@ MonoBehaviour:
   building: {fileID: 1289336978666534750}
   range:
     value: 4
+--- !u!114 &7383137929261724295
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2552353357852487069}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b5173ba85608de44bf80e40578a0bfa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  meshRoot: {fileID: 2552353357852487069}
+  gravity: 9.8
+  blastSpeed: 2
+  time: 2
+  isStarted:
+    value: 0
+  isFinished:
+    value: 0
 --- !u!1 &2911380533970534444
 GameObject:
   m_ObjectHideFlags: 0

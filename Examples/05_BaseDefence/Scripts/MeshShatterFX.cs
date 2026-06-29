@@ -14,7 +14,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float blastSpeed = 10f;
         [SerializeField] float time = 2f;
 
-        [Header("Runtime (Dont Edit")]
+        [Header("Runtime (Dont Edit)")]
         [SerializeField] UState<bool> isStarted = new(false);
         [SerializeField] UState<bool> isFinished = new(false);
 

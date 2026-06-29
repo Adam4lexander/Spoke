@@ -8,6 +8,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
+        [SerializeField] MeshShatterFX shatterFX;
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
@@ -26,28 +27,30 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             position.Set(transform.position);
 
-            s.Phase(IsEnabled, s => {
-                s.Effect(WatchHasService);
-                s.Effect(DimWhenUnserviced);
+            s.Phase(health.IsAlive, s => {
+                var inServiceCoverage = s.Effect(IsInServiceCoverage);
+                s.Effect(s => {
+                    hasService.Set(IsCore || s.D(inServiceCoverage) && s.D(health.IsAlive));
+                });
+                s.OnCleanup(() => hasService.Set(false));
+            });
+            
+            s.Effect(DimWhenUnserviced);
+
+            var isDead = s.Memo(s => !s.D(health.IsAlive));
+            s.Phase(isDead, s => {
+                shatterFX.StartFX();
+                s.Effect(s => {
+                    if (s.D(shatterFX.IsFinished)) Destroy(gameObject);
+                });
             });
         }
 
-        EffectBlock WatchHasService => s => {
-            if (!s.D(health.IsAlive)) {
-                hasService.Set(false);
-                return;
-            }
-
-            if (IsCore) {
-                hasService.Set(true);
-                return;
-            }
-
+        EffectBlock<bool> IsInServiceCoverage => s => {
             var sensor = s.Use(GameState.ServiceZone.Add(default, new Circle(Position.Now, radius), detects: true, detectable: false));
             s.Effect(s => sensor.Circle = new Circle(s.D(Position), radius));
 
-            var covered = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
-            s.Effect(s => hasService.Set(s.D(covered)));
+            return s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
         };
 
         EffectBlock DimWhenUnserviced => s => {
