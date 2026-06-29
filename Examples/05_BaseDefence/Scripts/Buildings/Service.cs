@@ -15,12 +15,10 @@ namespace Spoke.Examples.BaseDefence {
         State<int> hop = new(int.MaxValue);
 
         protected override void Init(EffectBuilder s) {
-            if (!building.IsCore) {
-                // On resettle every non-core service drops to unreachable up front. Clearing
-                // synchronously, before anything recomputes, is what breaks stale cycles when an
-                // island is severed from the core.
-                s.Subscribe(resettle, () => hop.Set(int.MaxValue));
-            }
+            // On resettle every non-core service drops to unreachable up front. Clearing
+            // synchronously, before anything recomputes, is what breaks stale cycles when an
+            // island is severed from the core.
+            s.Subscribe(resettle, () => hop.Set(int.MaxValue));
 
             s.Phase(IsEnabled, s => {
                 if (!s.D(building.HasService)) return;
@@ -40,7 +38,7 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock Propagate => s => {
             if (building.IsCore) {
-                hop.Set(0);
+                s.Effect(s => hop.Set(0), resettle);
                 return;
             }
             var sensor = s.Use(GameState.ServiceZone.Add(default, new Circle(building.Position.Now, 0f), detects: true, detectable: false));
@@ -52,7 +50,7 @@ namespace Spoke.Examples.BaseDefence {
                     nearest = Mathf.Min(nearest, s.D(collider.Payload.hop));
                 }
                 hop.Set(nearest == int.MaxValue ? int.MaxValue : nearest + 1);
-            }, sensor.Changed, resettle);
+            }, sensor.Changed);
         };
 
         void OnDrawGizmosSelected() {
