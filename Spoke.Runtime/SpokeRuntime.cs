@@ -119,16 +119,16 @@ namespace Spoke {
                     // The next tree would have been ordered before the prev, an oscillation has happened
                     passCount++;
                 }
+                prev = top;
 
                 // Tick the tree. SpokeTree always flushes in Auto mode
-                (this as Friend).TickTree(scheduledTrees.RemoveMin());
+                TickTree(scheduledTrees.RemoveMin());
             } while (HasPending());
         }
 
-        // Delivers a tick to the given tree.
-        // Sets the runtime's current flush layer to the tree's flush layer, and restores it afterwards.
-        // The runtime's flush layer determines whether TryFlush() flushes nested or not.
-        void Friend.TickTree(SpokeTree tree) {
+        // Delivers a tick to the given tree. Sets the runtime's current flush layer to the tree's
+        // flush layer (which determines whether TryFlush flushes nested), and restores it afterwards.
+        void TickTree(SpokeTree tree) {
             var storeLayer = layer;
             layer = Math.Min(tree.FlushLayer, layer);
             try {
@@ -137,6 +137,11 @@ namespace Spoke {
                 SpokeError.Log($"Uncaught Spoke error", e);
             }
             layer = storeLayer;
+        }
+
+        // Ticks a tree, then flushes anything scheduled during the tick.
+        void Friend.TickTree(SpokeTree tree) {
+            TickTree(tree);
             if (frames.Count == 0) {
                 TryFlush();
             }

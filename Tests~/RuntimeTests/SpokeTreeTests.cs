@@ -141,6 +141,22 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void OscillationGuard_StopsPingPong_BetweenSeparateTrees() {
+            Errors.ExpectErrors();
+            EpochPorts a = default, b = default;
+            var armed = false;
+
+            using var treeA = SpokeTree.Spawn(new LambdaEpoch(s => { a = s.Ports; return s => { if (armed) b.RequestTick(); }; }));
+            using var treeB = SpokeTree.Spawn(new LambdaEpoch(s => { b = s.Ports; return s => { if (armed) a.RequestTick(); }; }));
+
+            armed = true;
+            a.RequestTick(); // two trees re-arming each other across flushes
+
+            Assert.IsTrue(Errors.Entries.Exists(e => e.msg.Contains("oscillation limit")),
+                "Cross-tree ping-pong should be stopped by the oscillation guard");
+        }
+
+        [Test]
         public void Dispose_DuringFlush_IsDeferredUntilFlushCompletes() {
             // Disposing a tree from inside its own flush must NOT tear it down mid-tick — that would
             // pull the rug out from under the executing epoch. SpokeTree.Dispose defers the detach until
