@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -24,11 +23,13 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             position.Set(transform.position);
+            showOnTracked.SetActive(false);
 
             s.Phase(IsEnabled, s => {
                 s.Phase(health.IsAlive, s => {
                     s.Effect(Advance);
                     s.Effect(RadarTrack);
+                    s.Effect(Bob);
                 });
 
                 var isDead = s.Memo(s => !s.D(health.IsAlive));
@@ -82,6 +83,23 @@ namespace Spoke.Examples.BaseDefence {
                 var collider = s.Use(GameState.TrackedEnemyZone.Add(this, new Circle(position.Now, radius)));
                 s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
             });
+        };
+
+        EffectBlock Bob => s => {
+            const float bobAmplitude = 0.05f;
+            const float bobSpeed = 6f;
+            IEnumerator onUpdate() {
+                var baseY = transform.position.y;
+                var phase = UnityEngine.Random.value * Mathf.PI * 2f;   // desync enemies so they don't bob in lockstep
+                while (true) {
+                    yield return null;
+                    var p = transform.position;
+                    p.y = baseY + Mathf.Sin(Time.time * bobSpeed + phase) * bobAmplitude;
+                    transform.position = p;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
         };
 
         void Update() {

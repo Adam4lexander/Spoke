@@ -11,6 +11,7 @@ namespace Spoke.Examples.BaseDefence {
             Service = 1,
             Radar = 2,
             TrackedEnemy = 3,
+            Buildings = 4,
         }
 
         [Header("Level")]
@@ -81,6 +82,7 @@ namespace Spoke.Examples.BaseDefence {
                 if (mode == DebugModes.Service) return s.Effect(DebugCircles(serviceZone));
                 if (mode == DebugModes.Radar) return s.Effect(DebugCircles(radarZone));
                 if (mode == DebugModes.TrackedEnemy) return s.Effect(DebugCircles(trackedEnemyZone));
+                if (mode == DebugModes.Buildings) return s.Effect(DebugCircles(buildingZone));
                 return null;
             });
 
