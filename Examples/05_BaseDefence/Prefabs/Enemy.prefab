@@ -334,11 +334,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 357ba0d61272c52489ab6744274596b0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  bombBlastPrefab: {fileID: 8761192204346659007, guid: 8721d4519158738409316c7d69f13b3e, type: 3}
   health: {fileID: 3383984597874702801}
   shatterFX: {fileID: 6558335013262634079}
   fireFrom: {fileID: 8038472188550491902}
   showOnTracked: {fileID: 7890082224323991537}
   radius: 0.3
+  moveSpeed: 2
+  stopDistance: 1.2
+  fireRate: 1
 --- !u!114 &3383984597874702801
 MonoBehaviour:
   m_ObjectHideFlags: 0

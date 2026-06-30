@@ -6,6 +6,9 @@ namespace Spoke.Examples.BaseDefence {
 
     public class Enemy : SpokeBehaviour {
 
+        [Header("Prefabs")]
+        [SerializeField] GameObject bombBlastPrefab;
+
         [Header("References")]
         [SerializeField] Health health;
         [SerializeField] MeshShatterFX shatterFX;
@@ -16,6 +19,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float radius;
         [SerializeField] float moveSpeed = 2f;
         [SerializeField] float stopDistance = 1.2f;   // gap kept from the target building's centre
+        [SerializeField] float fireRate = 1f;         // shots per second
 
         State<Vector3> position = new();
 
@@ -27,9 +31,14 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(IsEnabled, s => {
                 s.Phase(health.IsAlive, s => {
-                    s.Effect(Advance);
                     s.Effect(RadarTrack);
                     s.Effect(Bob);
+
+                    var target = s.Effect(ChooseTarget);
+                    s.Effect(s => {
+                        if (s.D(target) == null) return;
+                        s.Effect(Attack(s.D(target)));
+                    });
                 });
 
                 var isDead = s.Memo(s => !s.D(health.IsAlive));
@@ -42,29 +51,53 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
-        EffectBlock Advance => s => {
+        EffectBlock<Building> ChooseTarget => s => {
+            var target = State.Create<Building>();
             IEnumerator onUpdate() {
                 while (true) {
                     yield return null;
-                    // Head for the building nearest our current position.
-                    var buildings = GameState.Buildings;
-                    Building target = null;
+                    Building bestTarget = null;
                     var bestSqr = float.MaxValue;
-                    for (var i = 0; i < buildings.Count; i++) {
-                        var sqr = (buildings[i].Payload.Position.Now - transform.position).sqrMagnitude;
-                        if (sqr < bestSqr) { bestSqr = sqr; target = buildings[i].Payload; }
-                    }
-                    if (target) {
-                        var to = target.Position.Now - transform.position;
-                        to.y = 0f;
-                        var dist = to.magnitude;
-                        if (dist > stopDistance) {
-                            var dir = to / dist;
-                            var step = Mathf.Min(moveSpeed * Time.deltaTime, dist - stopDistance);
-                            transform.position += dir * step;
-                            transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                    foreach (var building in GameState.Buildings) {
+                        var sqr = (building.Payload.Position.Now - transform.position).sqrMagnitude;
+                        if (sqr < bestSqr) { 
+                            bestSqr = sqr; 
+                            bestTarget = building.Payload; 
                         }
                     }
+                    target.Set(bestTarget);
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+            return target;
+        };
+
+        EffectBlock Attack(Building target) => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    if (target == null) break;
+                    var attackPos = target.Position.Now;
+
+                    // Move toward the target until it's in range.
+                    while (true) {
+                        var to = attackPos - transform.position;
+                        to.y = 0f;
+                        var dist = to.magnitude;
+                        if (dist <= stopDistance) break;
+                        var dir = to / dist;
+                        var step = Mathf.Min(moveSpeed * Time.deltaTime, dist - stopDistance);
+                        transform.position += dir * step;
+                        transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                        yield return null;
+                    }
+
+                    // Wait for cooldown
+                    yield return new WaitForSeconds(1f / fireRate);
+
+                    // Launch bomb
+                    Instantiate(bombBlastPrefab, attackPos, Quaternion.identity);
+                    yield return null;
                 }
             }
             var routine = StartCoroutine(onUpdate());
