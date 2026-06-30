@@ -27,7 +27,7 @@ namespace Spoke.Examples.BaseDefence {
 
             beam.positionCount = 2;
             beam.useWorldSpace = true;
-            beam.enabled = false;
+            beam.gameObject.SetActive(false);
 
             var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
 
@@ -95,9 +95,9 @@ namespace Spoke.Examples.BaseDefence {
                         // before the enemy dies and we retarget.
                         beam.SetPosition(0, fireFrom.transform.position);
                         beam.SetPosition(1, target.transform.position);
-                        beam.enabled = true;
+                        beam.gameObject.SetActive(true);
                         yield return new WaitForSeconds(beamFlashTime);
-                        beam.enabled = false;
+                        beam.gameObject.SetActive(false);
                         if (target) target.Health.Damage(damage);
                     }
                     yield return null;
@@ -106,7 +106,7 @@ namespace Spoke.Examples.BaseDefence {
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => {
                 StopCoroutine(routine);
-                beam.enabled = false;
+                beam.gameObject.SetActive(false);
             });
         };
 

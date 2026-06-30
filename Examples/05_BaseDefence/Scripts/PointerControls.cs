@@ -14,6 +14,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Attributes")]
         [SerializeField] UState<Color> hoverColour = new(new Color(1f, 0.7372549f, 0f));
+        [SerializeField] UState<Color> highlightColour = new(Color.cyan);
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
@@ -21,8 +22,9 @@ namespace Spoke.Examples.BaseDefence {
                 var view = s.Effect(ViewArea);
 
                 var circles = s.Effect(s => {
-                    var b = s.D(hovered);
-                    if (b == null) return null;
+                    var hoveredNow = s.D(hovered);
+                    if (hoveredNow == null) return null;
+                    var b = hoveredNow.Owner;
                     if (b.GetComponent<Service>() != null) return s.Effect(ZoneCircles(GameState.ServiceZone, view));
                     if (b.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone, view));
                     if (b.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone, view));
@@ -33,23 +35,33 @@ namespace Spoke.Examples.BaseDefence {
                     if (s.D(circles) == null) return;
                     s.Effect(RangeDisplay.Draw(circles, hoverColour));
                 });
+
+                s.Effect(s => {
+                    if (s.D(hovered) == null) return;
+                    var ring = s.Memo(s => {
+                        var circle = s.D(hovered).Circle;
+                        var larger = new Circle(circle.Center, circle.Radius * 1.5f);
+                        return new List<Circle> { larger };
+                    });
+                    s.Effect(RangeDisplay.Draw(ring, highlightColour));
+                });
             });
         }
 
         // The building currently under the mouse cursor (or null).
-        EffectBlock<Building> Hovered => s => {
-            var hovered = State.Create<Building>();
+        EffectBlock<ICollider<Building>> Hovered => s => {
+            var hovered = State.Create<ICollider<Building>>();
             var plane = new Plane(Vector3.up, GameState.Instance.LevelBounds.center);
             var hits = new List<ICollider<Building>>();
             IEnumerator onUpdate() {
                 while (true) {
                     yield return null;
-                    Building found = null;
+                    ICollider<Building> found = null;
                     var ray = cam.ScreenPointToRay(Input.mousePosition);
                     if (plane.Raycast(ray, out var enter)) {
                         hits.Clear();
                         GameState.BuildingZone.Query(new Circle(ray.GetPoint(enter), 0f), hits);
-                        if (hits.Count > 0) found = hits[0].Owner;
+                        if (hits.Count > 0) found = hits[0];
                     }
                     hovered.Set(found);
                 }

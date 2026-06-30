@@ -711,6 +711,8 @@ MonoBehaviour:
   cam: {fileID: 754526391}
   hoverColour:
     value: {r: 1, g: 0.7372549, b: 0, a: 1}
+  highlightColour:
+    value: {r: 0.7971698, g: 1, b: 0.98020375, a: 1}
 --- !u!114 &1245970317
 MonoBehaviour:
   m_ObjectHideFlags: 0
