@@ -47,7 +47,7 @@ namespace Spoke.Examples.BaseDefence {
                     meshFX.Shatter();
                     s.OnCleanup(meshFX.Restore);
                     s.Effect(s => {
-                        if (s.D(meshFX.IsShattered)) Destroy(gameObject);
+                        if (s.D(meshFX.IsShattered)) Pool.Despawn(gameObject);
                     });
                 });
             });

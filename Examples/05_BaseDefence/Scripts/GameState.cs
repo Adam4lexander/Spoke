@@ -20,7 +20,7 @@ namespace Spoke.Examples.BaseDefence {
         public Bounds LevelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0f, dimensions.y));
 
         [Header("Spawning")]
-        [SerializeField] Enemy enemyPrefab;
+        [SerializeField] GameObject enemyPrefab;
         [SerializeField] float spawnInterval = 2f;
 
         [Header("Debug")]
@@ -69,7 +69,7 @@ namespace Spoke.Examples.BaseDefence {
                         2 => new Vector3(x, y, b.min.z),  // south
                         _ => new Vector3(x, y, b.max.z),  // north
                     };
-                    Instantiate(enemyPrefab, edge, Quaternion.identity);
+                    Pool.Spawn(enemyPrefab, edge, Quaternion.identity);
                 }
             }
             var routine = StartCoroutine(onUpdate());

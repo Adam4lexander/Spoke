@@ -37,6 +37,8 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(s => {
                 isAlive.Set(s.D(hp) > 0f);
             });
+
+            s.Phase(IsEnabled, s => s.OnCleanup(() => damage.Set(0f)));   // restore full health on return to the pool
         }
     }
 }
