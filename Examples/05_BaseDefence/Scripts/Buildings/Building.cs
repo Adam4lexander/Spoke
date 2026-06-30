@@ -11,7 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
-        [SerializeField] MeshShatterFX shatterFX;
+        [SerializeField] MeshFX meshFX;
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
@@ -42,15 +42,25 @@ namespace Spoke.Examples.BaseDefence {
                     hasService.Set(IsCore || s.D(inServiceCoverage) && s.D(health.IsAlive));
                 });
                 s.OnCleanup(() => hasService.Set(false));
+
+                s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });
             
-            s.Effect(DimWhenUnserviced);
+            s.Effect(s => {
+                if (s.D(hasService)) {
+                    meshFX.SetTint(Color.white);
+                    return;
+                }
+                var d = s.D(unservicedDim); 
+                meshFX.SetTint(new Color(d, d, d, 1f));
+            });
 
             var isDead = s.Memo(s => !s.D(health.IsAlive));
             s.Phase(isDead, s => {
-                shatterFX.StartFX();
+                meshFX.Shatter();
+                s.OnCleanup(meshFX.Restore);
                 s.Effect(s => {
-                    if (s.D(shatterFX.IsFinished)) Destroy(gameObject);
+                    if (s.D(meshFX.IsShattered)) Destroy(gameObject);
                 });
             });
         }
@@ -60,26 +70,6 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(s => coverageSensor.Circle = new Circle(s.D(Position), radius));
 
             return s.Memo(s => coverageSensor.Overlaps.Count > 0, coverageSensor.OverlapsChanged);
-        };
-
-        EffectBlock DimWhenUnserviced => s => {
-            var renderers = GetComponentsInChildren<Renderer>();
-            var block = new MaterialPropertyBlock();
-
-            foreach (var renderer in renderers) {
-                var litColour = renderer.sharedMaterial.color;
-                s.Effect(s => {
-                    if (s.D(hasService)) return;
-                    var colour = litColour * s.D(unservicedDim);
-                    colour.a = litColour.a;
-                    renderer.GetPropertyBlock(block);
-                    block.SetColor("_Color", colour);
-                    renderer.SetPropertyBlock(block);
-                    s.OnCleanup(() => {
-                        renderer.SetPropertyBlock(null);
-                    });
-                });
-            }
         };
 
         void Update() {

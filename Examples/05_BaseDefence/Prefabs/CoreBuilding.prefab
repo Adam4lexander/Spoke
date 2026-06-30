@@ -238,7 +238,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   health: {fileID: 1652143216942797496}
-  shatterFX: {fileID: 4863930116280884562}
+  meshFX: {fileID: 4863930116280884562}
   radius: 0.5
   isCore: 1
   unservicedDim:
@@ -273,11 +273,8 @@ MonoBehaviour:
   meshRoot: {fileID: 6501176794181837326}
   gravity: 9.8
   blastSpeed: 2
-  time: 2
-  isStarted:
-    value: 0
-  isFinished:
-    value: 0
+  shatterTime: 2
+  blinkTime: 0.15
 --- !u!1 &7970535231448366522
 GameObject:
   m_ObjectHideFlags: 0

@@ -11,7 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
-        [SerializeField] MeshShatterFX shatterFX;
+        [SerializeField] MeshFX meshFX;
         [SerializeField] GameObject fireFrom;
         [SerializeField] GameObject showOnTracked;
 
@@ -33,6 +33,7 @@ namespace Spoke.Examples.BaseDefence {
                 s.Phase(health.IsAlive, s => {
                     s.Effect(RadarTrack);
                     s.Effect(Bob);
+                    s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
 
                     var target = s.Effect(ChooseTarget);
                     s.Effect(s => {
@@ -43,9 +44,10 @@ namespace Spoke.Examples.BaseDefence {
 
                 var isDead = s.Memo(s => !s.D(health.IsAlive));
                 s.Phase(isDead, s => {
-                    shatterFX.StartFX();
+                    meshFX.Shatter();
+                    s.OnCleanup(meshFX.Restore);
                     s.Effect(s => {
-                        if (s.D(shatterFX.IsFinished)) Destroy(gameObject);
+                        if (s.D(meshFX.IsShattered)) Destroy(gameObject);
                     });
                 });
             });

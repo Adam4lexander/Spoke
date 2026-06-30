@@ -336,7 +336,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   bombBlastPrefab: {fileID: 8761192204346659007, guid: 8721d4519158738409316c7d69f13b3e, type: 3}
   health: {fileID: 3383984597874702801}
-  shatterFX: {fileID: 6558335013262634079}
+  meshFX: {fileID: 6558335013262634079}
   fireFrom: {fileID: 8038472188550491902}
   showOnTracked: {fileID: 7890082224323991537}
   radius: 0.3
@@ -378,11 +378,8 @@ MonoBehaviour:
   meshRoot: {fileID: 3368531516232569017}
   gravity: 9.8
   blastSpeed: 2
-  time: 2
-  isStarted:
-    value: 0
-  isFinished:
-    value: 0
+  shatterTime: 2
+  blinkTime: 0.15
 --- !u!1 &4608008373106279954
 GameObject:
   m_ObjectHideFlags: 0

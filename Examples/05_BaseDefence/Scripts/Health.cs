@@ -18,7 +18,13 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<float> HPFraction => hpFrac;
         public ISignal<bool> IsAlive => isAlive;
 
-        public void Damage(float amount) => damage.Update(x => x + amount);
+        Trigger damaged = Trigger.Create();
+        public ITrigger Damaged => damaged;
+
+        public void Damage(float amount) {
+            damage.Update(x => x + amount);
+            damaged.Invoke();
+        }
 
         protected override void Init(EffectBuilder s) {
 
