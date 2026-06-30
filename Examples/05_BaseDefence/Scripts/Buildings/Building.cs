@@ -12,7 +12,6 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
-        [SerializeField] float maxHp = 5;
         [SerializeField] bool isCore = false;
         [SerializeField] UState<float> unservicedDim = new(0.35f);
 
@@ -29,7 +28,7 @@ namespace Spoke.Examples.BaseDefence {
             position.Set(transform.position);
 
             s.Phase(health.IsAlive, s => {
-                var body = s.Use(GameState.BuildingZone.Add(this, new Circle(Position.Now, radius)));
+                var body = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
                 s.Effect(s => body.Circle = new Circle(s.D(Position), radius));
 
                 var inServiceCoverage = s.Effect(IsInServiceCoverage);
@@ -51,10 +50,10 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         EffectBlock<bool> IsInServiceCoverage => s => {
-            var coverageSensor = s.Use(GameState.ServiceZone.Add(default, new Circle(Position.Now, radius), detects: true, detectable: false));
+            var coverageSensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
             s.Effect(s => coverageSensor.Circle = new Circle(s.D(Position), radius));
 
-            return s.Memo(s => coverageSensor.Overlaps.Count > 0, coverageSensor.Changed);
+            return s.Memo(s => coverageSensor.Overlaps.Count > 0, coverageSensor.OverlapsChanged);
         };
 
         EffectBlock DimWhenUnserviced => s => {

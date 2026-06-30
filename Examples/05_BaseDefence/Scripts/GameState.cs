@@ -39,14 +39,14 @@ namespace Spoke.Examples.BaseDefence {
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
         public static CollisionWorld<Building> BuildingZone => Instance.buildingZone;
 
-        IBody<Building> buildingsSensor;
-        public static ReadOnlyList<IBody<Building>> Buildings => Instance.buildingsSensor.Overlaps;
+        ISensor<Building> buildingsSensor;
+        public static ReadOnlyList<ICollider<Building>> Buildings => Instance.buildingsSensor.Overlaps;
 
         protected override void Init(EffectBuilder s) {
             s.Effect(RunDebugMode);
             s.Effect(SpawnEnemies);
             // One static, map-covering sensor maintains the list of all buildings for enemies to target.
-            buildingsSensor = s.Use(buildingZone.Add(default, new Circle(LevelBounds.center, LevelBounds.size.magnitude), detects: true, detectable: false));
+            buildingsSensor = s.Use(buildingZone.AddSensor(new Circle(LevelBounds.center, LevelBounds.size.magnitude)));
         }
 
         void LateUpdate() {
@@ -98,12 +98,12 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock<List<Circle>> DebugCircles<T>(CollisionWorld<T> zone) => s => {
-            var sensor = s.Use(zone.Add(default, new Circle(transform.position, dimensions.magnitude), detects: true, detectable: false));
+            var sensor = s.Use(zone.AddSensor(new Circle(transform.position, dimensions.magnitude)));
             return s.Memo(s => {
                 var circles = new List<Circle>();
                 foreach (var collider in sensor.Overlaps) circles.Add(collider.Circle);
                 return circles;
-            }, sensor.Changed);
+            }, sensor.OverlapsChanged);
         };
 
         void OnDrawGizmosSelected() {

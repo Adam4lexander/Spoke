@@ -4,18 +4,21 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public interface IBody<T> : IDisposable {
+    public interface ISensor<T> : IDisposable {
         Circle Circle { get; set; }
-        T Payload { get; }
-        ReadOnlyList<IBody<T>> Overlaps { get; }
-        ITrigger Changed { get; }
+        ReadOnlyList<ICollider<T>> Overlaps { get; }
+        ITrigger OverlapsChanged { get; }
+    }
+
+    public interface ICollider<T> : ISensor<T> {
+        T Owner { get; }
     }
 
     public class CollisionWorld<T> {
 
-        class Body : IBody<T> {
+        class Body : ICollider<T> {
 
-            public T Payload { get; }
+            public T Owner { get; }
             public Circle Circle {
                 get => circle;
                 set {
@@ -25,39 +28,33 @@ namespace Spoke.Examples.BaseDefence {
                     world.Insert(this);
                 }
             }
-            public ReadOnlyList<IBody<T>> Overlaps => new(overlaps);
-            public ITrigger Changed => changed;
+            public ReadOnlyList<ICollider<T>> Overlaps => new(overlaps);
+            public ITrigger OverlapsChanged => changed;
 
-            readonly bool detects, detectable;
-            readonly Trigger changed;
-            readonly List<IBody<T>> overlaps;
-            readonly List<(Body body, float dist2)> sorted;
+            readonly bool detectable;
+            readonly Trigger changed = Trigger.Create();
+            readonly List<ICollider<T>> overlaps = new();
+            readonly List<(Body body, float dist2)> sorted = new();
             Circle circle;
             CollisionWorld<T> world;
 
-            public Body(CollisionWorld<T> world, T payload, Circle circle, bool detects, bool detectable) {
+            public Body(CollisionWorld<T> world, T owner, Circle circle, bool detectable) {
                 this.world = world;
-                Payload = payload;
+                Owner = owner;
                 this.circle = circle;
-                this.detects = detects;
                 this.detectable = detectable;
-                if (detects) {
-                    changed = Trigger.Create();
-                    overlaps = new();
-                    sorted = new();
-                }
                 world.Insert(this);
             }
 
             public void Dispose() {
                 if (world == null) return;
                 world.Remove(this);
+                overlaps.Clear();
                 world = null;
             }
 
-            // Rebuild the nearest-first overlap set and raise Changed if it shifted (detecting only).
+            // Rebuild the nearest-first overlap set and raise Changed if it shifted.
             public void Recompute() {
-                if (!detects) return;
                 var area = circle;
                 sorted.Clear();
                 foreach (var body in world.Query(area))
@@ -91,8 +88,11 @@ namespace Spoke.Examples.BaseDefence {
             step = Step;
         }
 
-        public IBody<T> Add(T payload, Circle circle, bool detects = false, bool detectable = true)
-            => new Body(this, payload, circle, detects, detectable);
+        public ISensor<T> AddSensor(Circle circle)
+            => new Body(this, default, circle, detectable: false);
+
+        public ICollider<T> AddCollider(T owner, Circle circle)
+            => new Body(this, owner, circle, detectable: true);
 
         public void Tick() => SpokeRuntime.Batch(step);
 

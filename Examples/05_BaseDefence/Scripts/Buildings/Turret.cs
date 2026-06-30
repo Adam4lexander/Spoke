@@ -34,9 +34,9 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(isRunning, s => {
                 s.Effect(RotateToTarget);
 
-                var sensor = s.Use(GameState.TrackedEnemyZone.Add(default, new Circle(building.Position.Now, range), detects: true, detectable: false));
+                var sensor = s.Use(GameState.TrackedEnemyZone.AddSensor(new Circle(building.Position.Now, range)));
                 s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), range));
-                var target = s.Memo(s => sensor.Overlaps.Count == 0 ? null : sensor.Overlaps[0].Payload, sensor.Changed);
+                var target = s.Memo(s => sensor.Overlaps.Count == 0 ? null : sensor.Overlaps[0].Owner, sensor.OverlapsChanged);
 
                 s.Effect(s => {
                     var targetNow = s.D(target);

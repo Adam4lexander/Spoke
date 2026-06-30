@@ -59,10 +59,10 @@ namespace Spoke.Examples.BaseDefence {
                     Building bestTarget = null;
                     var bestSqr = float.MaxValue;
                     foreach (var building in GameState.Buildings) {
-                        var sqr = (building.Payload.Position.Now - transform.position).sqrMagnitude;
+                        var sqr = (building.Owner.Position.Now - transform.position).sqrMagnitude;
                         if (sqr < bestSqr) { 
                             bestSqr = sqr; 
-                            bestTarget = building.Payload; 
+                            bestTarget = building.Owner; 
                         }
                     }
                     target.Set(bestTarget);
@@ -105,15 +105,15 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock RadarTrack => s => {
-            var sensor = s.Use(GameState.RadarZone.Add(default, new Circle(position.Now, radius), detects: true, detectable: false));
+            var sensor = s.Use(GameState.RadarZone.AddSensor(new Circle(position.Now, radius)));
             s.Effect(s => sensor.Circle = new Circle(s.D(position), radius));
 
-            var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.Changed);
+            var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.OverlapsChanged);
             s.Phase(isTracked, s => {
                 showOnTracked.SetActive(true);
                 s.OnCleanup(() => showOnTracked.SetActive(false));
 
-                var collider = s.Use(GameState.TrackedEnemyZone.Add(this, new Circle(position.Now, radius)));
+                var collider = s.Use(GameState.TrackedEnemyZone.AddCollider(this, new Circle(position.Now, radius)));
                 s.Effect(s => collider.Circle = new Circle(s.D(position), radius));
             });
         };

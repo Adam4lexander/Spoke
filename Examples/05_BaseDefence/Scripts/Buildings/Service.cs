@@ -14,7 +14,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<float> range = new(5f);
 
         State<bool> connected = new(false);
-        IBody<Service> sensor;   // range sensor; its overlaps are the services within my range
+        ISensor<Service> sensor;   // range sensor; its overlaps are the services within my range
 
         // Driven once per frame by GameState to settle connectivity.
         public static void UpdateNetwork() => network.Recompute();
@@ -24,16 +24,16 @@ namespace Spoke.Examples.BaseDefence {
                 s.Phase(building.Health.IsAlive, s => {
                     // My place in the edge graph: a point others can detect, plus a range sensor whose
                     // overlaps are the services within my range.
-                    var point = s.Use(GameState.EdgeZone.Add(this, new Circle(building.Position.Now, 0f)));
+                    var point = s.Use(GameState.EdgeZone.AddCollider(this, new Circle(building.Position.Now, 0f)));
                     s.Effect(s => point.Circle = new Circle(s.D(building.Position), 0f));
-                    sensor = s.Use(GameState.EdgeZone.Add(this, new Circle(building.Position.Now, range.Now), detects: true, detectable: false));
+                    sensor = s.Use(GameState.EdgeZone.AddSensor(new Circle(building.Position.Now, range.Now)));
                     s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), s.D(range)));
                     network.Add(this);
                     s.OnCleanup(() => network.Remove(this));
                     // Re-flood when my neighbour set actually changes.
-                    s.Subscribe(sensor.Changed, network.Invalidate);
+                    s.Subscribe(sensor.OverlapsChanged, network.Invalidate);
                     s.Phase(connected, s => {
-                        var broadcast = s.Use(GameState.ServiceZone.Add(this, new Circle(building.Position.Now, range.Now)));
+                        var broadcast = s.Use(GameState.ServiceZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
                         s.Effect(s => broadcast.Circle = new Circle(s.D(building.Position), s.D(range)));
                     });
                 });
@@ -70,7 +70,7 @@ namespace Spoke.Examples.BaseDefence {
             void Flood(Service from) {
                 if (!reached.Add(from)) return;
                 foreach (var neighbour in from.sensor.Overlaps)
-                    Flood(neighbour.Payload);
+                    Flood(neighbour.Owner);
             }
         }
     }
