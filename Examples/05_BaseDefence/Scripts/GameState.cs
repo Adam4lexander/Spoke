@@ -39,14 +39,9 @@ namespace Spoke.Examples.BaseDefence {
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
         public static CollisionWorld<Building> BuildingZone => Instance.buildingZone;
 
-        ISensor<Building> buildingsSensor;
-        public static ReadOnlyList<ICollider<Building>> Buildings => Instance.buildingsSensor.Overlaps;
-
         protected override void Init(EffectBuilder s) {
             s.Effect(RunDebugMode);
             s.Effect(SpawnEnemies);
-            // One static, map-covering sensor maintains the list of all buildings for enemies to target.
-            buildingsSensor = s.Use(buildingZone.AddSensor(new Circle(LevelBounds.center, LevelBounds.size.magnitude)));
         }
 
         void LateUpdate() {

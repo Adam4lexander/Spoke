@@ -31,7 +31,7 @@ namespace Spoke.Examples.BaseDefence {
             public ReadOnlyList<ICollider<T>> Overlaps => new(overlaps);
             public ITrigger OverlapsChanged => changed;
 
-            readonly bool detectable;
+            public readonly bool detectable;
             readonly Trigger changed = Trigger.Create();
             readonly List<ICollider<T>> overlaps = new();
             readonly List<(Body body, float dist2)> sorted = new();
@@ -57,7 +57,7 @@ namespace Spoke.Examples.BaseDefence {
             public void Recompute() {
                 var area = circle;
                 sorted.Clear();
-                foreach (var body in world.Query(area))
+                foreach (var body in world.Broadphase(area))
                     if (body.detectable && body != this && area.Overlaps(body.circle))
                         sorted.Add((body, (body.circle.Center - area.Center).sqrMagnitude));
                 sorted.Sort((a, b) => a.dist2.CompareTo(b.dist2));
@@ -96,6 +96,14 @@ namespace Spoke.Examples.BaseDefence {
 
         public void Tick() => SpokeRuntime.Batch(step);
 
+        public List<ICollider<T>> Query(Circle area, List<ICollider<T>> storeIn = null) {
+            storeIn = storeIn ?? new List<ICollider<T>>();
+            foreach (var body in Broadphase(area))
+                if (body.detectable && area.Overlaps(body.Circle))
+                    storeIn.Add(body);
+            return storeIn;
+        }
+
         void Step() {
             dirtyBodies.Clear();
             foreach (var cell in dirty)
@@ -105,7 +113,7 @@ namespace Spoke.Examples.BaseDefence {
             foreach (var body in dirtyBodies) body.Recompute();
         }
 
-        HashSet<Body> Query(Circle c) {
+        HashSet<Body> Broadphase(Circle c) {
             queryBodies.Clear();
             foreach (var cell in Cells(c))
                 if (cells.TryGetValue(cell, out var list))

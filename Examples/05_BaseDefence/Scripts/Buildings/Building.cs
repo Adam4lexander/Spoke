@@ -6,6 +6,9 @@ namespace Spoke.Examples.BaseDefence {
 
     public class Building : SpokeBehaviour {
 
+        static readonly List<Building> all = new();
+        public static IReadOnlyList<Building> All => all;
+
         [Header("References")]
         [SerializeField] Health health;
         [SerializeField] MeshShatterFX shatterFX;
@@ -28,6 +31,9 @@ namespace Spoke.Examples.BaseDefence {
             position.Set(transform.position);
 
             s.Phase(health.IsAlive, s => {
+                all.Add(this);
+                s.OnCleanup(() => all.Remove(this));
+
                 var body = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
                 s.Effect(s => body.Circle = new Circle(s.D(Position), radius));
 

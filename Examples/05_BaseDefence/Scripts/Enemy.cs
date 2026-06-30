@@ -58,11 +58,11 @@ namespace Spoke.Examples.BaseDefence {
                     yield return null;
                     Building bestTarget = null;
                     var bestSqr = float.MaxValue;
-                    foreach (var building in GameState.Buildings) {
-                        var sqr = (building.Owner.Position.Now - transform.position).sqrMagnitude;
-                        if (sqr < bestSqr) { 
-                            bestSqr = sqr; 
-                            bestTarget = building.Owner; 
+                    foreach (var building in Building.All) {
+                        var sqr = (building.Position.Now - transform.position).sqrMagnitude;
+                        if (sqr < bestSqr) {
+                            bestSqr = sqr;
+                            bestTarget = building;
                         }
                     }
                     target.Set(bestTarget);

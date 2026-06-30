@@ -21,11 +21,10 @@ namespace Spoke.Examples.BaseDefence {
             fxRoot.transform.localScale = new Vector3(radius, 1f, radius);
             fxRoot.Play(true);
 
-            var sensor = s.Use(GameState.BuildingZone.AddSensor(new Circle(transform.position, radius)));
-            
             s.Phase(isDone, s => {
-                foreach (var body in sensor.Overlaps) {
-                    var building = body.Owner;
+                var buildingColliders = GameState.BuildingZone.Query(new Circle(transform.position, radius));
+                foreach (var collider in buildingColliders) {
+                    var building = collider.Owner;
                     if (building == null) continue;
                     building.Health.Damage(damage);
                 }
