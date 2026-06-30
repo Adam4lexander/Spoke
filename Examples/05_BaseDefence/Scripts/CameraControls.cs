@@ -6,6 +6,9 @@ namespace Spoke.Examples.BaseDefence {
 
     public class CameraControls : SpokeBehaviour {
 
+        [Header("References")]
+        [SerializeField] Camera cam;
+
         [Header("Attributes")]
         [SerializeField] float panSpeed = 10f;
         [SerializeField] float acceleration = 16f;
@@ -17,29 +20,28 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         EffectBlock PanControls => s => {
-            var cam = GetComponent<Camera>();
             var velocity = Vector3.zero;
 
             // Orbit rig: the target is the board point the camera looks at, and the camera
             // sits a fixed offset above and behind it. Tilt, height and distance never
             // change while panning, so capture the rig offset once and drive the camera
             // position from the target.
-            var target = transform.position;
+            var target = cam.transform.position;
             var rigOffset = Vector3.zero;
             {
                 var plane = new Plane(Vector3.up, GameState.Instance.LevelBounds.center);
                 var ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
                 if (plane.Raycast(ray, out var enter)) {
                     target = ray.GetPoint(enter);
-                    rigOffset = transform.position - target;
+                    rigOffset = cam.transform.position - target;
                 }
             }
 
             IEnumerator onUpdate() {
                 while (true) {
                     // Pan the target across the board plane, relative to the camera's facing.
-                    var forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
-                    var right = Vector3.ProjectOnPlane(transform.right, Vector3.up).normalized;
+                    var forward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                    var right = Vector3.ProjectOnPlane(cam.transform.right, Vector3.up).normalized;
 
                     var input = Vector3.zero;
                     if (Input.GetKey(KeyCode.W)) input += forward;
@@ -57,7 +59,7 @@ namespace Spoke.Examples.BaseDefence {
                     var bounds = GameState.Instance.LevelBounds;
                     target.x = Mathf.Clamp(target.x, bounds.min.x, bounds.max.x);
                     target.z = Mathf.Clamp(target.z, bounds.min.z, bounds.max.z);
-                    transform.position = target + rigOffset;
+                    cam.transform.position = target + rigOffset;
 
                     yield return null;
                 }

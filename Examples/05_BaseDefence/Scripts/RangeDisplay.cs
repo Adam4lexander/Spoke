@@ -3,7 +3,8 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Renders a set of circles as one merged opaque coverage area.
+    // Renders the outline of the merged union of a set of circles (interior overlap arcs hidden),
+    // as one line mesh.
     // It creates and owns its own GameObject + mesh + material, all torn down on cleanup,
     // and rebuilds the mesh whenever the circles signal changes.
     public static class RangeDisplay {
@@ -30,13 +31,9 @@ namespace Spoke.Examples.BaseDefence {
             meshRenderer.sharedMaterial = material;
             s.Effect("WithSafeDestroy", WithSafeDestroy(material));
 
-            s.Effect(s => {
-                var colourNow = s.D(colour);
-                colourNow.a = 1f;
-                material.color = colourNow;
-            });
+            s.Effect(s => material.color = s.D(colour));
 
-            s.Effect("SyncMeshGeom", SyncMeshGeom(mesh, circles));
+            s.Effect("BuildOutline", s => BuildOutline(mesh, s.D(circles)));
         };
 
         static EffectBlock WithSafeDestroy(Object obj) => s => {
@@ -47,38 +44,80 @@ namespace Spoke.Examples.BaseDefence {
             });
         };
 
-        static EffectBlock SyncMeshGeom(Mesh mesh, ISignal<List<Circle>> circles) => s => {
-            var circlesNow = s.D(circles);
-            if (circlesNow == null || circlesNow.Count == 0) return;
-
+        static void BuildOutline(Mesh mesh, List<Circle> circles) {
             var verts = new List<Vector3>();
-            var tris = new List<int>();
+            var lines = new List<int>();
+            var breaks = new List<float>();
 
-            foreach (var circle in circlesNow) {
+            // For each circle, split its ring at the angles where other circles cross it, then keep
+            // only the arcs on the union boundary (midpoint outside every other circle). The split
+            // angles are exact intersection points, so adjacent circles' arcs meet there.
+            for (var c = 0; circles != null && c < circles.Count; c++) {
+                var circle = circles[c];
                 if (circle.Radius <= 0f) continue;
 
-                var center = verts.Count;
-                verts.Add(circle.Center);
-
-                var ringStart = verts.Count;
-                for (var i = 0; i < segmentsPerCircle; i++) {
-                    var a = (i / (float)segmentsPerCircle) * Mathf.PI * 2f;
-                    var world = circle.Center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * circle.Radius;
-                    verts.Add(world);
+                breaks.Clear();
+                for (var j = 0; j < circles.Count; j++) {
+                    if (j == c) continue;
+                    var other = circles[j];
+                    if (other.Radius <= 0f) continue;
+                    var delta = other.Center - circle.Center;
+                    var d = delta.magnitude;
+                    if (d >= circle.Radius + other.Radius) continue;             // disjoint
+                    if (d <= Mathf.Abs(circle.Radius - other.Radius)) continue;  // one contains the other
+                    var projection = (d * d + circle.Radius * circle.Radius - other.Radius * other.Radius) / (2f * d);
+                    var phi = Mathf.Acos(Mathf.Clamp(projection / circle.Radius, -1f, 1f));
+                    var axis = Mathf.Atan2(delta.z, delta.x);
+                    breaks.Add(Wrap(axis - phi));
+                    breaks.Add(Wrap(axis + phi));
                 }
 
-                for (var i = 0; i < segmentsPerCircle; i++) {
-                    tris.Add(center);
-                    tris.Add(ringStart + i);
-                    tris.Add(ringStart + (i + 1) % segmentsPerCircle);
+                if (breaks.Count == 0) {
+                    // No crossings: the ring is wholly on the boundary or wholly buried.
+                    if (!InsideAnyOther(circles, c, PointOn(circle, 0f))) EmitArc(verts, lines, circle, 0f, Mathf.PI * 2f);
+                    continue;
+                }
+
+                breaks.Sort();
+                for (var k = 0; k < breaks.Count; k++) {
+                    var from = breaks[k];
+                    var to = k + 1 < breaks.Count ? breaks[k + 1] : breaks[0] + Mathf.PI * 2f;
+                    if (InsideAnyOther(circles, c, PointOn(circle, (from + to) * 0.5f))) continue;
+                    EmitArc(verts, lines, circle, from, to);
                 }
             }
 
             mesh.SetVertices(verts);
-            mesh.SetTriangles(tris, 0);
+            mesh.SetIndices(lines, MeshTopology.Lines, 0);
             mesh.RecalculateBounds();
+        }
 
-            s.OnCleanup(() => mesh.Clear());
-        };
+        static float Wrap(float angle) {
+            const float twoPi = Mathf.PI * 2f;
+            angle %= twoPi;
+            return angle < 0f ? angle + twoPi : angle;
+        }
+
+        static Vector3 PointOn(Circle circle, float angle)
+            => circle.Center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * circle.Radius;
+
+        static void EmitArc(List<Vector3> verts, List<int> lines, Circle circle, float from, float to) {
+            var steps = Mathf.Max(1, Mathf.CeilToInt((to - from) / (Mathf.PI * 2f) * segmentsPerCircle));
+            var start = verts.Count;
+            for (var i = 0; i <= steps; i++) verts.Add(PointOn(circle, Mathf.Lerp(from, to, i / (float)steps)));
+            for (var i = 0; i < steps; i++) {
+                lines.Add(start + i);
+                lines.Add(start + i + 1);
+            }
+        }
+
+        static bool InsideAnyOther(List<Circle> circles, int self, Vector3 point) {
+            for (var j = 0; j < circles.Count; j++) {
+                if (j == self) continue;
+                var other = circles[j];
+                if ((point - other.Center).sqrMagnitude < other.Radius * other.Radius) return true;
+            }
+            return false;
+        }
     }
 }
