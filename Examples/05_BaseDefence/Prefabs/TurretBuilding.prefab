@@ -300,8 +300,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: {fileID: 7658322207003012496}
   shatterFX: {fileID: 8019864895797315416}
-  radius: 0.6
-  maxHp: 5
+  radius: 0.3
   isCore: 0
   unservicedDim:
     value: 0.35
