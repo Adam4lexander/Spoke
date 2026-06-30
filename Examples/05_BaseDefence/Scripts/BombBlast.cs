@@ -21,7 +21,7 @@ namespace Spoke.Examples.BaseDefence {
             fxRoot.transform.localScale = new Vector3(radius, 1f, radius);
             fxRoot.Play(true);
 
-            var sensor = GameState.BuildingZone.Add(default, new Circle(transform.position, radius), detects: true, detectable: false);
+            var sensor = s.Use(GameState.BuildingZone.Add(default, new Circle(transform.position, radius), detects: true, detectable: false));
             
             s.Phase(isDone, s => {
                 foreach (var body in sensor.Overlaps) {
