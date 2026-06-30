@@ -14,27 +14,28 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float damage;
         [SerializeField] float duration;
 
-        float timer;
-        State<bool> isDone = new(false);
-
         protected override void Init(EffectBuilder s) {
             fxRoot.transform.localScale = new Vector3(radius, 1f, radius);
-            fxRoot.Play(true);
 
-            s.Phase(isDone, s => {
-                var buildingColliders = GameState.BuildingZone.Query(new Circle(transform.position, radius));
-                foreach (var collider in buildingColliders) {
-                    var building = collider.Owner;
-                    if (building == null) continue;
-                    building.Health.Damage(damage);
+            s.Phase(IsEnabled, s => {
+                fxRoot.Play(true);
+
+                IEnumerator onUpdate() {
+                    yield return new WaitForSeconds(duration);
+                    var buildingColliders = GameState.BuildingZone.Query(new Circle(transform.position, radius));
+                    foreach (var collider in buildingColliders) {
+                        var building = collider.Owner;
+                        if (building == null) continue;
+                        building.Health.Damage(damage);
+                    }
+                    Pool.Despawn(gameObject);
                 }
-                Destroy(gameObject);
+                var routine = StartCoroutine(onUpdate());
+                s.OnCleanup(() => {
+                    StopCoroutine(routine);
+                    fxRoot.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                });
             });
-        }
-
-        void Update() {
-            timer += Time.deltaTime;
-            isDone.Set(timer >= duration);
         }
 
         void OnDrawGizmosSelected() {

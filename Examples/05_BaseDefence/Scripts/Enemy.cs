@@ -98,7 +98,7 @@ namespace Spoke.Examples.BaseDefence {
                     yield return new WaitForSeconds(1f / fireRate);
 
                     // Launch bomb
-                    Instantiate(bombBlastPrefab, attackPos, Quaternion.identity);
+                    Pool.Spawn(bombBlastPrefab, attackPos, Quaternion.identity);
                     yield return null;
                 }
             }
