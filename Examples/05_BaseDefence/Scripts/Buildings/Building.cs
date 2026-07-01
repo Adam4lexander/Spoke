@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,19 +11,15 @@ namespace Spoke.Examples.BaseDefence {
         [Header("References")]
         [SerializeField] Health health;
         [SerializeField] MeshFX meshFX;
+        [SerializeField] Service service;
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
-        [SerializeField] bool isCore = false;
         [SerializeField] UState<float> unservicedDim = new(0.35f);
 
-        public bool IsCore => isCore;
+        public float Radius => radius;
         public Health Health => health;
-
-        public State<Service> Parent { get; } = new();
-
-        State<bool> hasService = new(false);
-        public ISignal<bool> HasService => hasService;
+        public Service Service => service;
 
         State<Vector3> position = new();
         public ISignal<Vector3> Position => position;
@@ -32,21 +27,20 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             position.Set(transform.position);
 
-            s.Effect(WatchParent);
-            s.Effect(WatchHasService);
-
             s.Phase(health.IsAlive, s => {
                 all.Add(this);
                 s.OnCleanup(() => all.Remove(this));
 
-                var body = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
-                s.Effect(s => body.Circle = new Circle(s.D(Position), radius));
+                // Physical footprint for hover-picking and blast damage (distinct from the network
+                // receiver the Service registers in the service world).
+                var footprint = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
+                s.Effect(s => footprint.Circle = new Circle(s.D(Position), radius));
 
                 s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });
 
             s.Effect(s => {
-                if (s.D(hasService)) {
+                if (s.D(service.HasService)) {
                     meshFX.SetTint(Color.white);
                     return;
                 }
@@ -63,39 +57,6 @@ namespace Spoke.Examples.BaseDefence {
                 });
             });
         }
-
-        EffectBlock WatchParent => s => {
-            var parentNow = s.D(Parent);
-            if (parentNow == null) return;
-
-            var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
-            s.Effect(s => sensor.Circle = new Circle(s.D(Position), radius));
-
-            s.Reaction(s => {
-                foreach (var c in sensor.Overlaps) {
-                    if (c.Owner == parentNow) return;
-                }
-                Parent.Set(null);
-            }, sensor.OverlapsChanged);
-
-            s.Effect(s => {
-                if (!s.D(parentNow.Building.hasService)) Parent.Set(null);
-            });
-        };
-
-        EffectBlock WatchHasService => s => {
-            const float powerDelay = 0.15f;
-            var nextHasService = s.Memo(s => isCore || s.D(Parent) != null);
-            var shouldChange = s.Memo(s => s.D(nextHasService) != s.D(hasService));
-            s.Phase(shouldChange, s => {
-                IEnumerator settle() {
-                    yield return new WaitForSeconds(powerDelay);
-                    hasService.Set(nextHasService.Now);
-                }
-                var routine = StartCoroutine(settle());
-                s.OnCleanup(() => StopCoroutine(routine));
-            });
-        };
 
         void Update() {
             position.Set(transform.position);

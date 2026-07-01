@@ -29,7 +29,7 @@ namespace Spoke.Examples.BaseDefence {
             beam.useWorldSpace = true;
             beam.gameObject.SetActive(false);
 
-            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
+            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.Service.HasService));
 
             s.Phase(isRunning, s => {
                 s.Effect(RotateToTarget);

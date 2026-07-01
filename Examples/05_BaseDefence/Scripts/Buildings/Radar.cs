@@ -15,7 +15,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float dishRotationSpeed;
 
         protected override void Init(EffectBuilder s) {
-            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.HasService));
+            var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.Service.HasService));
 
             s.Phase(isRunning, s => {
                 s.Effect(DishAnimation);

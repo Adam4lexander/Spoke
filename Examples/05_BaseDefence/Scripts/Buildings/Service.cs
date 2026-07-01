@@ -1,7 +1,16 @@
-using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
+
+    // Owner for the service world. Every building's Service puts a Receiver collider (its footprint in
+    // the network — how providers find it) in the world, and while it provides coverage a Provider
+    // collider (its range). Queries filter on IsProvider to tell the two apart.
+    public class ServiceBody {
+        public readonly Service Service;
+        public readonly bool IsProvider;
+        public ServiceBody(Service service, bool isProvider) { Service = service; IsProvider = isProvider; }
+    }
 
     public class Service : SpokeBehaviour {
 
@@ -9,52 +18,96 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] Building building;
 
         [Header("Attributes")]
+        [SerializeField] bool isCore = false;
         [SerializeField] UState<float> range = new(5f);
 
-        public Building Building => building;
+        State<Service> parent { get; } = new();
+
+        State<bool> hasService = new(false);
+        public ISignal<bool> HasService => hasService;
+
+        public bool ProvidesService => range.Now > 0;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
-                s.Phase(building.HasService, s => {
-                    var coverage = s.Use(GameState.ServiceZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
-                    s.Effect(s => coverage.Circle = new Circle(s.D(building.Position), s.D(range)));
+                s.Effect(WatchHasService);
 
-                    var isConnected = s.Memo(WatchIsConnected);
-                    s.Phase(isConnected, PropagateConnections);
+                s.Phase(building.Health.IsAlive, s => {
+                    // Receiver: my footprint in the service world — always present while alive.
+                    var receiver = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, false), new Circle(building.Position.Now, building.Radius)));
+                    s.Effect(s => receiver.Circle = new Circle(s.D(building.Position), building.Radius));
+
+                    s.Effect(WatchParent(receiver));
+
+                    // Provider: my coverage range, only while powered and only if I provide service.
+                    if (!ProvidesService) return;
+                    s.Phase(hasService, s => {
+                        var provider = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, true), new Circle(building.Position.Now, range.Now)));
+                        s.Effect(s => provider.Circle = new Circle(s.D(building.Position), s.D(range)));
+
+                        var isConnected = s.Memo(WatchIsConnected);
+                        s.Phase(isConnected, PropagateConnections(provider));
+                    });
                 });
             });
         }
 
+        EffectBlock WatchHasService => s => {
+            const float powerDelay = 0.15f;
+            var nextHasService = s.Memo(s => isCore || s.D(parent) != null);
+            var shouldChange = s.Memo(s => s.D(nextHasService) != s.D(hasService));
+            s.Phase(shouldChange, s => {
+                IEnumerator settle() {
+                    yield return new WaitForSeconds(powerDelay);
+                    hasService.Set(nextHasService.Now);
+                }
+                var routine = StartCoroutine(settle());
+                s.OnCleanup(() => StopCoroutine(routine));
+            });
+            s.OnCleanup(() => hasService.Set(false));
+        };
+
+        EffectBlock WatchParent(ICollider<ServiceBody> receiver) => s => {
+            var parentNow = s.D(parent);
+            if (parentNow == null) return;
+            s.Effect(s => {
+                foreach (var c in receiver.Overlaps)
+                    if (c.Owner.IsProvider && c.Owner.Service == parentNow) return;
+                parent.Set(null);
+            }, receiver.OverlapsChanged);
+            s.Effect(s => {
+                if (!s.D(parentNow.HasService)) parent.Set(null);
+            });
+            s.OnCleanup(() => parent.Set(null));
+        };
+
+        // Connected iff walking my parent chain reaches a core.
         MemoBlock<bool> WatchIsConnected => s => {
             var node = this;
             while (node != null) {
-                if (node.building.IsCore) return true;
-                node = s.D(node.building.Parent);
+                if (node.isCore) return true;
+                node = s.D(node.parent);
             }
             return false;
         };
 
-        EffectBlock PropagateConnections => s => {
-            var sensor = s.Use(GameState.BuildingZone.AddSensor(new Circle(building.Position.Now, range.Now)));
-            s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), s.D(range)));
-
+        EffectBlock PropagateConnections(ICollider<ServiceBody> provider) => s => {
             s.Effect(s => {
-                foreach (var collider in sensor.Overlaps) {
-                    var building = collider.Owner;
-                    if (building == this.building || building.IsCore) continue;
+                foreach (var c in provider.Overlaps) {
+                    if (c.Owner.IsProvider) continue;
+                    var svc = c.Owner.Service;
+                    if (svc == this || svc.isCore) continue;
                     var canConnect = s.Memo(s => {
-                        var parentNow = s.D(building.Parent);
+                        var parentNow = s.D(svc.parent);
                         return parentNow == null || parentNow == this;
                     });
-                    s.Phase(canConnect, s => {
-                        building.Parent.Set(this);
-                    });
+                    s.Phase(canConnect, s => svc.parent.Set(this));
                 }
-            }, sensor.OverlapsChanged);
+            }, provider.OverlapsChanged);
         };
 
         void OnDrawGizmosSelected() {
-            new Circle(transform.position, range.Now).DrawGizmo(Color.red);
+            if (ProvidesService) new Circle(transform.position, range.Now).DrawGizmo(Color.red);
         }
     }
 }

@@ -310,6 +310,7 @@ GameObject:
   - component: {fileID: 169359706472318776}
   - component: {fileID: 7658322207003012496}
   - component: {fileID: 1199900657066672085}
+  - component: {fileID: 4968336241987631639}
   - component: {fileID: 4941254606368316928}
   - component: {fileID: 8019864895797315416}
   m_Layer: 0
@@ -370,10 +371,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: {fileID: 7658322207003012496}
   meshFX: {fileID: 8019864895797315416}
+  service: {fileID: 4968336241987631639}
   radius: 0.4
   isCore: 0
   unservicedDim:
     value: 0.35
+--- !u!114 &4968336241987631639
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3104909201192853156}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3fdd49a471fc1b6488dd71d7d301293a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  building: {fileID: 1199900657066672085}
+  range:
+    value: 0
 --- !u!114 &4941254606368316928
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -240,8 +240,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: {fileID: 111459607697218058}
   meshFX: {fileID: 7383137929261724295}
+  service: {fileID: 3547522816358629646}
   radius: 0.3
-  isCore: 0
   unservicedDim:
     value: 0.35
 --- !u!114 &3547522816358629646
@@ -257,6 +257,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   building: {fileID: 1289336978666534750}
+  isCore: 0
+  providesService: 1
   range:
     value: 4
 --- !u!114 &7383137929261724295
