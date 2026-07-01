@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5588769944885444452}
   - component: {fileID: 5975771072005284606}
+  - component: {fileID: 1034992498165820823}
   m_Layer: 0
   m_Name: Resource
   m_TagString: Untagged
@@ -47,8 +48,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9538e2ccb7042cc4c9ad39cf5429798f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  harvestEffect: {fileID: 7766083131059866334}
+  harvestFX: {fileID: 7766083131059866334}
+  powerNode: {fileID: 1034992498165820823}
   radius: 0.5
+--- !u!114 &1034992498165820823
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5588769944885444455}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3fdd49a471fc1b6488dd71d7d301293a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  isRoot: 0
+  receiveRange:
+    value: 0.5
+  provideRange:
+    value: 0
 --- !u!1 &5588769945216333314
 GameObject:
   m_ObjectHideFlags: 0
