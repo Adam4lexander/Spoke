@@ -21,6 +21,8 @@ namespace Spoke.Examples.BaseDefence {
         public bool IsCore => isCore;
         public Health Health => health;
 
+        public State<Service> Parent { get; } = new();
+
         State<bool> hasService = new(false);
         public ISignal<bool> HasService => hasService;
 
@@ -30,6 +32,9 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             position.Set(transform.position);
 
+            s.Effect(WatchParent);
+            s.Effect(WatchHasService);
+
             s.Phase(health.IsAlive, s => {
                 all.Add(this);
                 s.OnCleanup(() => all.Remove(this));
@@ -37,21 +42,15 @@ namespace Spoke.Examples.BaseDefence {
                 var body = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
                 s.Effect(s => body.Circle = new Circle(s.D(Position), radius));
 
-                var inServiceCoverage = s.Effect(IsInServiceCoverage);
-                s.Effect(s => {
-                    hasService.Set(IsCore || s.D(inServiceCoverage) && s.D(health.IsAlive));
-                });
-                s.OnCleanup(() => hasService.Set(false));
-
                 s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });
-            
+
             s.Effect(s => {
                 if (s.D(hasService)) {
                     meshFX.SetTint(Color.white);
                     return;
                 }
-                var d = s.D(unservicedDim); 
+                var d = s.D(unservicedDim);
                 meshFX.SetTint(new Color(d, d, d, 1f));
             });
 
@@ -65,11 +64,37 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
-        EffectBlock<bool> IsInServiceCoverage => s => {
-            var coverageSensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
-            s.Effect(s => coverageSensor.Circle = new Circle(s.D(Position), radius));
+        EffectBlock WatchParent => s => {
+            var parentNow = s.D(Parent);
+            if (parentNow == null) return;
 
-            return s.Memo(s => coverageSensor.Overlaps.Count > 0, coverageSensor.OverlapsChanged);
+            var sensor = s.Use(GameState.ServiceZone.AddSensor(new Circle(Position.Now, radius)));
+            s.Effect(s => sensor.Circle = new Circle(s.D(Position), radius));
+
+            s.Reaction(s => {
+                foreach (var c in sensor.Overlaps) {
+                    if (c.Owner == parentNow) return;
+                }
+                Parent.Set(null);
+            }, sensor.OverlapsChanged);
+
+            s.Effect(s => {
+                if (!s.D(parentNow.Building.hasService)) Parent.Set(null);
+            });
+        };
+
+        EffectBlock WatchHasService => s => {
+            const float powerDelay = 0.15f;
+            var nextHasService = s.Memo(s => isCore || s.D(Parent) != null);
+            var shouldChange = s.Memo(s => s.D(nextHasService) != s.D(hasService));
+            s.Phase(shouldChange, s => {
+                IEnumerator settle() {
+                    yield return new WaitForSeconds(powerDelay);
+                    hasService.Set(nextHasService.Now);
+                }
+                var routine = StartCoroutine(settle());
+                s.OnCleanup(() => StopCoroutine(routine));
+            });
         };
 
         void Update() {

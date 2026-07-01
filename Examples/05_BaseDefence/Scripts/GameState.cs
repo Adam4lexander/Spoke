@@ -14,14 +14,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] GameObject enemyPrefab;
         [SerializeField] float spawnInterval = 2f;
 
-        readonly CollisionWorld<Service> edgeZone = new();
         readonly CollisionWorld<Service> serviceZone = new();
         readonly CollisionWorld<Radar> radarZone = new();
         readonly CollisionWorld<Turret> turretZone = new();
         readonly CollisionWorld<Enemy> trackedEnemyZone = new();
         readonly CollisionWorld<Building> buildingZone = new();
 
-        public static CollisionWorld<Service> EdgeZone => Instance.edgeZone;
         public static CollisionWorld<Service> ServiceZone => Instance.serviceZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Turret> TurretZone => Instance.turretZone;
@@ -33,14 +31,12 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         void LateUpdate() {
-            // Tick service edges, settle connectivity, then tick the rest of the zones.
-            edgeZone.Tick();
-            Service.UpdateNetwork();
+            // Building world first so the service tree settles connectivity, then the rest of the zones.
+            buildingZone.Tick();
             serviceZone.Tick();
             radarZone.Tick();
             turretZone.Tick();
             trackedEnemyZone.Tick();
-            buildingZone.Tick();
         }
 
         EffectBlock SpawnEnemies => s => {

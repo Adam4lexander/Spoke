@@ -5,73 +5,56 @@ namespace Spoke.Examples.BaseDefence {
 
     public class Service : SpokeBehaviour {
 
-        static ServiceNetwork network = new();
-
         [Header("References")]
         [SerializeField] Building building;
 
         [Header("Attributes")]
         [SerializeField] UState<float> range = new(5f);
 
-        State<bool> connected = new(false);
-        ISensor<Service> sensor;   // range sensor; its overlaps are the services within my range
-
-        // Driven once per frame by GameState to settle connectivity.
-        public static void UpdateNetwork() => network.Recompute();
+        public Building Building => building;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
-                s.Phase(building.Health.IsAlive, s => {
-                    // My place in the edge graph: a point others can detect, plus a range sensor whose
-                    // overlaps are the services within my range.
-                    var point = s.Use(GameState.EdgeZone.AddCollider(this, new Circle(building.Position.Now, 0f)));
-                    s.Effect(s => point.Circle = new Circle(s.D(building.Position), 0f));
-                    sensor = s.Use(GameState.EdgeZone.AddSensor(new Circle(building.Position.Now, range.Now)));
-                    s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), s.D(range)));
-                    network.Add(this);
-                    s.OnCleanup(() => network.Remove(this));
-                    // Re-flood when my neighbour set actually changes.
-                    s.Subscribe(sensor.OverlapsChanged, network.Invalidate);
-                    s.Phase(connected, s => {
-                        var broadcast = s.Use(GameState.ServiceZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
-                        s.Effect(s => broadcast.Circle = new Circle(s.D(building.Position), s.D(range)));
-                    });
+                s.Phase(building.HasService, s => {
+                    var coverage = s.Use(GameState.ServiceZone.AddCollider(this, new Circle(building.Position.Now, range.Now)));
+                    s.Effect(s => coverage.Circle = new Circle(s.D(building.Position), s.D(range)));
+
+                    var isConnected = s.Memo(WatchIsConnected);
+                    s.Phase(isConnected, PropagateConnections);
                 });
             });
         }
 
+        MemoBlock<bool> WatchIsConnected => s => {
+            var node = this;
+            while (node != null) {
+                if (node.building.IsCore) return true;
+                node = s.D(node.building.Parent);
+            }
+            return false;
+        };
+
+        EffectBlock PropagateConnections => s => {
+            var sensor = s.Use(GameState.BuildingZone.AddSensor(new Circle(building.Position.Now, range.Now)));
+            s.Effect(s => sensor.Circle = new Circle(s.D(building.Position), s.D(range)));
+
+            s.Effect(s => {
+                foreach (var collider in sensor.Overlaps) {
+                    var building = collider.Owner;
+                    if (building == this.building || building.IsCore) continue;
+                    var canConnect = s.Memo(s => {
+                        var parentNow = s.D(building.Parent);
+                        return parentNow == null || parentNow == this;
+                    });
+                    s.Phase(canConnect, s => {
+                        building.Parent.Set(this);
+                    });
+                }
+            }, sensor.OverlapsChanged);
+        };
+
         void OnDrawGizmosSelected() {
             new Circle(transform.position, range.Now).DrawGizmo(Color.red);
-        }
-
-        // Floods connectivity out from the cores through the edge graph: a Service is connected iff
-        // the flood reaches it. Each Service owns its edges (via the spatial system); the network
-        // just walks them.
-        private class ServiceNetwork {
-
-            readonly HashSet<Service> services = new();
-            readonly HashSet<Service> reached = new();
-            bool dirty;
-
-            public void Add(Service service) { services.Add(service); dirty = true; }
-            public void Remove(Service service) { if (services.Remove(service)) dirty = true; }
-            public void Invalidate() => dirty = true;
-
-            public void Recompute() {
-                if (!dirty) return;
-                dirty = false;
-                reached.Clear();
-                foreach (var service in services)
-                    if (service.building.IsCore) Flood(service);
-                foreach (var service in services)
-                    service.connected.Set(reached.Contains(service));
-            }
-
-            void Flood(Service from) {
-                if (!reached.Add(from)) return;
-                foreach (var neighbour in from.sensor.Overlaps)
-                    Flood(neighbour.Owner);
-            }
         }
     }
 }
