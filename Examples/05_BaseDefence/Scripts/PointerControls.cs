@@ -33,7 +33,7 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Effect(s => {
                     if (s.D(circles) == null) return;
-                    s.Effect(RangeDisplay.Draw(circles, hoverColour));
+                    s.Effect(AreaDisplay.Draw(circles, hoverColour));
                 });
 
                 s.Effect(s => {
@@ -43,7 +43,14 @@ namespace Spoke.Examples.BaseDefence {
                         var larger = new Circle(circle.Center, circle.Radius * 1.5f);
                         return new List<Circle> { larger };
                     });
-                    s.Effect(RangeDisplay.Draw(ring, highlightColour));
+                    s.Effect(AreaDisplay.Draw(ring, highlightColour));
+                });
+
+                s.Effect(s => {
+                    var hoveredNow = s.D(hovered);
+                    if (hoveredNow == null) return;
+                    var links = s.Memo(PowerLinks(hoveredNow.Owner.Power));
+                    s.Effect(LinkDisplay.Draw(links, highlightColour));
                 });
             });
         }
@@ -84,6 +91,20 @@ namespace Spoke.Examples.BaseDefence {
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
             return view;
+        };
+
+        // Line segments walking the hovered node's parent chain up to the root — each node to the
+        // provider powering it. Re-walks whenever any parent along the chain changes.
+        MemoBlock<List<(Vector3 from, Vector3 to)>> PowerLinks(PowerNode start) => s => {
+            var segments = new List<(Vector3 from, Vector3 to)>();
+            var node = start;
+            while (node != null) {
+                var parent = s.D(node.Parent);
+                if (parent == null) break;
+                segments.Add((node.transform.position, parent.transform.position));
+                node = parent;
+            }
+            return segments;
         };
 
         // The provider (coverage) ranges within the given area — a sensor over the power world,

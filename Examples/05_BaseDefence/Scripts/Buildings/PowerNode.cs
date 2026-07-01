@@ -19,7 +19,8 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<float> receiveRange = new(0.1f);
         [SerializeField] UState<float> provideRange = new(4f);
 
-        State<PowerNode> parent { get; } = new();
+        State<PowerNode> parent = new();
+        public ISignal<PowerNode> Parent => parent;
 
         State<bool> hasPower = new(false);
         public ISignal<bool> HasPower => hasPower;
@@ -37,6 +38,7 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock DebounceHasPowerChange => s => {
             const float powerDelay = 0.15f;
+            if (isRoot) hasPower.Set(true);
             var nextHasPower = s.Memo(s => isRoot || s.D(parent) != null);
             var shouldChange = s.Memo(s => s.D(nextHasPower) != s.D(hasPower));
             s.Phase(shouldChange, s => {

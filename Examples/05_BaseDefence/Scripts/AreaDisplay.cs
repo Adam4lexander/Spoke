@@ -7,13 +7,13 @@ namespace Spoke.Examples.BaseDefence {
     // as one line mesh.
     // It creates and owns its own GameObject + mesh + material, all torn down on cleanup,
     // and rebuilds the mesh whenever the circles signal changes.
-    public static class RangeDisplay {
+    public static class AreaDisplay {
 
         const int segmentsPerCircle = 48;
 
         public static EffectBlock Draw(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
 
-            var go = new GameObject("RangeDisplay");
+            var go = new GameObject("AreaDisplay");
             go.transform.position = Vector3.up * 0.01f;
             s.Effect("WithSafeDestroy", WithSafeDestroy(go));
 
