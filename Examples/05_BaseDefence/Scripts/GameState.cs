@@ -15,13 +15,13 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float spawnInterval = 2f;
 
         readonly CollisionWorld<PowerBody> powerZone = new();
-        readonly CollisionWorld<Building> buildingZone = new();
+        readonly CollisionWorld<GameObject> groundZone = new();
         readonly CollisionWorld<Radar> radarZone = new();
         readonly CollisionWorld<Turret> turretZone = new();
         readonly CollisionWorld<Enemy> trackedEnemyZone = new();
 
         public static CollisionWorld<PowerBody> PowerZone => Instance.powerZone;
-        public static CollisionWorld<Building> BuildingZone => Instance.buildingZone;
+        public static CollisionWorld<GameObject> GroundZone => Instance.groundZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Turret> TurretZone => Instance.turretZone;
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
@@ -31,9 +31,8 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         void LateUpdate() {
-            // Power world first so the network settles connectivity, then the rest of the zones.
             powerZone.Tick();
-            buildingZone.Tick();
+            groundZone.Tick();
             radarZone.Tick();
             turretZone.Tick();
             trackedEnemyZone.Tick();

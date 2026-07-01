@@ -17,7 +17,6 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float radius = 0.6f;
         [SerializeField] UState<float> unpoweredDim = new(0.35f);
 
-        public Health Health => health;
         public PowerNode Power => powerNode;
 
         protected override void Init(EffectBuilder s) {
@@ -27,7 +26,7 @@ namespace Spoke.Examples.BaseDefence {
 
                 // Physical footprint for hover-picking and blast damage (distinct from the network
                 // receiver the PowerNode registers in the power world).
-                s.Use(GameState.BuildingZone.AddCollider(this, () => new Circle(transform.position, radius)));
+                s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
 
                 s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });

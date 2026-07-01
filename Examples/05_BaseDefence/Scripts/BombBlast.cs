@@ -22,11 +22,10 @@ namespace Spoke.Examples.BaseDefence {
 
                 IEnumerator onUpdate() {
                     yield return new WaitForSeconds(duration);
-                    var buildingColliders = GameState.BuildingZone.Query(new Circle(transform.position, radius));
-                    foreach (var collider in buildingColliders) {
-                        var building = collider.Owner;
-                        if (building == null) continue;
-                        building.Health.Damage(damage);
+                    foreach (var collider in GameState.GroundZone.Query(new Circle(transform.position, radius))) {
+                        var health = collider.Owner.GetComponent<Health>();
+                        if (health == null) continue;   // resources have no Health → not damageable
+                        health.Damage(damage);
                     }
                     Pool.Despawn(gameObject);
                 }
