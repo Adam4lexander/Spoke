@@ -28,26 +28,14 @@ namespace Spoke.Examples.BaseDefence {
         public bool IsLeaf => provideRange.Now <= 0;
 
         protected override void Init(EffectBuilder s) {
-            // The Building disables this component when it dies, tearing everything below down.
             s.Phase(IsEnabled, s => {
-                s.Effect(WatchHasPower);
-
-                // Receiver: my footprint in the power world — how providers find me.
-                var receiver = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, false), () => new Circle(transform.position, receiveRange.Now)));
-                s.Effect(WatchParent(receiver));
-
-                // Provider: my coverage range, only while powered and only if I'm not a leaf.
-                if (IsLeaf) return;
-                s.Phase(hasPower, s => {
-                    var provider = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, true), () => new Circle(transform.position, provideRange.Now)));
-
-                    var isRootConnected = s.Memo(IsRootConnected);
-                    s.Phase(isRootConnected, PropagateConnections(provider));
-                });
+                s.Effect(DebounceHasPowerChange);
+                if (!isRoot) s.Effect(ReceivePower);
+                if (!IsLeaf) s.Phase(hasPower, ProvidePower);
             });
         }
 
-        EffectBlock WatchHasPower => s => {
+        EffectBlock DebounceHasPowerChange => s => {
             const float powerDelay = 0.15f;
             var nextHasPower = s.Memo(s => isRoot || s.D(parent) != null);
             var shouldChange = s.Memo(s => s.D(nextHasPower) != s.D(hasPower));
@@ -62,18 +50,38 @@ namespace Spoke.Examples.BaseDefence {
             s.OnCleanup(() => hasPower.Set(false));
         };
 
-        EffectBlock WatchParent(ICollider<PowerBody> receiver) => s => {
-            var parentNow = s.D(parent);
-            if (parentNow == null) return;
+        EffectBlock ReceivePower => s => {
+            var collider = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, false), () => new Circle(transform.position, receiveRange.Now)));
             s.Effect(s => {
-                foreach (var c in receiver.Overlaps)
-                    if (c.Owner.IsProvider && c.Owner.Node == parentNow) return;
-                parent.Set(null);
-            }, receiver.OverlapsChanged);
-            s.Effect(s => {
-                if (!s.D(parentNow.HasPower)) parent.Set(null);
+                var parentNow = s.D(parent);
+                if (parentNow == null) return;
+                s.Effect(s => {
+                    foreach (var c in collider.Overlaps)
+                        if (c.Owner.IsProvider && c.Owner.Node == parentNow) return;
+                    parent.Set(null);
+                }, collider.OverlapsChanged);
+                s.Effect(s => {
+                    if (!s.D(parentNow.HasPower)) parent.Set(null);
+                });
+                s.OnCleanup(() => parent.Set(null));
             });
-            s.OnCleanup(() => parent.Set(null));
+        };
+
+        EffectBlock ProvidePower => s => {
+            var isRootConnected = s.Memo(IsRootConnected);
+            var collider = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, true), () => new Circle(transform.position, provideRange.Now)));
+            s.Phase(isRootConnected, s => {
+                foreach (var c in collider.Overlaps) {
+                    if (c.Owner.IsProvider) continue;
+                    var node = c.Owner.Node;
+                    if (node == this || node.isRoot) continue;
+                    var canConnect = s.Memo(s => {
+                        var parentNow = s.D(node.parent);
+                        return parentNow == null || parentNow == this;
+                    });
+                    s.Phase(canConnect, s => node.parent.Set(this));
+                }
+            }, collider.OverlapsChanged);
         };
 
         // Connected iff walking my parent chain reaches a root.
@@ -84,21 +92,6 @@ namespace Spoke.Examples.BaseDefence {
                 node = s.D(node.parent);
             }
             return false;
-        };
-
-        EffectBlock PropagateConnections(ICollider<PowerBody> provider) => s => {
-            s.Effect(s => {
-                foreach (var c in provider.Overlaps) {
-                    if (c.Owner.IsProvider) continue;
-                    var node = c.Owner.Node;
-                    if (node == this || node.isRoot) continue;
-                    var canConnect = s.Memo(s => {
-                        var parentNow = s.D(node.parent);
-                        return parentNow == null || parentNow == this;
-                    });
-                    s.Phase(canConnect, s => node.parent.Set(this));
-                }
-            }, provider.OverlapsChanged);
         };
 
         void OnDrawGizmosSelected() {
