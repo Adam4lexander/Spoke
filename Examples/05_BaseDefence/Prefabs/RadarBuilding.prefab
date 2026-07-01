@@ -858,9 +858,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: {fileID: 5451052952287465367}
   meshFX: {fileID: 5238254981829936414}
-  service: {fileID: 158370638330680247}
+  powerNode: {fileID: 158370638330680247}
   radius: 0.4
-  unservicedDim:
+  unpoweredDim:
     value: 0.35
 --- !u!114 &158370638330680247
 MonoBehaviour:
@@ -874,7 +874,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3fdd49a471fc1b6488dd71d7d301293a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  building: {fileID: 42374699712382174}
   isRoot: 0
   receiveRange:
     value: 0.1

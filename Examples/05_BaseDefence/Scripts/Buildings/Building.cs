@@ -11,15 +11,14 @@ namespace Spoke.Examples.BaseDefence {
         [Header("References")]
         [SerializeField] Health health;
         [SerializeField] MeshFX meshFX;
-        [SerializeField] Service service;
+        [SerializeField] PowerNode powerNode;
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
-        [SerializeField] UState<float> unservicedDim = new(0.35f);
+        [SerializeField] UState<float> unpoweredDim = new(0.35f);
 
-        public float Radius => radius;
         public Health Health => health;
-        public Service Service => service;
+        public PowerNode Power => powerNode;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(health.IsAlive, s => {
@@ -27,25 +26,29 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => all.Remove(this));
 
                 // Physical footprint for hover-picking and blast damage (distinct from the network
-                // receiver the Service registers in the service world).
+                // receiver the PowerNode registers in the power world).
                 s.Use(GameState.BuildingZone.AddCollider(this, () => new Circle(transform.position, radius)));
 
                 s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });
 
             s.Effect(s => {
-                if (s.D(service.HasService)) {
+                if (s.D(powerNode.HasPower)) {
                     meshFX.SetTint(Color.white);
                     return;
                 }
-                var d = s.D(unservicedDim);
+                var d = s.D(unpoweredDim);
                 meshFX.SetTint(new Color(d, d, d, 1f));
             });
 
             var isDead = s.Memo(s => !s.D(health.IsAlive));
             s.Phase(isDead, s => {
                 meshFX.Shatter();
-                s.OnCleanup(meshFX.Restore);
+                powerNode.enabled = false;
+                s.OnCleanup(() => {
+                    meshFX.Restore();
+                    powerNode.enabled = true;
+                });
                 s.Effect(s => {
                     if (s.D(meshFX.IsShattered)) Destroy(gameObject);
                 });

@@ -180,7 +180,7 @@ GameObject:
   - component: {fileID: 3547522816358629646}
   - component: {fileID: 7383137929261724295}
   m_Layer: 0
-  m_Name: ServiceBuilding
+  m_Name: RelayBuilding
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -240,9 +240,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   health: {fileID: 111459607697218058}
   meshFX: {fileID: 7383137929261724295}
-  service: {fileID: 3547522816358629646}
+  powerNode: {fileID: 3547522816358629646}
   radius: 0.3
-  unservicedDim:
+  unpoweredDim:
     value: 0.35
 --- !u!114 &3547522816358629646
 MonoBehaviour:
@@ -256,10 +256,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3fdd49a471fc1b6488dd71d7d301293a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  building: {fileID: 1289336978666534750}
-  isCore: 0
-  providesService: 1
-  range:
+  isRoot: 0
+  receiveRange:
+    value: 0.1
+  provideRange:
     value: 4
 --- !u!114 &7383137929261724295
 MonoBehaviour:

@@ -25,7 +25,7 @@ namespace Spoke.Examples.BaseDefence {
                     var hoveredNow = s.D(hovered);
                     if (hoveredNow == null) return null;
                     var b = hoveredNow.Owner;
-                    if (b.Service.ProvidesService) return s.Effect(ProviderCircles(view));
+                    if (!b.Power.IsLeaf) return s.Effect(ProviderCircles(view));
                     if (b.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone, view));
                     if (b.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone, view));
                     return null;
@@ -86,10 +86,10 @@ namespace Spoke.Examples.BaseDefence {
             return view;
         };
 
-        // The provider (coverage) ranges within the given area — a sensor over the service world,
+        // The provider (coverage) ranges within the given area — a sensor over the power world,
         // keeping only the colliders that represent a Provider.
         EffectBlock<List<Circle>> ProviderCircles(ISignal<Circle> area) => s => {
-            var sensor = s.Use(GameState.ServiceZone.AddSensor(() => area.Now));
+            var sensor = s.Use(GameState.PowerZone.AddSensor(() => area.Now));
             return s.Memo(s => {
                 var circles = new List<Circle>();
                 foreach (var c in sensor.Overlaps) if (c.Owner.IsProvider) circles.Add(c.Circle);
