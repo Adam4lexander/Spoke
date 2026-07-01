@@ -89,8 +89,7 @@ namespace Spoke.Examples.BaseDefence {
         // The provider (coverage) ranges within the given area — a sensor over the service world,
         // keeping only the colliders that represent a Provider.
         EffectBlock<List<Circle>> ProviderCircles(ISignal<Circle> area) => s => {
-            var sensor = s.Use(GameState.ServiceZone.AddSensor(area.Now));
-            s.Effect(s => sensor.Circle = s.D(area));
+            var sensor = s.Use(GameState.ServiceZone.AddSensor(() => area.Now));
             return s.Memo(s => {
                 var circles = new List<Circle>();
                 foreach (var c in sensor.Overlaps) if (c.Owner.IsProvider) circles.Add(c.Circle);
@@ -101,8 +100,7 @@ namespace Spoke.Examples.BaseDefence {
         // All of a zone's range circles within the given area (a sensor sized to that area, recentred
         // as it changes; dedups when stationary).
         EffectBlock<List<Circle>> ZoneCircles<T>(CollisionWorld<T> zone, ISignal<Circle> area) => s => {
-            var sensor = s.Use(zone.AddSensor(area.Now));
-            s.Effect(s => sensor.Circle = s.D(area));
+            var sensor = s.Use(zone.AddSensor(() => area.Now));
             return s.Memo(s => {
                 var circles = new List<Circle>();
                 foreach (var collider in sensor.Overlaps) circles.Add(collider.Circle);

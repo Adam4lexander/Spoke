@@ -34,16 +34,14 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Phase(building.Health.IsAlive, s => {
                     // Receiver: my footprint in the service world — always present while alive.
-                    var receiver = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, false), new Circle(building.Position.Now, building.Radius)));
-                    s.Effect(s => receiver.Circle = new Circle(s.D(building.Position), building.Radius));
+                    var receiver = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, false), () => new Circle(transform.position, building.Radius)));
 
                     s.Effect(WatchParent(receiver));
 
                     // Provider: my coverage range, only while powered and only if I provide service.
                     if (!ProvidesService) return;
                     s.Phase(hasService, s => {
-                        var provider = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, true), new Circle(building.Position.Now, range.Now)));
-                        s.Effect(s => provider.Circle = new Circle(s.D(building.Position), s.D(range)));
+                        var provider = s.Use(GameState.ServiceZone.AddCollider(new ServiceBody(this, true), () => new Circle(transform.position, range.Now)));
 
                         var isConnected = s.Memo(WatchIsConnected);
                         s.Phase(isConnected, PropagateConnections(provider));

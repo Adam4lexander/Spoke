@@ -21,20 +21,14 @@ namespace Spoke.Examples.BaseDefence {
         public Health Health => health;
         public Service Service => service;
 
-        State<Vector3> position = new();
-        public ISignal<Vector3> Position => position;
-
         protected override void Init(EffectBuilder s) {
-            position.Set(transform.position);
-
             s.Phase(health.IsAlive, s => {
                 all.Add(this);
                 s.OnCleanup(() => all.Remove(this));
 
                 // Physical footprint for hover-picking and blast damage (distinct from the network
                 // receiver the Service registers in the service world).
-                var footprint = s.Use(GameState.BuildingZone.AddCollider(this, new Circle(Position.Now, radius)));
-                s.Effect(s => footprint.Circle = new Circle(s.D(Position), radius));
+                s.Use(GameState.BuildingZone.AddCollider(this, () => new Circle(transform.position, radius)));
 
                 s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
             });
@@ -56,10 +50,6 @@ namespace Spoke.Examples.BaseDefence {
                     if (s.D(meshFX.IsShattered)) Destroy(gameObject);
                 });
             });
-        }
-
-        void Update() {
-            position.Set(transform.position);
         }
 
         void OnDrawGizmosSelected() {

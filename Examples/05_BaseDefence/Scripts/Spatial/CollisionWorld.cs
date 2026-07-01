@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Spoke.Examples.BaseDefence {
 
     public interface ISensor<T> : IDisposable {
-        Circle Circle { get; set; }
+        Circle Circle { get; }
         ReadOnlyList<ICollider<T>> Overlaps { get; }
         ITrigger OverlapsChanged { get; }
     }
@@ -19,15 +19,7 @@ namespace Spoke.Examples.BaseDefence {
         class Body : ICollider<T> {
 
             public T Owner { get; }
-            public Circle Circle {
-                get => circle;
-                set {
-                    if (value == circle) return;
-                    world.Remove(this);
-                    circle = value;
-                    world.Insert(this);
-                }
-            }
+            public Circle Circle => circle;
             public ReadOnlyList<ICollider<T>> Overlaps => new(overlaps);
             public ITrigger OverlapsChanged => changed;
 
@@ -35,22 +27,35 @@ namespace Spoke.Examples.BaseDefence {
             readonly Trigger changed = Trigger.Create();
             readonly List<ICollider<T>> overlaps = new();
             readonly List<(Body body, float dist2)> sorted = new();
+            readonly Func<Circle> getCircle;
             Circle circle;
             CollisionWorld<T> world;
 
-            public Body(CollisionWorld<T> world, T owner, Circle circle, bool detectable) {
+            public Body(CollisionWorld<T> world, T owner, Func<Circle> getCircle, bool detectable) {
                 this.world = world;
                 Owner = owner;
-                this.circle = circle;
+                this.getCircle = getCircle;
+                this.circle = getCircle();
                 this.detectable = detectable;
+                world.bodies.Add(this);
                 world.Insert(this);
             }
 
             public void Dispose() {
                 if (world == null) return;
+                world.bodies.Remove(this);
                 world.Remove(this);
                 overlaps.Clear();
                 world = null;
+            }
+
+            // Re-sample the source circle and re-grid if it moved.
+            public void Poll() {
+                var next = getCircle();
+                if (next == circle) return;
+                world.Remove(this);
+                circle = next;
+                world.Insert(this);
             }
 
             // Rebuild the nearest-first overlap set and raise Changed if it shifted.
@@ -79,6 +84,7 @@ namespace Spoke.Examples.BaseDefence {
         readonly HashSet<(int x, int z)> dirty = new();
         readonly HashSet<Body> dirtyBodies = new();
         readonly HashSet<Body> queryBodies = new();
+        readonly HashSet<Body> bodies = new();
         readonly List<(int x, int z)> cellBuffer = new();
         readonly float cellSize;
         readonly Action step;
@@ -88,11 +94,11 @@ namespace Spoke.Examples.BaseDefence {
             step = Step;
         }
 
-        public ISensor<T> AddSensor(Circle circle)
-            => new Body(this, default, circle, detectable: false);
+        public ISensor<T> AddSensor(Func<Circle> getCircle)
+            => new Body(this, default, getCircle, detectable: false);
 
-        public ICollider<T> AddCollider(T owner, Circle circle)
-            => new Body(this, owner, circle, detectable: true);
+        public ICollider<T> AddCollider(T owner, Func<Circle> getCircle)
+            => new Body(this, owner, getCircle, detectable: true);
 
         public void Tick() => SpokeRuntime.Batch(step);
 
@@ -105,6 +111,7 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         void Step() {
+            foreach (var body in bodies) body.Poll();
             dirtyBodies.Clear();
             foreach (var cell in dirty)
                 if (cells.TryGetValue(cell, out var list))
