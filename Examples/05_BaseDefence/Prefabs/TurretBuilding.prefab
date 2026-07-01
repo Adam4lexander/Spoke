@@ -373,7 +373,6 @@ MonoBehaviour:
   meshFX: {fileID: 8019864895797315416}
   service: {fileID: 4968336241987631639}
   radius: 0.4
-  isCore: 0
   unservicedDim:
     value: 0.35
 --- !u!114 &4968336241987631639
@@ -389,7 +388,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   building: {fileID: 1199900657066672085}
-  range:
+  isRoot: 0
+  receiveRange:
+    value: 0.1
+  provideRange:
     value: 0
 --- !u!114 &4941254606368316928
 MonoBehaviour:

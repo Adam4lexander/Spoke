@@ -256,9 +256,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   building: {fileID: 6561391522022659384}
-  isCore: 1
-  providesService: 1
-  range:
+  isRoot: 1
+  receiveRange:
+    value: 0.1
+  provideRange:
     value: 4
 --- !u!114 &4863930116280884562
 MonoBehaviour:
