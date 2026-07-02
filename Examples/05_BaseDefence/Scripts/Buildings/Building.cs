@@ -10,6 +10,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
+        [SerializeField] HealthBar healthBar;
         [SerializeField] MeshFX meshFX;
         [SerializeField] PowerNode powerNode;
 
@@ -20,6 +21,12 @@ namespace Spoke.Examples.BaseDefence {
         public PowerNode Power => powerNode;
 
         protected override void Init(EffectBuilder s) {
+            s.Effect(s => {
+                var showHealth = s.D(health.IsAlive) && s.D(health.HPFraction) < 1f;
+                healthBar.gameObject.SetActive(showHealth);
+                healthBar.Fraction.Set(s.D(health.HPFraction));
+            });
+
             s.Phase(health.IsAlive, s => {
                 all.Add(this);
                 s.OnCleanup(() => all.Remove(this));

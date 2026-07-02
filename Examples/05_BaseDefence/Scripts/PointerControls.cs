@@ -19,16 +19,16 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 var hovered = s.Effect(Hovered);
-                var view = s.Effect(ViewArea);
+                var groundArea = s.Memo(s => s.D(GameState.View).GroundArea);
 
                 var circles = s.Effect(s => {
                     var hoveredNow = s.D(hovered);
                     if (hoveredNow == null) return null;
                     var go = hoveredNow.Owner;
                     var power = go.GetComponent<PowerNode>();
-                    if (power != null && !power.IsLeaf) return s.Effect(ProviderCircles(view));
-                    if (go.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone, view));
-                    if (go.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone, view));
+                    if (power != null && !power.IsLeaf) return s.Effect(ProviderCircles(groundArea));
+                    if (go.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone, groundArea));
+                    if (go.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone, groundArea));
                     return null;
                 });
 
@@ -59,7 +59,7 @@ namespace Spoke.Examples.BaseDefence {
         // The ground unit currently under the mouse cursor (or null).
         EffectBlock<ICollider<GameObject>> Hovered => s => {
             var hovered = State.Create<ICollider<GameObject>>();
-            var plane = new Plane(Vector3.up, GameState.Instance.LevelBounds.center);
+            var plane = GameState.GroundPlane;
             var hits = new List<ICollider<GameObject>>();
             IEnumerator onUpdate() {
                 while (true) {
@@ -77,21 +77,6 @@ namespace Spoke.Examples.BaseDefence {
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
             return hovered;
-        };
-
-        // The camera's on-screen ground footprint as a circle (recentred as the camera pans).
-        EffectBlock<Circle> ViewArea => s => {
-            var view = State.Create<Circle>();
-            var plane = new Plane(Vector3.up, GameState.Instance.LevelBounds.center);
-            IEnumerator onUpdate() {
-                while (true) {
-                    yield return null;
-                    if (TryViewCircle(plane, out var vc)) view.Set(vc);
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
-            return view;
         };
 
         // Line segments walking the hovered node's parent chain up to the root — each node to the
@@ -129,25 +114,5 @@ namespace Spoke.Examples.BaseDefence {
                 return circles;
             }, sensor.OverlapsChanged);
         };
-
-        // Bounding circle of the camera's ground footprint (the four viewport corners ray-cast to the
-        // play plane). Returns false if a corner ray misses the plane (keep the previous view).
-        bool TryViewCircle(Plane plane, out Circle circle) {
-            circle = default;
-            if (!GroundPoint(plane, 0f, 0f, out var bl) || !GroundPoint(plane, 1f, 0f, out var br) ||
-                !GroundPoint(plane, 0f, 1f, out var tl) || !GroundPoint(plane, 1f, 1f, out var tr)) return false;
-            var center = (bl + br + tl + tr) * 0.25f;
-            var radius = Mathf.Max(Mathf.Max(Vector3.Distance(center, bl), Vector3.Distance(center, br)),
-                                   Mathf.Max(Vector3.Distance(center, tl), Vector3.Distance(center, tr)));
-            circle = new Circle(center, radius);
-            return true;
-        }
-
-        bool GroundPoint(Plane plane, float vx, float vy, out Vector3 point) {
-            var ray = cam.ViewportPointToRay(new Vector3(vx, vy, 0f));
-            if (plane.Raycast(ray, out var enter)) { point = ray.GetPoint(enter); return true; }
-            point = default;
-            return false;
-        }
     }
 }

@@ -8,23 +8,35 @@ namespace Spoke.Examples.BaseDefence {
         [Header("Level")]
         [SerializeField] Vector2 dimensions = new Vector2(40f, 40f);
 
-        public Bounds LevelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0f, dimensions.y));
-
         [Header("Spawning")]
         [SerializeField] GameObject enemyPrefab;
         [SerializeField] float spawnInterval = 2f;
 
-        readonly CollisionWorld<PowerBody> powerZone = new();
-        readonly CollisionWorld<GameObject> groundZone = new();
-        readonly CollisionWorld<Radar> radarZone = new();
-        readonly CollisionWorld<Turret> turretZone = new();
-        readonly CollisionWorld<Enemy> trackedEnemyZone = new();
+        State<View> view = new();
+        public static ISignal<View> View => Instance.view;
+
+        CollisionWorld<PowerBody> powerZone = new();
+        CollisionWorld<GameObject> groundZone = new();
+        CollisionWorld<Radar> radarZone = new();
+        CollisionWorld<Turret> turretZone = new();
+        CollisionWorld<Enemy> trackedEnemyZone = new();
 
         public static CollisionWorld<PowerBody> PowerZone => Instance.powerZone;
         public static CollisionWorld<GameObject> GroundZone => Instance.groundZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Turret> TurretZone => Instance.turretZone;
         public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
+
+        public static Plane GroundPlane => new(Vector3.up, LevelBounds.center);
+
+        public static Bounds LevelBounds {
+            get {
+                var inst = Instance;
+                return new Bounds(inst.transform.position, new Vector3(inst.dimensions.x, 0f, inst.dimensions.y));
+            }
+        }
+
+        public static void RecomputeView(Camera camera) => Instance.view.Set(new View(camera, GroundPlane));
 
         protected override void Init(EffectBuilder s) {
             s.Effect(SpawnEnemies);

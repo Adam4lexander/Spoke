@@ -29,7 +29,7 @@ namespace Spoke.Examples.BaseDefence {
             var target = cam.transform.position;
             var rigOffset = Vector3.zero;
             {
-                var plane = new Plane(Vector3.up, GameState.Instance.LevelBounds.center);
+                var plane = GameState.GroundPlane;
                 var ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
                 if (plane.Raycast(ray, out var enter)) {
                     target = ray.GetPoint(enter);
@@ -56,10 +56,12 @@ namespace Spoke.Examples.BaseDefence {
                     target += velocity * Time.deltaTime;
 
                     // Keep the looked-at point inside the level, then place the camera.
-                    var bounds = GameState.Instance.LevelBounds;
+                    var bounds = GameState.LevelBounds;
                     target.x = Mathf.Clamp(target.x, bounds.min.x, bounds.max.x);
                     target.z = Mathf.Clamp(target.z, bounds.min.z, bounds.max.z);
                     cam.transform.position = target + rigOffset;
+
+                    GameState.RecomputeView(cam);
 
                     yield return null;
                 }
