@@ -1,4 +1,4 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -19,16 +19,15 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 var hovered = s.Effect(Hovered);
-                var groundArea = s.Memo(s => s.D(GameState.View).GroundArea);
 
                 var circles = s.Effect(s => {
                     var hoveredNow = s.D(hovered);
                     if (hoveredNow == null) return null;
                     var go = hoveredNow.Owner;
                     var power = go.GetComponent<PowerNode>();
-                    if (power != null && !power.IsLeaf) return s.Effect(ProviderCircles(groundArea));
-                    if (go.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone, groundArea));
-                    if (go.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone, groundArea));
+                    if (power != null && !power.IsLeaf) return s.Effect(ZoneCircles(GameState.PowerZone, c => c.Owner.IsProvider));
+                    if (go.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone));
+                    if (go.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone));
                     return null;
                 });
 
@@ -56,27 +55,18 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
-        // The ground unit currently under the mouse cursor (or null).
+        // The ground unit currently under the mouse cursor (or null) — a point sensor that follows
+        // the mouse across the ground plane. Overlaps are nearest-first, so [0] is the unit under
+        // the cursor. Keeps the previous point if the mouse ray misses the plane.
         EffectBlock<ICollider<GameObject>> Hovered => s => {
-            var hovered = State.Create<ICollider<GameObject>>();
-            var plane = GameState.GroundPlane;
-            var hits = new List<ICollider<GameObject>>();
-            IEnumerator onUpdate() {
-                while (true) {
-                    yield return null;
-                    ICollider<GameObject> found = null;
-                    var ray = cam.ScreenPointToRay(Input.mousePosition);
-                    if (plane.Raycast(ray, out var enter)) {
-                        hits.Clear();
-                        GameState.GroundZone.Query(new Circle(ray.GetPoint(enter), 0f), hits);
-                        if (hits.Count > 0) found = hits[0];
-                    }
-                    hovered.Set(found);
-                }
+            var point = default(Circle);
+            Circle mousePoint() {
+                var ray = cam.ScreenPointToRay(Input.mousePosition);
+                if (GameState.GroundPlane.Raycast(ray, out var enter)) point = new Circle(ray.GetPoint(enter), 0f);
+                return point;
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
-            return hovered;
+            var sensor = s.Use(GameState.GroundZone.AddSensor(mousePoint));
+            return s.Memo(s => sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null, sensor.OverlapsChanged);
         };
 
         // Line segments walking the hovered node's parent chain up to the root — each node to the
@@ -93,24 +83,15 @@ namespace Spoke.Examples.BaseDefence {
             return segments;
         };
 
-        // The provider (coverage) ranges within the given area — a sensor over the power world,
-        // keeping only the colliders that represent a Provider.
-        EffectBlock<List<Circle>> ProviderCircles(ISignal<Circle> area) => s => {
-            var sensor = s.Use(GameState.PowerZone.AddSensor(() => area.Now));
+        // A zone's range circles within the camera's ground view (a sensor sized to that view,
+        // recentred as it changes; dedups when stationary). The filter, if given, keeps only
+        // matching colliders.
+        EffectBlock<List<Circle>> ZoneCircles<T>(CollisionWorld<T> zone, Func<ICollider<T>, bool> filter = null) => s => {
+            var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea));
             return s.Memo(s => {
                 var circles = new List<Circle>();
-                foreach (var c in sensor.Overlaps) if (c.Owner.IsProvider) circles.Add(c.Circle);
-                return circles;
-            }, sensor.OverlapsChanged);
-        };
-
-        // All of a zone's range circles within the given area (a sensor sized to that area, recentred
-        // as it changes; dedups when stationary).
-        EffectBlock<List<Circle>> ZoneCircles<T>(CollisionWorld<T> zone, ISignal<Circle> area) => s => {
-            var sensor = s.Use(zone.AddSensor(() => area.Now));
-            return s.Memo(s => {
-                var circles = new List<Circle>();
-                foreach (var collider in sensor.Overlaps) circles.Add(collider.Circle);
+                foreach (var collider in sensor.Overlaps)
+                    if (filter == null || filter(collider)) circles.Add(collider.Circle);
                 return circles;
             }, sensor.OverlapsChanged);
         };
