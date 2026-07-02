@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -10,6 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
+        [SerializeField] float collectTime = 2f;
 
         protected override void Init(EffectBuilder s) {
             harvestFX.SetActive(false);
@@ -25,6 +27,23 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock Harvest => s => {
             harvestFX.SetActive(true);
             s.OnCleanup(() => harvestFX.SetActive(false));
+
+            GameState.CollectRate.Update(x => x + 1);
+            s.OnCleanup(() => GameState.CollectRate.Update(x => x - 1));
+
+            IEnumerator onUpdate() {
+                var timer = 0f;
+                while (true) {
+                    timer += Time.deltaTime;
+                    if (timer > collectTime) {
+                        timer = 0f;
+                        GameState.Money.Update(x => x + 1);
+                    }
+                    yield return null;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
         };
 
         void OnDrawGizmosSelected() {

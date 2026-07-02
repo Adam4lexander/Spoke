@@ -38,6 +38,12 @@ namespace Spoke.Examples.BaseDefence {
 
         public static void RecomputeView(Camera camera) => Instance.view.Set(new View(camera, GroundPlane));
 
+        State<float> money = new();
+        public static IState<float> Money => Instance.money;
+
+        State<int> collectRate = new();
+        public static IState<int> CollectRate => Instance.collectRate;
+
         protected override void Init(EffectBuilder s) {
             s.Effect(SpawnEnemies);
         }

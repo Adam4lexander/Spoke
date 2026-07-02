@@ -22,7 +22,7 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 if (s.D(barImage) == null) return;
-                if (Application.isPlaying) s.Effect(FaceCamera);
+                if (s.D(UnitySignals.IsPlaying)) s.Effect(FaceCamera);
                 s.Effect(SyncFraction);
             });
         }
