@@ -167,7 +167,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 020e8454dede2974bac1cb63025f247e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  canvas: {fileID: 415784228}
   moneyText: {fileID: 342749939}
 --- !u!1001 &97229377
 PrefabInstance:
