@@ -21,12 +21,9 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float stopDistance = 1.2f;   // gap kept from the target building's centre
         [SerializeField] float fireRate = 1f;         // shots per second
 
-        State<Vector3> position = new();
-
         public Health Health => health;
 
         protected override void Init(EffectBuilder s) {
-            position.Set(transform.position);
             showOnTracked.SetActive(false);
 
             s.Phase(IsEnabled, s => {
@@ -107,14 +104,14 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock RadarTrack => s => {
-            var sensor = s.Use(GameState.RadarZone.AddSensor(() => new Circle(position.Now, radius)));
+            var sensor = s.Use(GameState.RadarZone.AddSensor(() => new Circle(transform.position, radius)));
 
             var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.OverlapsChanged);
             s.Phase(isTracked, s => {
                 showOnTracked.SetActive(true);
                 s.OnCleanup(() => showOnTracked.SetActive(false));
 
-                s.Use(GameState.TrackedEnemyZone.AddCollider(this, () => new Circle(position.Now, radius)));
+                s.Use(GameState.TrackedEnemyZone.AddCollider(this, () => new Circle(transform.position, radius)));
             });
         };
 
@@ -134,10 +131,6 @@ namespace Spoke.Examples.BaseDefence {
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
         };
-
-        void Update() {
-            position.Set(transform.position);
-        }
 
         void OnDrawGizmosSelected() {
             var circle = new Circle(transform.position, radius);
