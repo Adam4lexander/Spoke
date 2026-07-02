@@ -53,13 +53,17 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock ReceivePower => s => {
-            var collider = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, false), () => new Circle(transform.position, receiveRange.Now)));
+            var collider = s.Use(GameState.PowerZone.AddCollider(
+                new PowerBody(this, false), 
+                () => new Circle(transform.position, receiveRange.Now), 
+                body => body.IsProvider));
+
             s.Effect(s => {
                 var parentNow = s.D(parent);
                 if (parentNow == null) return;
                 s.Effect(s => {
                     foreach (var c in collider.Overlaps)
-                        if (c.Owner.IsProvider && c.Owner.Node == parentNow) return;
+                        if (c.Owner.Node == parentNow) return;
                     parent.Set(null);
                 }, collider.OverlapsChanged);
                 s.Effect(s => {
@@ -70,11 +74,14 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         EffectBlock ProvidePower => s => {
+            var collider = s.Use(GameState.PowerZone.AddCollider(
+                new PowerBody(this, true), 
+                () => new Circle(transform.position, provideRange.Now), 
+                body => !body.IsProvider));
+
             var isRootConnected = s.Memo(IsRootConnected);
-            var collider = s.Use(GameState.PowerZone.AddCollider(new PowerBody(this, true), () => new Circle(transform.position, provideRange.Now)));
             s.Phase(isRootConnected, s => {
                 foreach (var c in collider.Overlaps) {
-                    if (c.Owner.IsProvider) continue;
                     var node = c.Owner.Node;
                     if (node == this || node.isRoot) continue;
                     var canConnect = s.Memo(s => {

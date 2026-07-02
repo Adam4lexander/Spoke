@@ -28,15 +28,17 @@ namespace Spoke.Examples.BaseDefence {
             readonly List<ICollider<T>> overlaps = new();
             readonly List<(Body body, float dist2)> sorted = new();
             readonly Func<Circle> getCircle;
+            readonly Func<T, bool> filter;
             Circle circle;
             CollisionWorld<T> world;
 
-            public Body(CollisionWorld<T> world, T owner, Func<Circle> getCircle, bool detectable) {
+            public Body(CollisionWorld<T> world, T owner, Func<Circle> getCircle, bool detectable, Func<T, bool> filter) {
                 this.world = world;
                 Owner = owner;
                 this.getCircle = getCircle;
                 this.circle = getCircle();
                 this.detectable = detectable;
+                this.filter = filter;
                 world.bodies.Add(this);
                 world.Insert(this);
             }
@@ -63,7 +65,7 @@ namespace Spoke.Examples.BaseDefence {
                 var area = circle;
                 sorted.Clear();
                 foreach (var body in world.Broadphase(area))
-                    if (body.detectable && body != this && area.Overlaps(body.circle))
+                    if (body.detectable && body != this && (filter == null || filter(body.Owner)) && area.Overlaps(body.circle))
                         sorted.Add((body, (body.circle.Center - area.Center).sqrMagnitude));
                 sorted.Sort((a, b) => a.dist2.CompareTo(b.dist2));
                 if (Same()) return;
@@ -94,11 +96,11 @@ namespace Spoke.Examples.BaseDefence {
             step = Step;
         }
 
-        public ISensor<T> AddSensor(Func<Circle> getCircle)
-            => new Body(this, default, getCircle, detectable: false);
+        public ISensor<T> AddSensor(Func<Circle> getCircle, Func<T, bool> filter = null)
+            => new Body(this, default, getCircle, detectable: false, filter);
 
-        public ICollider<T> AddCollider(T owner, Func<Circle> getCircle)
-            => new Body(this, owner, getCircle, detectable: true);
+        public ICollider<T> AddCollider(T owner, Func<Circle> getCircle, Func<T, bool> filter = null)
+            => new Body(this, owner, getCircle, detectable: true, filter);
 
         public void Tick() => SpokeRuntime.Batch(step);
 

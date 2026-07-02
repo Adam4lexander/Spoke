@@ -20,37 +20,24 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(IsEnabled, s => {
                 var hovered = s.Effect(Hovered);
 
-                var circles = s.Effect(s => {
+                s.Effect(s => {
                     var hoveredNow = s.D(hovered);
-                    if (hoveredNow == null) return null;
+                    if (hoveredNow == null) return;
+
                     var go = hoveredNow.Owner;
                     var power = go.GetComponent<PowerNode>();
-                    if (power != null && !power.IsLeaf) return s.Effect(ZoneCircles(GameState.PowerZone, c => c.Owner.IsProvider));
-                    if (go.GetComponent<Radar>() != null) return s.Effect(ZoneCircles(GameState.RadarZone));
-                    if (go.GetComponent<Turret>() != null) return s.Effect(ZoneCircles(GameState.TurretZone));
-                    return null;
-                });
+                    if (power != null && !power.IsLeaf) s.Effect(Coverage(GameState.PowerZone, body => body.IsProvider));
+                    else if (go.GetComponent<Radar>() != null) s.Effect(Coverage(GameState.RadarZone));
+                    else if (go.GetComponent<Turret>() != null) s.Effect(Coverage(GameState.TurretZone));
 
-                s.Effect(s => {
-                    if (s.D(circles) == null) return;
-                    s.Effect(AreaDisplay.Draw(circles, hoverColour));
-                });
-
-                s.Effect(s => {
-                    if (s.D(hovered) == null) return;
                     var ring = s.Memo(s => {
-                        var circle = s.D(hovered).Circle;
+                        var circle = hoveredNow.Circle;
                         var larger = new Circle(circle.Center, circle.Radius * 1.5f);
                         return new List<Circle> { larger };
                     });
                     s.Effect(AreaDisplay.Draw(ring, highlightColour));
-                });
 
-                s.Effect(s => {
-                    var hoveredNow = s.D(hovered);
-                    if (hoveredNow == null) return;
-                    var links = s.Memo(PowerLinks(hoveredNow.Owner.GetComponent<PowerNode>()));
-                    s.Effect(LinkDisplay.Draw(links, highlightColour));
+                    s.Effect(PowerLinks(hoveredNow.Owner.GetComponent<PowerNode>()));
                 });
             });
         }
@@ -69,31 +56,34 @@ namespace Spoke.Examples.BaseDefence {
             return s.Memo(s => sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null, sensor.OverlapsChanged);
         };
 
-        // Line segments walking the hovered node's parent chain up to the root — each node to the
+        // Shows the hovered node's parent chain up to the root — a line from each node to the
         // provider powering it. Re-walks whenever any parent along the chain changes.
-        MemoBlock<List<(Vector3 from, Vector3 to)>> PowerLinks(PowerNode start) => s => {
-            var segments = new List<(Vector3 from, Vector3 to)>();
-            var node = start;
-            while (node != null) {
-                var parent = s.D(node.Parent);
-                if (parent == null) break;
-                segments.Add((node.transform.position, parent.transform.position));
-                node = parent;
-            }
-            return segments;
+        EffectBlock PowerLinks(PowerNode start) => s => {
+            var segments = s.Memo(s => {
+                var list = new List<(Vector3 from, Vector3 to)>();
+                var node = start;
+                while (node != null) {
+                    var parent = s.D(node.Parent);
+                    if (parent == null) break;
+                    list.Add((node.transform.position, parent.transform.position));
+                    node = parent;
+                }
+                return list;
+            });
+            s.Effect(LinkDisplay.Draw(segments, highlightColour));
         };
 
-        // A zone's range circles within the camera's ground view (a sensor sized to that view,
-        // recentred as it changes; dedups when stationary). The filter, if given, keeps only
+        // Shows a zone's coverage circles within the camera's ground view (a sensor sized to that
+        // view, recentred as it changes; dedups when stationary). The filter, if given, keeps only
         // matching colliders.
-        EffectBlock<List<Circle>> ZoneCircles<T>(CollisionWorld<T> zone, Func<ICollider<T>, bool> filter = null) => s => {
-            var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea));
-            return s.Memo(s => {
-                var circles = new List<Circle>();
-                foreach (var collider in sensor.Overlaps)
-                    if (filter == null || filter(collider)) circles.Add(collider.Circle);
-                return circles;
+        EffectBlock Coverage<T>(CollisionWorld<T> zone, Func<T, bool> filter = null) => s => {
+            var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea, filter));
+            var circles = s.Memo(s => {
+                var list = new List<Circle>();
+                foreach (var collider in sensor.Overlaps) list.Add(collider.Circle);
+                return list;
             }, sensor.OverlapsChanged);
+            s.Effect(AreaDisplay.Draw(circles, hoverColour));
         };
     }
 }
