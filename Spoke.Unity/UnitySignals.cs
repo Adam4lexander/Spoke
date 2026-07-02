@@ -57,8 +57,8 @@ namespace Spoke {
                 Application.quitting += () => appTeardown.Invoke();
 #if UNITY_EDITOR
                 EditorApplication.playModeStateChanged += state => {
-                    isPlaying.Set(Application.isPlaying);
                     if (state == PlayModeStateChange.ExitingPlayMode) appTeardown.Invoke();
+                    isPlaying.Set(state == PlayModeStateChange.EnteredPlayMode);
                 };
                 AssemblyReloadEvents.beforeAssemblyReload += () => appTeardown.Invoke();
 #endif
