@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Spoke.Examples.BaseDefence {
 
@@ -7,6 +8,7 @@ namespace Spoke.Examples.BaseDefence {
         public readonly Vector3 Position;
         public readonly Quaternion Rotation;
         public readonly Circle GroundArea;
+        public readonly Vector3? MousePoint;
 
         public View(Camera camera, Plane groundPlane) {
             Position = camera.transform.position;
@@ -14,6 +16,16 @@ namespace Spoke.Examples.BaseDefence {
             if (!TryViewCircle(groundPlane, camera, out GroundArea)) {
                 Debug.LogError("Cannot find GroundArea, camera must be pointing at ground plane");
             }
+            MousePoint = FindMousePoint(groundPlane, camera);
+        }
+
+        // The cursor's point on the ground plane — null while the cursor is over screen-space UI,
+        // or its ray misses the plane.
+        static Vector3? FindMousePoint(Plane plane, Camera cam) {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
+            var ray = cam.ScreenPointToRay(Input.mousePosition);
+            if (plane.Raycast(ray, out var enter)) return ray.GetPoint(enter);
+            return null;
         }
 
         // Bounding circle of the camera's ground footprint (the four viewport corners ray-cast to the

@@ -9,9 +9,6 @@ namespace Spoke.Examples.BaseDefence {
     // only within the current camera view.
     public class PointerControls : SpokeBehaviour {
 
-        [Header("References")]
-        [SerializeField] Camera cam;
-
         [Header("Attributes")]
         [SerializeField] UState<Color> hoverColour = new(new Color(1f, 0.7372549f, 0f));
         [SerializeField] UState<Color> highlightColour = new(Color.cyan);
@@ -44,16 +41,17 @@ namespace Spoke.Examples.BaseDefence {
 
         // The ground unit currently under the mouse cursor (or null) — a point sensor that follows
         // the mouse across the ground plane. Overlaps are nearest-first, so [0] is the unit under
-        // the cursor. Keeps the previous point if the mouse ray misses the plane.
+        // the cursor. Nothing is hovered while the cursor points at no ground (over UI, or its ray
+        // misses the plane); the sensor holds its last point through those gaps.
         EffectBlock<ICollider<GameObject>> Hovered => s => {
             var point = default(Circle);
             Circle mousePoint() {
-                var ray = cam.ScreenPointToRay(Input.mousePosition);
-                if (GameState.GroundPlane.Raycast(ray, out var enter)) point = new Circle(ray.GetPoint(enter), 0f);
+                var mp = GameState.View.Now.MousePoint;
+                if (mp != null) point = new Circle(mp.Value, 0f);
                 return point;
             }
             var sensor = s.Use(GameState.GroundZone.AddSensor(mousePoint));
-            return s.Memo(s => sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null, sensor.OverlapsChanged);
+            return s.Memo(s => s.D(GameState.View).MousePoint != null && sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null, sensor.OverlapsChanged);
         };
 
         // Shows the hovered node's parent chain up to the root — a line from each node to the
