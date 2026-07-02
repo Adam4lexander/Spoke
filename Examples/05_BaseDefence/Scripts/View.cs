@@ -1,9 +1,11 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public readonly struct View {
+    public readonly struct View : IEquatable<View> {
 
         public readonly Vector3 Position;
         public readonly Quaternion Rotation;
@@ -47,5 +49,17 @@ namespace Spoke.Examples.BaseDefence {
             point = default;
             return false;
         }
+
+        public bool Equals(View other) {
+            return Position.Equals(other.Position) &&
+                   Rotation.Equals(other.Rotation) &&
+                   GroundArea.Equals(other.GroundArea) &&
+                   EqualityComparer<Vector3?>.Default.Equals(MousePoint, other.MousePoint);
+        }
+
+        public override bool Equals(object obj) => obj is View view && Equals(view);
+        public override int GetHashCode() => HashCode.Combine(Position, Rotation, GroundArea, MousePoint);
+        public static bool operator ==(View left, View right) => left.Equals(right);
+        public static bool operator !=(View left, View right) => !(left == right);
     }
 }
