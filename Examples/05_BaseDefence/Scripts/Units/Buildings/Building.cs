@@ -6,7 +6,7 @@ namespace Spoke.Examples.BaseDefence {
     public class Building : SpokeBehaviour {
 
         static readonly List<Building> all = new();
-        public static IReadOnlyList<Building> All => all;
+        public static ReadOnlyList<Building> All => new(all);
 
         [Header("References")]
         [SerializeField] Health health;
