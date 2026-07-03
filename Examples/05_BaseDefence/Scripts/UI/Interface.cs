@@ -6,6 +6,7 @@ namespace Spoke.Examples.BaseDefence {
     public class Interface : SpokeBehaviour {
 
         [Header("References")]
+        [SerializeField] BuildMenu buildMenu;
         [SerializeField] Text moneyText;
         [SerializeField] Text messageText;
 

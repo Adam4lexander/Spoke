@@ -890,6 +890,7 @@ MonoBehaviour:
   healthBar: {fileID: 2721390351369273551}
   meshFX: {fileID: 5238254981829936414}
   powerNode: {fileID: 158370638330680247}
+  cost: 1
   radius: 0.4
   unpoweredDim:
     value: 0.35

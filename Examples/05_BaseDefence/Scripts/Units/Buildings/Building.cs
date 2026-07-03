@@ -15,9 +15,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] PowerNode powerNode;
 
         [Header("Attributes")]
+        [SerializeField] int cost;
         [SerializeField] float radius = 0.6f;
         [SerializeField] UState<float> unpoweredDim = new(0.35f);
 
+        public int Cost => cost;
+        public float Radius => radius;
         public PowerNode Power => powerNode;
 
         protected override void Init(EffectBuilder s) {
