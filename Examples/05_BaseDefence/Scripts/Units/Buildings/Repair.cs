@@ -18,7 +18,11 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
-            hoverInfo.Set(new HoverInfo("Repair — mends damaged buildings in range", CoverageType.Repair, building.Power));
+            hoverInfo.Set(new HoverInfo(
+                $"{building.DisplayName.ToUpper()}\n\n" +
+                "Repairs the most damaged building inside its coverage, one at a time.\n\n" +
+                "Repair buildings can mend each other, but never themselves.",
+                CoverageType.Repair, building.Power));
 
             beam.positionCount = 2;
             beam.useWorldSpace = true;

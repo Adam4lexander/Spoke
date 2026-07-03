@@ -49,8 +49,8 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock SyncHoverInfo => s => {
             var left = s.D(remaining);
             var description = left > 0
-                ? $"Resource — generates money while powered ({left} left)"
-                : "Resource — depleted";
+                ? $"RESOURCE\n\nGenerates money while powered.\n\n{left} remaining."
+                : "RESOURCE\n\nDepleted.";
             hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
         };
 

@@ -18,7 +18,11 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
-            hoverInfo.Set(new HoverInfo("Radar — reveals enemies to nearby turrets", CoverageType.Radar, building.Power));
+            hoverInfo.Set(new HoverInfo(
+                $"{building.DisplayName.ToUpper()}\n\n" +
+                "Reveals enemies inside its coverage to turrets.\n\n" +
+                "Turrets cannot fire at enemies that no radar has revealed.",
+                CoverageType.Radar, building.Power));
 
             var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.Power.HasPower));
 

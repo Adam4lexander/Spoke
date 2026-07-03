@@ -26,7 +26,11 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
-            hoverInfo.Set(new HoverInfo("Turret — fires at enemies revealed by radar", CoverageType.Turret, building.Power));
+            hoverInfo.Set(new HoverInfo(
+                $"{building.DisplayName.ToUpper()}\n\n" +
+                "Fires at enemies inside its coverage that radar has revealed.\n\n" +
+                "Pair with radar coverage — a turret alone sees nothing.",
+                CoverageType.Turret, building.Power));
 
             targetDirection = fireFrom.transform.forward;
 
