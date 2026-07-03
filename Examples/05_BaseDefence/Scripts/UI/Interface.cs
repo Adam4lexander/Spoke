@@ -17,20 +17,24 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
 
         protected override void Init(EffectBuilder s) {
+            messageText.text = "";
             s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
 
-            var hovered = s.Effect(TrackHovered);
+            var hoveredCollider = s.Effect(TrackHovered);
 
             s.Effect(s => {
-                var hoveredNow = s.D(hovered);
-                var hoverable = hoveredNow?.Owner.GetComponent<IHoverable>();
-                if (hoverable == null) { messageText.text = ""; return; }
+                var hoveredColliderNow = s.D(hoveredCollider);
+                var hoverable = hoveredColliderNow?.Owner.GetComponent<IHoverable>();
+                if (hoverable == null) return;
 
                 var description = s.Memo(s => s.D(hoverable.HoverInfo).Description);
                 var coverage = s.Memo(s => s.D(hoverable.HoverInfo).Coverage);
                 var powerNode = s.Memo(s => s.D(hoverable.HoverInfo).PowerNode);
 
-                s.Effect(s => messageText.text = s.D(description));
+                s.Effect(s => {
+                    messageText.text = s.D(description);
+                    s.OnCleanup(() => messageText.text = "");
+                });
 
                 s.Effect(s => {
                     switch (s.D(coverage)) {
@@ -46,7 +50,7 @@ namespace Spoke.Examples.BaseDefence {
                 });
 
                 // Highlight ring, slightly larger than the unit's footprint.
-                var circle = hoveredNow.Circle;
+                var circle = hoveredColliderNow.Circle;
                 s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.5f), unitRingColour));
             });
         }
