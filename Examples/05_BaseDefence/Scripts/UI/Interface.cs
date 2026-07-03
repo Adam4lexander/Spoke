@@ -21,7 +21,8 @@ namespace Spoke.Examples.BaseDefence {
 
         public State<Building> Placing { get; } = new();
 
-        Trigger onClick = Trigger.Create();
+        Trigger onLeftClick = Trigger.Create();
+        Trigger onRightClick = Trigger.Create();
 
         protected override void Init(EffectBuilder s) {
             messageText.text = "";
@@ -93,16 +94,19 @@ namespace Spoke.Examples.BaseDefence {
             
             s.Effect(CoverageDisplay.Draw(footprint, colour));
 
-            s.Subscribe(onClick, () => {
+            s.Subscribe(onLeftClick, () => {
                 if (!isValid.Now) return;
                 Pool.Spawn(prefab.gameObject, new Vector3(mousePos.Now.x, prefab.transform.position.y, mousePos.Now.z), Quaternion.identity);
                 GameState.Money.Update(x => x - prefab.Cost);
                 Placing.Set(null);
             });
+
+            s.Subscribe(onRightClick, () => Placing.Set(null));
         };
 
         void Update() {
-            if (Input.GetMouseButtonDown(0)) onClick.Invoke();
+            if (Input.GetMouseButtonDown(0)) onLeftClick.Invoke();
+            if (Input.GetMouseButtonDown(1)) onRightClick.Invoke();
         }
     }
 }
