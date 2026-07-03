@@ -81,6 +81,9 @@ namespace Spoke.Examples.BaseDefence {
         // footprint follows the mouse — recoloured by whether it can go there (touching provider
         // coverage, clear of other units). A click on a valid spot buys and places the building.
         EffectBlock PlaceBuilding(Building prefab) => s => {
+            messageText.text = $"Placing {prefab.DisplayName} — press Escape to cancel";
+            s.OnCleanup(() => messageText.text = "");
+
             s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider));
 
             var mousePos = s.Memo(s => s.D(GameState.View).MousePoint.Value);

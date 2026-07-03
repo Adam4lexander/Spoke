@@ -10,7 +10,6 @@ namespace Spoke.Examples.BaseDefence {
         [Serializable]
         struct BuildItem {
             public Building Prefab;
-            public string Name;
             public Button Button;
             public string Hotkey;
         }
@@ -35,7 +34,7 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock ControlItem(BuildItem item) => s => {
             var buttonText = item.Button.GetComponentInChildren<Text>();
-            var idleLabel = $"{item.Name} ({item.Hotkey}) - ${item.Prefab.Cost}";
+            var idleLabel = $"{item.Prefab.DisplayName} ({item.Hotkey}) - ${item.Prefab.Cost}";
             buttonText.text = idleLabel;
 
             var hotkey = item.Hotkey.ToLower();

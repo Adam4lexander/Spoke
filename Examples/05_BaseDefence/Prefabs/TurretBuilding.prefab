@@ -362,6 +362,7 @@ MonoBehaviour:
   healthBar: {fileID: 1504826412574342607}
   meshFX: {fileID: 8019864895797315416}
   powerNode: {fileID: 4968336241987631639}
+  displayName: Turret
   cost: 1
   radius: 0.4
   unpoweredDim:
