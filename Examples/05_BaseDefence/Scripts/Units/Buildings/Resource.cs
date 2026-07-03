@@ -19,35 +19,26 @@ namespace Spoke.Examples.BaseDefence {
         State<HoverInfo> hoverInfo = new();
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
+        State<int> remaining = new();
+
         protected override void Init(EffectBuilder s) {
-            var remaining = State.Create(startResources);
-
-            s.Effect(s => {
-                var left = s.D(remaining);
-                var description = left > 0
-                    ? $"Resource — generates money while powered ({left} left)"
-                    : "Resource — depleted";
-                hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
-            });
-
-            s.Effect(s => {
-                var frac = (float)s.D(remaining) / startResources;
-                healthBar.gameObject.SetActive(frac < 1f && frac > 0f);
-                healthBar.Fraction.Set(frac);
-            });
-
             harvestFX.SetActive(false);
+            
             s.Phase(IsEnabled, s => {
-                // Physical footprint so the ground world can hover-pick this resource. It carries no
-                // Health, so a blast query finds it here but has nothing to damage.
+                remaining.Set(startResources);
+
+                s.Effect(SyncHoverInfo);
+                s.Effect(SyncHealthBar);
+
                 s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
 
                 var hasResources = s.Memo(s => s.D(remaining) > 0);
-                var canHarvest = s.Memo(s => s.D(hasResources) && s.D(powerNode.HasPower));
-                s.Phase(canHarvest, Harvest(remaining));
-
-                // Spent: the crystals shatter away, leaving the mound as a permanent husk.
                 var isDepleted = s.Memo(s => !s.D(hasResources));
+
+                s.Phase(hasResources, s => {
+                    if (s.D(powerNode.HasPower)) s.Effect(Harvest);
+                });
+
                 s.Phase(isDepleted, s => {
                     meshFX.Shatter();
                     s.OnCleanup(meshFX.Restore);
@@ -55,7 +46,21 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
-        EffectBlock Harvest(State<int> remaining) => s => {
+        EffectBlock SyncHoverInfo => s => {
+            var left = s.D(remaining);
+            var description = left > 0
+                ? $"Resource — generates money while powered ({left} left)"
+                : "Resource — depleted";
+            hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
+        };
+
+        EffectBlock SyncHealthBar => s => {
+            var frac = (float)s.D(remaining) / startResources;
+            healthBar.gameObject.SetActive(frac < 1f && frac > 0f);
+            healthBar.Fraction.Set(frac);
+        };
+
+        EffectBlock Harvest => s => {
             harvestFX.SetActive(true);
             s.OnCleanup(() => harvestFX.SetActive(false));
 
