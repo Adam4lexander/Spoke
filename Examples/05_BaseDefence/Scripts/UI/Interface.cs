@@ -8,7 +8,13 @@ namespace Spoke.Examples.BaseDefence {
         [Header("References")]
         [SerializeField] Text moneyText;
         [SerializeField] Text messageText;
-        [SerializeField] Overlays overlays;
+
+        [Header("Attributes")]
+        [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
+        [SerializeField] UState<Color> radarCoverageColour = new(new Color(1f, 0.7372549f, 0f));
+        [SerializeField] UState<Color> turretCoverageColour = new(new Color(1f, 0.7372549f, 0f));
+        [SerializeField] UState<Color> powerLinkColour = new(Color.cyan);
+        [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
 
         protected override void Init(EffectBuilder s) {
             s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
@@ -28,18 +34,20 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Effect(s => {
                     switch (s.D(coverage)) {
-                        case CoverageType.Power: s.Effect(overlays.PowerCoverage); break;
-                        case CoverageType.Radar: s.Effect(overlays.RadarCoverage); break;
-                        case CoverageType.Turret: s.Effect(overlays.TurretCoverage); break;
+                        case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider)); break;
+                        case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour)); break;
+                        case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
                     }
                 });
 
                 s.Effect(s => {
                     var node = s.D(powerNode);
-                    if (node != null) s.Effect(overlays.PowerLinks(node));
+                    if (node != null) s.Effect(LinkDisplay.Draw(node, powerLinkColour));
                 });
 
-                s.Effect(overlays.UnitRing(hoveredNow));
+                // Highlight ring, slightly larger than the unit's footprint.
+                var circle = hoveredNow.Circle;
+                s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.5f), unitRingColour));
             });
         }
 

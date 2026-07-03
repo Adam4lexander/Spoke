@@ -3,11 +3,28 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Renders a set of line segments as one line mesh. Like AreaDisplay it creates and owns its own
+    // Renders a set of line segments as one line mesh. Like CoverageDisplay it creates and owns its own
     // GameObject + mesh + material, all torn down on cleanup, and rebuilds whenever the segments change.
     public static class LinkDisplay {
 
-        public static EffectBlock Draw(ISignal<List<(Vector3 from, Vector3 to)>> segments, ISignal<Color> colour) => s => {
+        // Shows the node's parent chain up to the root — a line from each node to the provider
+        // powering it. Re-walks whenever any parent along the chain changes.
+        public static EffectBlock Draw(PowerNode start, ISignal<Color> colour) => s => {
+            var segments = s.Memo(s => {
+                var list = new List<(Vector3 from, Vector3 to)>();
+                var node = start;
+                while (node != null) {
+                    var parent = s.D(node.Parent);
+                    if (parent == null) break;
+                    list.Add((node.transform.position, parent.transform.position));
+                    node = parent;
+                }
+                return list;
+            });
+            s.Effect(DrawSegments(segments, colour));
+        };
+
+        static EffectBlock DrawSegments(ISignal<List<(Vector3 from, Vector3 to)>> segments, ISignal<Color> colour) => s => {
 
             var go = new GameObject("LinkDisplay");
             go.transform.position = Vector3.up * 0.01f;

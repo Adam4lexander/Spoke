@@ -7,13 +7,31 @@ namespace Spoke.Examples.BaseDefence {
     // as one line mesh.
     // It creates and owns its own GameObject + mesh + material, all torn down on cleanup,
     // and rebuilds the mesh whenever the circles signal changes.
-    public static class AreaDisplay {
+    public static class CoverageDisplay {
 
         const int segmentsPerCircle = 48;
 
-        public static EffectBlock Draw(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
+        // Coverage circles for a zone, gathered within the camera's ground view (a sensor sized to
+        // that view, recentred as it changes; dedups when stationary). The filter, if given, keeps
+        // only matching colliders.
+        public static EffectBlock Draw<T>(CollisionWorld<T> zone, ISignal<Color> colour, System.Func<T, bool> filter = null) => s => {
+            var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea, filter));
+            var circles = s.Memo(s => {
+                var list = new List<Circle>();
+                foreach (var collider in sensor.Overlaps) list.Add(collider.Circle);
+                return list;
+            }, sensor.OverlapsChanged);
+            s.Effect(DrawCircles(circles, colour));
+        };
 
-            var go = new GameObject("AreaDisplay");
+        public static EffectBlock Draw(Circle circle, ISignal<Color> colour) => s => {
+            var circles = State.Create(new List<Circle> { circle });
+            s.Effect(DrawCircles(circles, colour));
+        };
+
+        static EffectBlock DrawCircles(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
+
+            var go = new GameObject("CoverageDisplay");
             go.transform.position = Vector3.up * 0.01f;
             s.Effect("WithSafeDestroy", WithSafeDestroy(go));
 
