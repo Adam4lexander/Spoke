@@ -93,7 +93,7 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Subscribe(onClick, () => {
                 if (!isValid.Now) return;
-                Instantiate(prefab, new Vector3(mousePos.Now.x, prefab.transform.position.y, mousePos.Now.z), Quaternion.identity);
+                Pool.Spawn(prefab.gameObject, new Vector3(mousePos.Now.x, prefab.transform.position.y, mousePos.Now.z), Quaternion.identity);
                 GameState.Money.Update(x => x - prefab.Cost);
                 Placing.Set(null);
             });

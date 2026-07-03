@@ -30,15 +30,30 @@ namespace Spoke.Examples.BaseDefence {
                 healthBar.Fraction.Set(s.D(health.HPFraction));
             });
 
-            s.Phase(health.IsAlive, s => {
-                all.Add(this);
-                s.OnCleanup(() => all.Remove(this));
+            s.Phase(IsEnabled, s => {
+                s.Phase(health.IsAlive, s => {
+                    all.Add(this);
+                    s.OnCleanup(() => all.Remove(this));
 
-                // Physical footprint for hover-picking and blast damage (distinct from the network
-                // receiver the PowerNode registers in the power world).
-                s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
+                    // Physical footprint for hover-picking and blast damage (distinct from the network
+                    // receiver the PowerNode registers in the power world).
+                    s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
 
-                s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
+                    s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
+                });
+
+                var isDead = s.Memo(s => !s.D(health.IsAlive));
+                s.Phase(isDead, s => {
+                    meshFX.Shatter();
+                    powerNode.enabled = false;
+                    s.OnCleanup(() => {
+                        meshFX.Restore();
+                        powerNode.enabled = true;
+                    });
+                    s.Effect(s => {
+                        if (s.D(meshFX.IsShattered)) Pool.Despawn(gameObject);
+                    });
+                });
             });
 
             s.Effect(s => {
@@ -48,19 +63,6 @@ namespace Spoke.Examples.BaseDefence {
                 }
                 var d = s.D(unpoweredDim);
                 meshFX.SetTint(new Color(d, d, d, 1f));
-            });
-
-            var isDead = s.Memo(s => !s.D(health.IsAlive));
-            s.Phase(isDead, s => {
-                meshFX.Shatter();
-                powerNode.enabled = false;
-                s.OnCleanup(() => {
-                    meshFX.Restore();
-                    powerNode.enabled = true;
-                });
-                s.Effect(s => {
-                    if (s.D(meshFX.IsShattered)) Destroy(gameObject);
-                });
             });
         }
 
