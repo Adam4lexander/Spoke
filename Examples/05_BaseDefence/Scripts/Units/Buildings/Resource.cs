@@ -8,16 +8,33 @@ namespace Spoke.Examples.BaseDefence {
         [Header("References")]
         [SerializeField] GameObject harvestFX;
         [SerializeField] PowerNode powerNode;
+        [SerializeField] HealthBar healthBar;
+        [SerializeField] MeshFX meshFX;
 
         [Header("Attributes")]
         [SerializeField] float radius = 0.6f;
         [SerializeField] float collectTime = 2f;
+        [SerializeField] int startResources = 20;
 
         State<HoverInfo> hoverInfo = new();
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
-            hoverInfo.Set(new HoverInfo("Resource — generates money while powered", CoverageType.None, powerNode));
+            var remaining = State.Create(startResources);
+
+            s.Effect(s => {
+                var left = s.D(remaining);
+                var description = left > 0
+                    ? $"Resource — generates money while powered ({left} left)"
+                    : "Resource — depleted";
+                hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
+            });
+
+            s.Effect(s => {
+                var frac = (float)s.D(remaining) / startResources;
+                healthBar.gameObject.SetActive(frac < 1f && frac > 0f);
+                healthBar.Fraction.Set(frac);
+            });
 
             harvestFX.SetActive(false);
             s.Phase(IsEnabled, s => {
@@ -25,11 +42,20 @@ namespace Spoke.Examples.BaseDefence {
                 // Health, so a blast query finds it here but has nothing to damage.
                 s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
 
-                s.Phase(powerNode.HasPower, Harvest);
+                var hasResources = s.Memo(s => s.D(remaining) > 0);
+                var canHarvest = s.Memo(s => s.D(hasResources) && s.D(powerNode.HasPower));
+                s.Phase(canHarvest, Harvest(remaining));
+
+                // Spent: the crystals shatter away, leaving the mound as a permanent husk.
+                var isDepleted = s.Memo(s => !s.D(hasResources));
+                s.Phase(isDepleted, s => {
+                    meshFX.Shatter();
+                    s.OnCleanup(meshFX.Restore);
+                });
             });
         }
 
-        EffectBlock Harvest => s => {
+        EffectBlock Harvest(State<int> remaining) => s => {
             harvestFX.SetActive(true);
             s.OnCleanup(() => harvestFX.SetActive(false));
 
@@ -43,6 +69,7 @@ namespace Spoke.Examples.BaseDefence {
                     if (timer > collectTime) {
                         timer = 0f;
                         GameState.Money.Update(x => x + 1);
+                        remaining.Update(x => x - 1);
                     }
                     yield return null;
                 }
