@@ -249,6 +249,7 @@ GameObject:
   - component: {fileID: 4003209481838783647}
   - component: {fileID: 5525732696834895109}
   - component: {fileID: 2041115908920840070}
+  - component: {fileID: 3105069750548152365}
   - component: {fileID: 7961739304234843577}
   - component: {fileID: 5727988383154249024}
   m_Layer: 0
@@ -292,6 +293,7 @@ MonoBehaviour:
   fireFrom: {fileID: 2325287998573063501}
   beam: {fileID: 4955101093780070498}
   range: 5
+  repairRate: 0.5
 --- !u!114 &2041115908920840070
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -304,7 +306,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22ee2be9b8c448041ac4f4b58f5e97d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  health: {fileID: 0}
+  health: {fileID: 3105069750548152365}
   healthBar: {fileID: 2460358632251662550}
   meshFX: {fileID: 5727988383154249024}
   powerNode: {fileID: 7961739304234843577}
@@ -312,6 +314,26 @@ MonoBehaviour:
   radius: 0.6
   unpoweredDim:
     value: 0.35
+--- !u!114 &3105069750548152365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2548401296149044193}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32d566f3d4560304da2801b8cb01f8cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxHP:
+    value: 5
+  damage:
+    value: 0
+  hpFrac:
+    value: 1
+  isAlive:
+    value: 1
 --- !u!114 &7961739304234843577
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -343,7 +365,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   meshRoot: {fileID: 1729731108448844149}
   gravity: 9.8
-  blastSpeed: 10
+  blastSpeed: 2
   shatterTime: 2
   blinkTime: 0.15
 --- !u!1 &3307546906699401201

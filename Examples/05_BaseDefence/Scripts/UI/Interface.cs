@@ -13,6 +13,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
         [SerializeField] UState<Color> radarCoverageColour = new(new Color(1f, 0.7372549f, 0f));
         [SerializeField] UState<Color> turretCoverageColour = new(new Color(1f, 0.7372549f, 0f));
+        [SerializeField] UState<Color> repairCoverageColour = new(new Color(1f, 0.7372549f, 0f));
         [SerializeField] UState<Color> powerLinkColour = new(Color.cyan);
         [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
@@ -59,6 +60,7 @@ namespace Spoke.Examples.BaseDefence {
                         case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider)); break;
                         case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour)); break;
                         case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
+                    case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
                     }
                 });
 

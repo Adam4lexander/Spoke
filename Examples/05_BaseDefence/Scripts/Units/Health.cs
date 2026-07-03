@@ -26,6 +26,12 @@ namespace Spoke.Examples.BaseDefence {
             damaged.Invoke();
         }
 
+        // Repair never resurrects — a dead unit stays dead.
+        public void Repair(float amount) {
+            if (!isAlive.Now) return;
+            damage.Update(x => Mathf.Max(0f, x - amount));
+        }
+
         protected override void Init(EffectBuilder s) {
 
             var hp = s.Memo(s => s.D(maxHP) - s.D(damage));

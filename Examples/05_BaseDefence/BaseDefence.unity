@@ -176,6 +176,8 @@ MonoBehaviour:
     value: {r: 0.34509802, g: 0.36953562, b: 1, a: 1}
   turretCoverageColour:
     value: {r: 1, g: 0.109803915, b: 0.15999596, a: 1}
+  repairCoverageColour:
+    value: {r: 0, g: 1, b: 0.51094913, a: 1}
   powerLinkColour:
     value: {r: 0, g: 1, b: 1, a: 1}
   unitRingColour:
@@ -230,7 +232,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_RootOrder
-      value: 16
+      value: 17
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_LocalPosition.x
@@ -420,7 +422,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 19
+  m_RootOrder: 20
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &262415927
 PrefabInstance:
@@ -2335,7 +2337,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_RootOrder
-      value: 17
+      value: 18
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2799,7 +2801,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 5588769944885444452, guid: 93d95ef91cfe5be4daacefb0513be3f9, type: 3}
       propertyPath: m_RootOrder
-      value: 18
+      value: 19
       objectReference: {fileID: 0}
     - target: {fileID: 5588769944885444452, guid: 93d95ef91cfe5be4daacefb0513be3f9, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2860,7 +2862,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_RootOrder
-      value: 15
+      value: 16
       objectReference: {fileID: 0}
     - target: {fileID: 7300397162719989401, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2917,7 +2919,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4003209481838783647, guid: 3ac9072bb40b56f48826f334be3f96b8, type: 3}
       propertyPath: m_RootOrder
-      value: 20
+      value: 15
       objectReference: {fileID: 0}
     - target: {fileID: 4003209481838783647, guid: 3ac9072bb40b56f48826f334be3f96b8, type: 3}
       propertyPath: m_LocalPosition.x
