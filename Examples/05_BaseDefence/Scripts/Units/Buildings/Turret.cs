@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public class Turret : SpokeBehaviour {
+    public class Turret : SpokeBehaviour, IHoverable {
 
         [Header("References")]
         [SerializeField] Building building;
@@ -22,7 +22,12 @@ namespace Spoke.Examples.BaseDefence {
 
         Vector3 targetDirection = Vector3.zero;
 
+        State<HoverInfo> hoverInfo = new();
+        public ISignal<HoverInfo> HoverInfo => hoverInfo;
+
         protected override void Init(EffectBuilder s) {
+            hoverInfo.Set(new HoverInfo("Turret — fires at enemies revealed by radar", CoverageType.Turret, building.Power));
+
             targetDirection = fireFrom.transform.forward;
 
             beam.positionCount = 2;

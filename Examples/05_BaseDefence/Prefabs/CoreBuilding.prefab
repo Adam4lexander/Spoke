@@ -210,8 +210,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 203692540748043042}
-  - component: {fileID: 1652143216942797496}
+  - component: {fileID: 4706809502174951687}
   - component: {fileID: 6561391522022659384}
+  - component: {fileID: 1652143216942797496}
   - component: {fileID: 4874990117497117971}
   - component: {fileID: 4863930116280884562}
   m_Layer: 0
@@ -238,6 +239,38 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4706809502174951687
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6501176794181837326}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: da54233d9b2ce13428ca1bb0f441fa88, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  building: {fileID: 6561391522022659384}
+--- !u!114 &6561391522022659384
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6501176794181837326}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22ee2be9b8c448041ac4f4b58f5e97d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  health: {fileID: 1652143216942797496}
+  healthBar: {fileID: 6469908660354695326}
+  meshFX: {fileID: 4863930116280884562}
+  powerNode: {fileID: 4874990117497117971}
+  radius: 0.5
+  unpoweredDim:
+    value: 0.35
 --- !u!114 &1652143216942797496
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -258,25 +291,6 @@ MonoBehaviour:
     value: 1
   isAlive:
     value: 1
---- !u!114 &6561391522022659384
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6501176794181837326}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 22ee2be9b8c448041ac4f4b58f5e97d1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  health: {fileID: 1652143216942797496}
-  healthBar: {fileID: 6469908660354695326}
-  meshFX: {fileID: 4863930116280884562}
-  powerNode: {fileID: 4874990117497117971}
-  radius: 0.5
-  unpoweredDim:
-    value: 0.35
 --- !u!114 &4874990117497117971
 MonoBehaviour:
   m_ObjectHideFlags: 0

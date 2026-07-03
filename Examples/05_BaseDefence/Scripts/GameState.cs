@@ -15,9 +15,6 @@ namespace Spoke.Examples.BaseDefence {
         State<View> view = new();
         public static ISignal<View> View => Instance.view;
 
-        State<ICollider<GameObject>> hovered = new();
-        public static ISignal<ICollider<GameObject>> Hovered => Instance.hovered;
-
         CollisionWorld<PowerBody> powerZone = new();
         CollisionWorld<GameObject> groundZone = new();
         CollisionWorld<Radar> radarZone = new();
@@ -48,24 +45,8 @@ namespace Spoke.Examples.BaseDefence {
         public static IState<int> CollectRate => Instance.collectRate;
 
         protected override void Init(EffectBuilder s) {
-            s.Effect(TrackHovered);
             s.Effect(SpawnEnemies);
         }
-
-        // The ground unit currently under the mouse cursor (or null) — a point sensor that follows
-        // the mouse across the ground plane. Overlaps are nearest-first, so [0] is the unit under
-        // the cursor. Nothing is hovered while the cursor points at no ground (over UI, or its ray
-        // misses the plane); the sensor holds its last point through those gaps.
-        EffectBlock TrackHovered => s => {
-            var point = default(Circle);
-            Circle mousePoint() {
-                var mp = view.Now.MousePoint;
-                if (mp != null) point = new Circle(mp.Value, 0f);
-                return point;
-            }
-            var sensor = s.Use(groundZone.AddSensor(mousePoint));
-            s.Effect(s => hovered.Set(s.D(view).MousePoint != null && sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null), sensor.OverlapsChanged);
-        };
 
         void LateUpdate() {
             powerZone.Tick();

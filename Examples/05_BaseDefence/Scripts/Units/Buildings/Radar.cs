@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public class Radar : SpokeBehaviour {
+    public class Radar : SpokeBehaviour, IHoverable {
 
         [Header("References")]
         [SerializeField] Building building;
@@ -14,7 +14,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<float> range = new(5f);
         [SerializeField] float dishRotationSpeed;
 
+        State<HoverInfo> hoverInfo = new();
+        public ISignal<HoverInfo> HoverInfo => hoverInfo;
+
         protected override void Init(EffectBuilder s) {
+            hoverInfo.Set(new HoverInfo("Radar — reveals enemies to nearby turrets", CoverageType.Radar, building.Power));
+
             var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.Power.HasPower));
 
             s.Phase(isRunning, s => {

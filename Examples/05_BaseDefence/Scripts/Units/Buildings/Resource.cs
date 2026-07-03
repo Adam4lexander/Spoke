@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public class Resource : SpokeBehaviour {
+    public class Resource : SpokeBehaviour, IHoverable {
 
         [Header("References")]
         [SerializeField] GameObject harvestFX;
@@ -13,7 +13,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float radius = 0.6f;
         [SerializeField] float collectTime = 2f;
 
+        State<HoverInfo> hoverInfo = new();
+        public ISignal<HoverInfo> HoverInfo => hoverInfo;
+
         protected override void Init(EffectBuilder s) {
+            hoverInfo.Set(new HoverInfo("Resource — generates money while powered", CoverageType.None, powerNode));
+
             harvestFX.SetActive(false);
             s.Phase(IsEnabled, s => {
                 // Physical footprint so the ground world can hover-pick this resource. It carries no
