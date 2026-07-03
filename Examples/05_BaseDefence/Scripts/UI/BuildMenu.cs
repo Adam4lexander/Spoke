@@ -61,7 +61,6 @@ namespace Spoke.Examples.BaseDefence {
 
                     void cancel() => ui.Placing.Set(null);
                     s.Subscribe(item.Button.onClick, cancel);
-                    s.Effect(WatchHotkey(hotkey, cancel));
                     s.Effect(WatchHotkey("escape", cancel));
                 });
             });
