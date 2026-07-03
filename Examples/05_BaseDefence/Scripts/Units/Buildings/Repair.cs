@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -30,59 +29,64 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(isRunning, s => {
                 s.Use(GameState.RepairZone.AddCollider(this, () => new Circle(transform.position, range)));
 
-                var sensor = s.Use(GameState.GroundZone.AddSensor(() => new Circle(transform.position, range)));
-
-                var patient = State.Create<Health>();
-                var hasPatient = s.Memo(s => s.D(patient) != null);
-                var noPatient = s.Memo(s => !s.D(hasPatient));
-
-                s.Phase(noPatient, FindPatient(sensor, patient));
-                s.Phase(hasPatient, RepairPatient(sensor, patient));
+                var patient = s.Effect(FindPatient);
+                s.Effect(s => {
+                    var patientNow = s.D(patient);
+                    if (patientNow != null) s.Effect(DoRepair(patientNow));
+                });
             });
         }
 
         // Takes the most damaged building in range (excluding its own — repair towers can
         // cover each other, but not themselves). Idle while everyone's at full health.
-        EffectBlock FindPatient(ISensor<GameObject> sensor, State<Health> patient) => s => {
+        EffectBlock<Health> FindPatient => s => {
+            var patient = State.Create<Health>();
+            var sensor = s.Use(GameState.GroundZone.AddSensor(() => new Circle(transform.position, range)));
+
             s.Effect(s => {
+                var patientNow = s.D(patient);
+                if (patientNow == null) return;
+                if (s.D(patientNow.HPFraction) >= 1f) {
+                    patient.Set(null);
+                    return;
+                }
+                foreach (var c in sensor.Overlaps) {
+                    if (c.Owner == patientNow.gameObject) return;
+                }
+                patient.Set(null);
+            }, sensor.OverlapsChanged);
+
+            s.Effect(s => {
+                if (s.D(patient) != null) return;
                 Health best = null;
                 var bestFrac = 1f;
                 foreach (var c in sensor.Overlaps) {
                     if (c.Owner == building.gameObject) continue;
-                    var health = c.Owner.GetComponent<Health>();
-                    if (health == null) continue;
+                    if (!c.Owner.TryGetComponent<Health>(out var health)) continue;
                     var frac = s.D(health.HPFraction);
                     if (frac < bestFrac) {
                         bestFrac = frac;
                         best = health;
                     }
                 }
-                if (best != null) patient.Set(best);
+                patient.Set(best);
             }, sensor.OverlapsChanged);
+
+            return patient;
         };
 
         // Heals the patient with the beam held on them, releasing them once they're healed
         // or gone (out of range or dead — either way their collider has left the sensor).
-        EffectBlock RepairPatient(ISensor<GameObject> sensor, State<Health> patient) => s => {
-            var target = patient.Now;
-
+        EffectBlock DoRepair(Health patient) => s => {
             beam.SetPosition(0, fireFrom.transform.position);
-            beam.SetPosition(1, target.transform.position);
+            beam.SetPosition(1, patient.transform.position);
             beam.gameObject.SetActive(true);
             s.OnCleanup(() => beam.gameObject.SetActive(false));
-
-            s.Effect(s => {
-                var inRange = false;
-                foreach (var c in sensor.Overlaps) {
-                    if (c.Owner == target.gameObject) { inRange = true; break; }
-                }
-                if (!inRange || s.D(target.HPFraction) >= 1f) patient.Set(null);
-            }, sensor.OverlapsChanged);
 
             IEnumerator onUpdate() {
                 while (true) {
                     yield return null;
-                    if (target) target.Repair(repairRate * Time.deltaTime);
+                    patient.Repair(repairRate * Time.deltaTime);
                 }
             }
             var routine = StartCoroutine(onUpdate());
