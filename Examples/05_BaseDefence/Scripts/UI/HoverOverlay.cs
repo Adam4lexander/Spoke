@@ -4,10 +4,9 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Shows the ranges of whatever building is under the mouse. Lives on the Main Camera (like
-    // CameraControls) since it's input/presentation, not game state. The range circles are gathered
-    // only within the current camera view.
-    public class PointerControls : SpokeBehaviour {
+    // Draws the hovered unit's in-world overlays: a highlight ring, its coverage circles, and its
+    // power links. The coverage circles are gathered only within the current camera view.
+    public class HoverOverlay : SpokeBehaviour {
 
         [Header("Attributes")]
         [SerializeField] UState<Color> hoverColour = new(new Color(1f, 0.7372549f, 0f));
@@ -15,10 +14,8 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
-                var hovered = s.Effect(Hovered);
-
                 s.Effect(s => {
-                    var hoveredNow = s.D(hovered);
+                    var hoveredNow = s.D(GameState.Hovered);
                     if (hoveredNow == null) return;
 
                     var go = hoveredNow.Owner;
@@ -38,21 +35,6 @@ namespace Spoke.Examples.BaseDefence {
                 });
             });
         }
-
-        // The ground unit currently under the mouse cursor (or null) — a point sensor that follows
-        // the mouse across the ground plane. Overlaps are nearest-first, so [0] is the unit under
-        // the cursor. Nothing is hovered while the cursor points at no ground (over UI, or its ray
-        // misses the plane); the sensor holds its last point through those gaps.
-        EffectBlock<ICollider<GameObject>> Hovered => s => {
-            var point = default(Circle);
-            Circle mousePoint() {
-                var mp = GameState.View.Now.MousePoint;
-                if (mp != null) point = new Circle(mp.Value, 0f);
-                return point;
-            }
-            var sensor = s.Use(GameState.GroundZone.AddSensor(mousePoint));
-            return s.Memo(s => s.D(GameState.View).MousePoint != null && sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null, sensor.OverlapsChanged);
-        };
 
         // Shows the hovered node's parent chain up to the root — a line from each node to the
         // provider powering it. Re-walks whenever any parent along the chain changes.
