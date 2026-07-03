@@ -78,12 +78,11 @@ namespace Spoke.Examples.BaseDefence {
                     if (target == null) break;
                     var attackPos = target.transform.position;
 
-                    // Move toward the target until it's in range.
                     while (true) {
                         var to = attackPos - transform.position;
                         to.y = 0f;
                         var dist = to.magnitude;
-                        if (dist <= stopDistance) break;
+                        if (dist <= stopDistance + 0.001f) break;
                         var dir = to / dist;
                         var step = Mathf.Min(moveSpeed * Time.deltaTime, dist - stopDistance);
                         transform.position += dir * step;
