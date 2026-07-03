@@ -22,12 +22,14 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] BuildItem relayItem;
         [SerializeField] BuildItem radarItem;
         [SerializeField] BuildItem turretItem;
+        [SerializeField] BuildItem repairItem;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 s.Effect(ControlItem(relayItem));
                 s.Effect(ControlItem(radarItem));
                 s.Effect(ControlItem(turretItem));
+                s.Effect(ControlItem(repairItem));
             });
         }
 
