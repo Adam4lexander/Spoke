@@ -132,6 +132,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6361557}
   - component: {fileID: 6361558}
+  - component: {fileID: 6361559}
   m_Layer: 0
   m_Name: '[!--Interface--!]'
   m_TagString: Untagged
@@ -167,7 +168,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 020e8454dede2974bac1cb63025f247e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  buildMenu: {fileID: 1406352372}
   moneyText: {fileID: 342749939}
   messageText: {fileID: 1541435722}
   powerCoverageColour:
@@ -180,6 +180,38 @@ MonoBehaviour:
     value: {r: 0, g: 1, b: 1, a: 1}
   unitRingColour:
     value: {r: 1, g: 1, b: 1, a: 1}
+  validPlacementColour:
+    value: {r: 0, g: 1, b: 0, a: 1}
+  invalidPlacementColour:
+    value: {r: 1, g: 0, b: 0, a: 1}
+--- !u!114 &6361559
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6361556}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74c1fdbca7a8a844980fb6b0bb77237e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ui: {fileID: 6361558}
+  relayItem:
+    Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
+    Name: Relay
+    Button: {fileID: 440189158}
+    Hotkey: e
+  radarItem:
+    Prefab: {fileID: 42374699712382174, guid: bd59b9c7a37273f4e8c6ad0000adb7dd, type: 3}
+    Name: Radar
+    Button: {fileID: 514170805}
+    Hotkey: r
+  turretItem:
+    Prefab: {fileID: 1199900657066672085, guid: 2c416eb962e2cc0489755804edaef22a, type: 3}
+    Name: Turret
+    Button: {fileID: 300938600}
+    Hotkey: t
 --- !u!1001 &97229377
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1789,7 +1821,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1406352371}
-  - component: {fileID: 1406352372}
   m_Layer: 5
   m_Name: Build Menu
   m_TagString: Untagged
@@ -1821,33 +1852,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -100}
   m_SizeDelta: {x: 0, y: 300}
   m_Pivot: {x: 0.5, y: 1}
---- !u!114 &1406352372
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1406352370}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 74c1fdbca7a8a844980fb6b0bb77237e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  relayItem:
-    Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
-    Name: Relay
-    Button: {fileID: 440189158}
-    Hotkey: e
-  radarItem:
-    Prefab: {fileID: 42374699712382174, guid: bd59b9c7a37273f4e8c6ad0000adb7dd, type: 3}
-    Name: Radar
-    Button: {fileID: 514170805}
-    Hotkey: r
-  turretItem:
-    Prefab: {fileID: 1199900657066672085, guid: 2c416eb962e2cc0489755804edaef22a, type: 3}
-    Name: Turret
-    Button: {fileID: 300938600}
-    Hotkey: t
 --- !u!1 &1480498762
 GameObject:
   m_ObjectHideFlags: 0

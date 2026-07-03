@@ -32,7 +32,8 @@ namespace Spoke.Examples.BaseDefence {
         public static Bounds LevelBounds {
             get {
                 var inst = Instance;
-                return new Bounds(inst.transform.position, new Vector3(inst.dimensions.x, 0f, inst.dimensions.y));
+                // A little height so Contains tolerates points a float-epsilon off the ground plane.
+                return new Bounds(inst.transform.position, new Vector3(inst.dimensions.x, 0.1f, inst.dimensions.y));
             }
         }
 

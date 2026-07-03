@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,13 +15,13 @@ namespace Spoke.Examples.BaseDefence {
             public string Hotkey;
         }
 
+        [Header("References")]
+        [SerializeField] Interface ui;
+
         [Header("Items")]
         [SerializeField] BuildItem relayItem;
         [SerializeField] BuildItem radarItem;
         [SerializeField] BuildItem turretItem;
-
-        State<Building> placing = new();
-        public ISignal<Building> Placing => placing;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
@@ -32,20 +33,50 @@ namespace Spoke.Examples.BaseDefence {
 
         EffectBlock ControlItem(BuildItem item) => s => {
             var buttonText = item.Button.GetComponentInChildren<Text>();
-            buttonText.text = $"{item.Name} ({item.Hotkey}) - ${item.Prefab.Cost}";
+            var idleLabel = $"{item.Name} ({item.Hotkey}) - ${item.Prefab.Cost}";
+            buttonText.text = idleLabel;
 
+            var hotkey = item.Hotkey.ToLower();
             var canAfford = s.Memo(s => item.Prefab.Cost <= s.D(GameState.Money));
-            var isPlacing = s.Memo(s => s.D(placing) != null);
+            var isPlacing = s.Memo(s => s.D(ui.Placing) != null);
             var isNotPlacing = s.Memo(s => !s.D(isPlacing));
 
             s.Phase(isNotPlacing, s => {
-                // Subscribe to button if we can afford, and also the hotkeys
-                // Disable button if we cant afford
+                s.Effect(s => item.Button.interactable = s.D(canAfford));
+
+                void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item.Prefab); }
+                s.Subscribe(item.Button.onClick, beginPlacing);
+                s.Effect(WatchHotkey(hotkey, beginPlacing));
             });
 
             s.Phase(isPlacing, s => {
-                // Some changes to the button given we're placing a building
+                var isPlacingThis = s.Memo(s => s.D(ui.Placing) == item.Prefab);
+
+                // Only the selected button stays live — it becomes the cancel affordance.
+                s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
+
+                s.Phase(isPlacingThis, s => {
+                    buttonText.text = $"Cancel ({item.Hotkey})";
+                    s.OnCleanup(() => buttonText.text = idleLabel);
+
+                    void cancel() => ui.Placing.Set(null);
+                    s.Subscribe(item.Button.onClick, cancel);
+                    s.Effect(WatchHotkey(hotkey, cancel));
+                    s.Effect(WatchHotkey("escape", cancel));
+                });
             });
+        };
+
+        // Invokes onPressed on the frame the key goes down, for as long as this is mounted.
+        EffectBlock WatchHotkey(string key, Action onPressed) => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    if (Input.GetKeyDown(key)) onPressed();
+                    yield return null;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
         };
     }
 }

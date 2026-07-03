@@ -29,6 +29,11 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(DrawCircles(circles, colour));
         };
 
+        public static EffectBlock Draw(ISignal<Circle> circle, ISignal<Color> colour) => s => {
+            var circles = s.Memo(s => new List<Circle> { s.D(circle) });
+            s.Effect(DrawCircles(circles, colour));
+        };
+
         static EffectBlock DrawCircles(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
 
             var go = new GameObject("CoverageDisplay");
