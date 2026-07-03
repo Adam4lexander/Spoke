@@ -356,7 +356,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP:
-    value: 3
+    value: 4
   damage:
     value: 0
   hpFrac:

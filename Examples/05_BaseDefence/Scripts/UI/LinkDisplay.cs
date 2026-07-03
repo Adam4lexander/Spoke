@@ -58,6 +58,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         static void BuildLines(Mesh mesh, List<(Vector3 from, Vector3 to)> segments) {
+            mesh.Clear();
             var verts = new List<Vector3>();
             var lines = new List<int>();
             for (var i = 0; segments != null && i < segments.Count; i++) {

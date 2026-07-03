@@ -68,6 +68,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         static void BuildOutline(Mesh mesh, List<Circle> circles) {
+            mesh.Clear();
             var verts = new List<Vector3>();
             var lines = new List<int>();
             var breaks = new List<float>();
