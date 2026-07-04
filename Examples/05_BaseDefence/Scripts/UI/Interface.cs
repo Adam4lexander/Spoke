@@ -42,7 +42,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
         [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
 
-        public State<Building> Placing { get; } = new();
+        public State<BuildItem> Placing { get; } = new();
 
         Trigger onLeftClick = Trigger.Create();
         Trigger onRightClick = Trigger.Create();
@@ -135,14 +135,7 @@ namespace Spoke.Examples.BaseDefence {
                 });
 
                 var coverage = s.Memo(s => s.D(hoverable.HoverInfo).Coverage);
-                s.Effect(s => {
-                    switch (s.D(coverage)) {
-                        case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider)); break;
-                        case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour)); break;
-                        case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
-                    case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
-                    }
-                });
+                s.Effect(s => s.Effect(ShowCoverage(s.D(coverage))));
 
                 var powerNode = s.Memo(s => s.D(hoverable.HoverInfo).PowerNode);
                 s.Effect(s => {
@@ -156,14 +149,17 @@ namespace Spoke.Examples.BaseDefence {
             });
         };
 
-        // The placement experience: power coverage shows while choosing a spot, and the building's
-        // footprint follows the mouse — recoloured by whether it can go there (touching provider
-        // coverage, clear of other units). A click on a valid spot buys and places the building.
-        EffectBlock PlaceBuilding(Building prefab) => s => {
+        // The placement experience: power coverage and the placed type's own coverage show while
+        // choosing a spot, and the building's footprint follows the mouse — recoloured by whether
+        // it can go there (touching provider coverage, clear of other units). A click on a valid
+        // spot buys and places the building.
+        EffectBlock PlaceBuilding(BuildItem item) => s => {
+            var prefab = item.Prefab;
             messageText.text = $"Placing {prefab.DisplayName} — press Escape to cancel";
             s.OnCleanup(() => messageText.text = "");
 
             s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider));
+            if (item.Coverage != CoverageType.Power) s.Effect(ShowCoverage(item.Coverage));
 
             var mousePos = s.Memo(s => s.D(GameState.View).MousePoint.Value);
             var footprint = s.Memo(s => new Circle(s.D(mousePos), prefab.Radius));
@@ -184,6 +180,16 @@ namespace Spoke.Examples.BaseDefence {
             });
 
             s.Subscribe(onRightClick, () => Placing.Set(null));
+        };
+
+        // One coverage type → its zone drawn in its palette colour.
+        EffectBlock ShowCoverage(CoverageType type) => s => {
+            switch (type) {
+                case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider)); break;
+                case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour)); break;
+                case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
+                case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
+            }
         };
 
         // Blink along the threatened screen edge while the wave is incoming.

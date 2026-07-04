@@ -5,14 +5,15 @@ using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public class BuildMenu : SpokeBehaviour {
+    [Serializable]
+    public class BuildItem {
+        public Building Prefab;
+        public Button Button;
+        public string Hotkey;
+        public CoverageType Coverage;   // shown while placing, alongside power coverage
+    }
 
-        [Serializable]
-        struct BuildItem {
-            public Building Prefab;
-            public Button Button;
-            public string Hotkey;
-        }
+    public class BuildMenu : SpokeBehaviour {
 
         [Header("References")]
         [SerializeField] Interface ui;
@@ -47,13 +48,13 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(isNotPlacing, s => {
                 s.Effect(s => item.Button.interactable = s.D(canAfford));
 
-                void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item.Prefab); }
+                void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item); }
                 s.Subscribe(item.Button.onClick, beginPlacing);
                 s.Effect(WatchHotkey(hotkey, beginPlacing));
             });
 
             s.Phase(isPlacing, s => {
-                var isPlacingThis = s.Memo(s => s.D(ui.Placing) == item.Prefab);
+                var isPlacingThis = s.Memo(s => s.D(ui.Placing) == item);
 
                 // Only the selected button stays live — it becomes the cancel affordance.
                 s.Effect(s => item.Button.interactable = s.D(isPlacingThis));

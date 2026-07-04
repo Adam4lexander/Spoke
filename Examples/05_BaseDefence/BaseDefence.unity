@@ -218,18 +218,22 @@ MonoBehaviour:
     Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
     Button: {fileID: 440189158}
     Hotkey: e
+    Coverage: 0
   radarItem:
     Prefab: {fileID: 42374699712382174, guid: bd59b9c7a37273f4e8c6ad0000adb7dd, type: 3}
     Button: {fileID: 514170805}
     Hotkey: r
+    Coverage: 2
   turretItem:
     Prefab: {fileID: 1199900657066672085, guid: 2c416eb962e2cc0489755804edaef22a, type: 3}
     Button: {fileID: 300938600}
     Hotkey: t
+    Coverage: 3
   repairItem:
     Prefab: {fileID: 2041115908920840070, guid: 3ac9072bb40b56f48826f334be3f96b8, type: 3}
     Button: {fileID: 1000647246}
     Hotkey: y
+    Coverage: 4
 --- !u!1001 &13727372
 PrefabInstance:
   m_ObjectHideFlags: 0
