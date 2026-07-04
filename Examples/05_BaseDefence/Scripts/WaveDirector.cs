@@ -33,11 +33,13 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<Edge> Front => front;
 
         protected override void Init(EffectBuilder s) {
-            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
-            s.Phase(isPlaying, s => {
-                var isLull = s.Memo(s => !s.D(assaulting));
-                s.Phase(isLull, Lull);
-                s.Phase(assaulting, Assault);
+            s.Phase(IsEnabled, s => {
+                var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
+                s.Phase(isPlaying, s => {
+                    var isLull = s.Memo(s => !s.D(assaulting));
+                    s.Phase(isLull, Lull);
+                    s.Phase(assaulting, Assault);
+                });
             });
         }
 

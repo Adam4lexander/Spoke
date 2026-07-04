@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -16,6 +17,10 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] Text waveText;
         [SerializeField] Text moneyText;
         [SerializeField] Text messageText;
+        [SerializeField] GameObject northWaveWarning;
+        [SerializeField] GameObject eastWaveWarning;
+        [SerializeField] GameObject southWaveWarning;
+        [SerializeField] GameObject westWaveWarning;
 
         [Header("Game Over References")]
         [SerializeField] GameObject gameOverPanel;
@@ -30,6 +35,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
+        [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
 
         public State<Building> Placing { get; } = new();
 
@@ -41,6 +47,10 @@ namespace Spoke.Examples.BaseDefence {
             pregamePanel.SetActive(false);
             gameplayPanel.SetActive(false);
             gameOverPanel.SetActive(false);
+            northWaveWarning.SetActive(false);
+            eastWaveWarning.SetActive(false);
+            southWaveWarning.SetActive(false);
+            westWaveWarning.SetActive(false);
 
             var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
@@ -69,6 +79,9 @@ namespace Spoke.Examples.BaseDefence {
                         ? $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}"
                         : $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
                 });
+
+                
+                s.Effect(ShowWaveWarning);
 
                 var hasMousePoint = s.Memo(s => {
                     var p = s.D(GameState.View).MousePoint;
@@ -155,6 +168,35 @@ namespace Spoke.Examples.BaseDefence {
             });
 
             s.Subscribe(onRightClick, () => Placing.Set(null));
+        };
+
+        // Blink along the threatened screen edge while the wave is incoming.
+        EffectBlock ShowWaveWarning => s => {
+            if (s.D(waveDirector.IsAssaulting)) return;
+            var bar = s.D(waveDirector.Front) switch {
+                Edge.North => northWaveWarning,
+                Edge.East => eastWaveWarning,
+                Edge.South => southWaveWarning,
+                _ => westWaveWarning,
+            };
+
+            IEnumerator onUpdate() {
+                bar.SetActive(true);
+                var timer = 0f;
+                while (true) {
+                    yield return null;
+                    timer += Time.unscaledDeltaTime;
+                    if (timer >= waveWarningBlinkTime) {
+                        timer = 0f;
+                        bar.SetActive(!bar.activeSelf);
+                    }
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => {
+                StopCoroutine(routine);
+                bar.SetActive(false);
+            });
         };
 
         void Update() {
