@@ -6,18 +6,22 @@ namespace Spoke.Examples.BaseDefence {
     public enum Edge { West, East, South, North }
 
     // Sends enemies in waves: each assault pours in from one edge of the level,
-    // and each wave is bigger and faster than the last, with a lull in between.
-    // The next wave's front is chosen when the lull begins, so the UI can warn
-    // where the attack will come from while the countdown runs.
+    // and each wave is bigger, faster and heavier than the last, with a lull in
+    // between. The next wave's front is chosen when the lull begins, so the UI can
+    // warn where the attack will come from while the countdown runs.
     public class WaveDirector : SpokeBehaviour {
 
         [Header("References")]
-        [SerializeField] GameObject enemyPrefab;
+        [SerializeField] GameObject enemy1Prefab;
+        [SerializeField] GameObject enemy2Prefab;
+        [SerializeField] GameObject enemy3Prefab;
 
         [Header("Attributes")]
         [SerializeField] float lullDuration = 8f;          // calm between assaults
-        [SerializeField] int baseCount = 4;                // enemies in wave 1
-        [SerializeField] int countPerWave = 2;             // extra enemies each wave
+        [SerializeField] int baseBudget = 4;               // wave 1's spend, in basic-enemy units
+        [SerializeField] int budgetPerWave = 2;            // extra budget each wave
+        [SerializeField] int enemy2UnlockWave = 3;         // first wave that can field tier 2
+        [SerializeField] int enemy3UnlockWave = 6;         // first wave that can field tier 3
         [SerializeField] float baseSpawnInterval = 1f;     // in-wave spacing at wave 1
         [SerializeField] float spawnIntervalStep = 0.1f;   // spacing shrinks per wave...
         [SerializeField] float minSpawnInterval = 0.25f;   // ...down to this floor
@@ -66,7 +70,7 @@ namespace Spoke.Examples.BaseDefence {
         // pool can heal or reuse the instance).
         EffectBlock Assault => s => {
             var waveNow = s.D(wave);
-            var count = baseCount + countPerWave * (waveNow - 1);
+            var budget = baseBudget + budgetPerWave * (waveNow - 1);
             var interval = Mathf.Max(minSpawnInterval, baseSpawnInterval - spawnIntervalStep * (waveNow - 1));
 
             var doneSpawning = State.Create(false);
@@ -75,8 +79,10 @@ namespace Spoke.Examples.BaseDefence {
 
             IEnumerator onUpdate() {
                 yield return null;
-                for (int i = 0; i < count; i++) {
-                    var enemy = Pool.Spawn(enemyPrefab, EdgePoint(front.Now), Quaternion.identity).GetComponent<Enemy>();
+                while (budget > 0) {
+                    var (prefab, cost) = PickEnemy(waveNow, budget);
+                    budget -= cost;
+                    var enemy = Pool.Spawn(prefab, EdgePoint(front.Now, prefab), Quaternion.identity).GetComponent<Enemy>();
                     remaining.Update(x => x + 1);
                     dock.Effect(enemy, s => {
                         if (s.D(enemy.Health.IsAlive)) return;
@@ -95,10 +101,24 @@ namespace Spoke.Examples.BaseDefence {
             });
         };
 
+        // Each tier costs its health multiple, so the wave budget is total HP thrown at
+        // the player — one tier-3 replaces four basics. Heavier tiers unlock as waves
+        // progress, and a pick never overshoots the budget left.
+        (GameObject prefab, int cost) PickEnemy(int wave, int budget) {
+            var maxTier = wave >= enemy3UnlockWave ? 3 : wave >= enemy2UnlockWave ? 2 : 1;
+            if (maxTier > 2 && budget < 4) maxTier = 2;
+            if (maxTier > 1 && budget < 2) maxTier = 1;
+            return Random.Range(1, maxTier + 1) switch {
+                1 => (enemy1Prefab, 1),
+                2 => (enemy2Prefab, 2),
+                _ => (enemy3Prefab, 4),
+            };
+        }
+
         // A random point along the given edge of the level bounds, at the prefab's height.
-        Vector3 EdgePoint(Edge edge) {
+        Vector3 EdgePoint(Edge edge, GameObject prefab) {
             var b = GameState.LevelBounds;
-            var y = enemyPrefab.transform.position.y;
+            var y = prefab.transform.position.y;
             var x = Random.Range(b.min.x, b.max.x);
             var z = Random.Range(b.min.z, b.max.z);
             return edge switch {

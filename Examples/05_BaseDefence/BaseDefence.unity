@@ -197,6 +197,7 @@ MonoBehaviour:
     value: {r: 0, g: 1, b: 0, a: 1}
   invalidPlacementColour:
     value: {r: 1, g: 0, b: 0, a: 1}
+  waveWarningBlinkTime: 0.5
 --- !u!114 &6361559
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3303,6 +3304,10 @@ MonoBehaviour:
     count: 5
   - prefab: {fileID: 4257122341883944014, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
     count: 5
+  - prefab: {fileID: 6920224175962368326, guid: 0014e3a59c5ccea4e98bd8ae51475213, type: 3}
+    count: 5
+  - prefab: {fileID: 4990086787066691017, guid: ae325cae895a1964899eb08129ffbadb, type: 3}
+    count: 5
 --- !u!4 &1381892952
 Transform:
   m_ObjectHideFlags: 0
@@ -4276,10 +4281,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f09f2dc0809bc945a1ea26a06c81dd6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyPrefab: {fileID: 4257122341883944014, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
+  enemy1Prefab: {fileID: 4257122341883944014, guid: 0e7492cf423d81145b23ebcad3a05f8c, type: 3}
+  enemy2Prefab: {fileID: 6920224175962368326, guid: 0014e3a59c5ccea4e98bd8ae51475213, type: 3}
+  enemy3Prefab: {fileID: 4990086787066691017, guid: ae325cae895a1964899eb08129ffbadb, type: 3}
   lullDuration: 8
-  baseCount: 4
-  countPerWave: 2
+  baseBudget: 4
+  budgetPerWave: 2
+  enemy2UnlockWave: 3
+  enemy3UnlockWave: 6
   baseSpawnInterval: 1
   spawnIntervalStep: 0.1
   minSpawnInterval: 0.25
