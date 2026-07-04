@@ -9788,5 +9788,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   fxRoot: {fileID: 8857442844259350945}
   radius: 1.2
-  damage: 1
+  damage: 0.5
   duration: 0.3

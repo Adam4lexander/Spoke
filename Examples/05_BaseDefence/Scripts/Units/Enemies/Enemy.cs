@@ -20,6 +20,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float moveSpeed = 2f;
         [SerializeField] float stopDistance = 1.2f;   // gap kept from the target building's centre
         [SerializeField] float fireRate = 1f;         // shots per second
+        [SerializeField] float proximityBias = 0.5f;  // 0 = follow the heading line, higher favours nearby buildings
 
         public Health Health => health;
 
@@ -50,17 +51,36 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
+        // Each life picks a random heading across the base, and targets the building that
+        // best blends "in my path" with "near me" — so enemies cut lines through the base
+        // instead of all piling onto the nearest building. Once everything lies behind the
+        // heading, the score reduces to plain nearest-building.
         EffectBlock<Building> ChooseTarget => s => {
             var target = State.Create<Building>();
+
+            // Aim at the central half of the level, so the line always crosses the base interior.
+            var bounds = GameState.LevelBounds;
+            var aim = bounds.center + 0.5f * new Vector3(
+                UnityEngine.Random.Range(-bounds.extents.x, bounds.extents.x),
+                0f,
+                UnityEngine.Random.Range(-bounds.extents.z, bounds.extents.z));
+            var heading = aim - transform.position;
+            heading.y = 0f;
+            heading.Normalize();
+
             IEnumerator onUpdate() {
                 while (true) {
                     yield return null;
                     Building bestTarget = null;
-                    var bestSqr = float.MaxValue;
+                    var bestScore = float.MaxValue;
                     foreach (var building in Building.All) {
-                        var sqr = (building.transform.position - transform.position).sqrMagnitude;
-                        if (sqr < bestSqr) {
-                            bestSqr = sqr;
+                        var v = building.transform.position - transform.position;
+                        v.y = 0f;
+                        var along = Mathf.Max(0f, Vector3.Dot(v, heading));
+                        var offLine = (v - along * heading).magnitude;
+                        var score = offLine + proximityBias * v.magnitude;
+                        if (score < bestScore) {
+                            bestScore = score;
                             bestTarget = building;
                         }
                     }

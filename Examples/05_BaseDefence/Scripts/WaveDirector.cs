@@ -19,7 +19,7 @@ namespace Spoke.Examples.BaseDefence {
         [Header("Attributes")]
         [SerializeField] float lullDuration = 8f;          // calm between assaults
         [SerializeField] int baseBudget = 4;               // wave 1's spend, in basic-enemy units
-        [SerializeField] int budgetPerWave = 2;            // extra budget each wave
+        [SerializeField] float budgetPerWave = 2f;         // extra budget each wave (fractions accumulate across waves)
         [SerializeField] int enemy2UnlockWave = 3;         // first wave that can field tier 2
         [SerializeField] int enemy3UnlockWave = 6;         // first wave that can field tier 3
         [SerializeField] float baseSpawnInterval = 1f;     // in-wave spacing at wave 1
@@ -70,7 +70,7 @@ namespace Spoke.Examples.BaseDefence {
         // pool can heal or reuse the instance).
         EffectBlock Assault => s => {
             var waveNow = s.D(wave);
-            var budget = baseBudget + budgetPerWave * (waveNow - 1);
+            var budget = baseBudget + Mathf.FloorToInt(budgetPerWave * (waveNow - 1));
             var interval = Mathf.Max(minSpawnInterval, baseSpawnInterval - spawnIntervalStep * (waveNow - 1));
 
             var doneSpawning = State.Create(false);

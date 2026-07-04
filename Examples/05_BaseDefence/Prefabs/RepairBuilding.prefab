@@ -293,7 +293,7 @@ MonoBehaviour:
   fireFrom: {fileID: 2325287998573063501}
   beam: {fileID: 4955101093780070498}
   range: 5
-  repairRate: 1
+  repairRate: 0.5
 --- !u!114 &2041115908920840070
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -311,7 +311,7 @@ MonoBehaviour:
   meshFX: {fileID: 5727988383154249024}
   powerNode: {fileID: 7961739304234843577}
   displayName: Repair
-  cost: 60
+  cost: 150
   radius: 0.5
   unpoweredDim:
     value: 0.35

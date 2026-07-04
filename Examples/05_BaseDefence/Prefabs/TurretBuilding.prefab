@@ -342,7 +342,7 @@ MonoBehaviour:
   beam: {fileID: 6813769431354447905}
   range: 4
   rotationSpeed: 180
-  damage: 1
+  damage: 0.5
   fireRate: 2
   fireAngle: 2
   beamFlashTime: 0.1
@@ -363,7 +363,7 @@ MonoBehaviour:
   meshFX: {fileID: 8019864895797315416}
   powerNode: {fileID: 4968336241987631639}
   displayName: Turret
-  cost: 20
+  cost: 50
   radius: 0.4
   unpoweredDim:
     value: 0.35
