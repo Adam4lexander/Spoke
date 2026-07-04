@@ -872,7 +872,7 @@ MonoBehaviour:
   building: {fileID: 42374699712382174}
   dishPivot: {fileID: 3603570203389529715}
   range:
-    value: 5
+    value: 8
   dishRotationSpeed: 90
 --- !u!114 &42374699712382174
 MonoBehaviour:
@@ -891,7 +891,7 @@ MonoBehaviour:
   meshFX: {fileID: 5238254981829936414}
   powerNode: {fileID: 158370638330680247}
   displayName: Radar
-  cost: 1
+  cost: 25
   radius: 0.4
   unpoweredDim:
     value: 0.35

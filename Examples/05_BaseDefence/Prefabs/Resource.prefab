@@ -55,8 +55,8 @@ MonoBehaviour:
   healthBar: {fileID: 751268281607687698}
   meshFX: {fileID: 2862670053150678700}
   radius: 0.5
-  collectTime: 2
-  startResources: 20
+  collectTime: 1
+  startResources: 120
 --- !u!114 &1034992498165820823
 MonoBehaviour:
   m_ObjectHideFlags: 0

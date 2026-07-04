@@ -6,7 +6,8 @@ namespace Spoke.Examples.BaseDefence {
 
     public class GameState : SpokeSingleton<GameState> {
 
-        [Header("Level")]
+        [Header("Attributes")]
+        [SerializeField] float startMoney;
         [SerializeField] Vector2 dimensions = new Vector2(40f, 40f);
 
         State<View> view = new();
@@ -28,13 +29,9 @@ namespace Spoke.Examples.BaseDefence {
 
         public static Plane GroundPlane => new(Vector3.up, LevelBounds.center);
 
-        public static Bounds LevelBounds {
-            get {
-                var inst = Instance;
-                // A little height so Contains tolerates points a float-epsilon off the ground plane.
-                return new Bounds(inst.transform.position, new Vector3(inst.dimensions.x, 0.1f, inst.dimensions.y));
-            }
-        }
+        // A little height so Contains tolerates points a float-epsilon off the ground plane.
+        Bounds levelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0.1f, dimensions.y));
+        public static Bounds LevelBounds => Instance.levelBounds;
 
         public static void RecomputeView(Camera camera) => Instance.view.Set(new View(camera, GroundPlane));
 
@@ -48,7 +45,11 @@ namespace Spoke.Examples.BaseDefence {
         public static IState<int> CollectRate => Instance.collectRate;
 
         protected override void Init(EffectBuilder s) {
-            s.Effect(s => Time.timeScale = s.D(mode) == GameMode.Playing ? 1f : 0f);
+            var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);
+            s.Effect(s => Time.timeScale = s.D(isPlaying) ? 1f : 0f);
+            s.Phase(isPlaying, s => {
+                Money.Set(startMoney);
+            });
         }
 
         void LateUpdate() {
@@ -61,7 +62,7 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         void OnDrawGizmosSelected() {
-            var bounds = LevelBounds;
+            var bounds = levelBounds;
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireCube(bounds.center, bounds.size);
         }

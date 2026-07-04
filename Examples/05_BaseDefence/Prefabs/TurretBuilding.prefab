@@ -340,12 +340,12 @@ MonoBehaviour:
   pivot: {fileID: 7629657184877623706}
   fireFrom: {fileID: 6221690417680857805}
   beam: {fileID: 6813769431354447905}
-  range: 6
+  range: 4
   rotationSpeed: 180
   damage: 1
   fireRate: 2
   fireAngle: 2
-  beamFlashTime: 0.05
+  beamFlashTime: 0.1
 --- !u!114 &1199900657066672085
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -363,7 +363,7 @@ MonoBehaviour:
   meshFX: {fileID: 8019864895797315416}
   powerNode: {fileID: 4968336241987631639}
   displayName: Turret
-  cost: 1
+  cost: 10
   radius: 0.4
   unpoweredDim:
     value: 0.35
@@ -380,7 +380,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP:
-    value: 5
+    value: 3
   damage:
     value: 0
   hpFrac:

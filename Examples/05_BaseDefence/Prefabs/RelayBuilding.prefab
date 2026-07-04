@@ -234,7 +234,7 @@ MonoBehaviour:
   meshFX: {fileID: 7383137929261724295}
   powerNode: {fileID: 3547522816358629646}
   displayName: Relay
-  cost: 1
+  cost: 5
   radius: 0.3
   unpoweredDim:
     value: 0.35
@@ -251,7 +251,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP:
-    value: 5
+    value: 2
   damage:
     value: 0
   hpFrac:
@@ -274,7 +274,7 @@ MonoBehaviour:
   receiveRange:
     value: 0.1
   provideRange:
-    value: 4
+    value: 3
 --- !u!114 &7383137929261724295
 MonoBehaviour:
   m_ObjectHideFlags: 0
