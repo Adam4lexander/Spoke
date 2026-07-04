@@ -12,6 +12,8 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Gameplay References")]
         [SerializeField] GameObject gameplayPanel;
+        [SerializeField] WaveDirector waveDirector;
+        [SerializeField] Text waveText;
         [SerializeField] Text moneyText;
         [SerializeField] Text messageText;
 
@@ -57,6 +59,16 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => Placing.Set(null));
 
                 s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
+
+                // Whole seconds derived from the ticking countdown, so the text only
+                // rewrites when the displayed number changes.
+                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
+                s.Effect(s => {
+                    var direction = s.D(waveDirector.Front).ToString().ToLower();
+                    waveText.text = s.D(waveDirector.IsAssaulting)
+                        ? $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}"
+                        : $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                });
 
                 var hasMousePoint = s.Memo(s => {
                     var p = s.D(GameState.View).MousePoint;
