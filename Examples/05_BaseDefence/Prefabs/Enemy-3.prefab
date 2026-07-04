@@ -55,7 +55,7 @@ MonoBehaviour:
   fireFrom: {fileID: 4990086787403593833}
   showOnTracked: {fileID: 4990086788514598739}
   radius: 0.5
-  moveSpeed: 2
+  moveSpeed: 1
   stopDistance: 1.2
   fireRate: 1
 --- !u!114 &4990086787066691023

@@ -363,7 +363,7 @@ MonoBehaviour:
   meshFX: {fileID: 8019864895797315416}
   powerNode: {fileID: 4968336241987631639}
   displayName: Turret
-  cost: 10
+  cost: 20
   radius: 0.4
   unpoweredDim:
     value: 0.35
@@ -380,7 +380,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP:
-    value: 3
+    value: 5
   damage:
     value: 0
   hpFrac:
