@@ -19,9 +19,12 @@ namespace Spoke.Examples.BaseDefence {
                 CoverageType.Power, building.Power));
 
             // The Core only despawns when destroyed (after its shatter plays out),
-            // so going disabled is the game-over signal.
+            // so going disabled is the game-over signal. The guard keeps a Core
+            // torn down after the game has already ended from rewriting the mode.
             s.Phase(IsEnabled, s => {
-                s.OnCleanup(() => GameState.Mode.Set(GameMode.GameOver));
+                s.OnCleanup(() => {
+                    if (GameState.Mode.Now == GameMode.Playing) GameState.Mode.Set(GameMode.GameOver);
+                });
             });
         }
     }

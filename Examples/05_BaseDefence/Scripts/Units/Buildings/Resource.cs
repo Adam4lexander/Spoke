@@ -23,7 +23,7 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             harvestFX.SetActive(false);
-            
+
             s.Phase(IsEnabled, s => {
                 remaining.Set(startResources);
 
@@ -36,7 +36,10 @@ namespace Spoke.Examples.BaseDefence {
                 var isDepleted = s.Memo(s => !s.D(hasResources));
 
                 s.Phase(hasResources, s => {
-                    if (s.D(powerNode.HasPower)) s.Effect(Harvest);
+                    GameState.ResourcesRemaining.Update(x => x + 1);
+                    s.OnCleanup(() => GameState.ResourcesRemaining.Update(x => x - 1));
+
+                    s.Phase(powerNode.HasPower, Harvest);
                 });
 
                 s.Phase(isDepleted, s => {

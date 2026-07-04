@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public enum GameMode { Pregame, Playing, GameOver }
+    public enum GameMode { Pregame, Playing, GameOver, Victory }
 
     public class GameState : SpokeSingleton<GameState> {
 
@@ -44,11 +44,19 @@ namespace Spoke.Examples.BaseDefence {
         State<int> collectRate = new();
         public static IState<int> CollectRate => Instance.collectRate;
 
+        // Resource nodes on the map not yet mined out; victory when it reaches zero.
+        State<int> resourcesRemaining = new();
+        public static IState<int> ResourcesRemaining => Instance.resourcesRemaining;
+
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);
             s.Effect(s => Time.timeScale = s.D(isPlaying) ? 1f : 0f);
             s.Phase(isPlaying, s => {
                 Money.Set(startMoney);
+
+                // The map is won when every resource on it has been mined out.
+                var allMined = s.Memo(s => s.D(resourcesRemaining) == 0);
+                s.Phase(allMined, s => mode.Set(GameMode.Victory));
             });
         }
 

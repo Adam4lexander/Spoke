@@ -16,6 +16,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] WaveDirector waveDirector;
         [SerializeField] Text waveText;
         [SerializeField] Text moneyText;
+        [SerializeField] Text resourcesText;
         [SerializeField] Text messageText;
         [SerializeField] GameObject northWaveWarning;
         [SerializeField] GameObject eastWaveWarning;
@@ -25,6 +26,10 @@ namespace Spoke.Examples.BaseDefence {
         [Header("Game Over References")]
         [SerializeField] GameObject gameOverPanel;
         [SerializeField] Button restartButton;
+
+        [Header("Victory References")]
+        [SerializeField] GameObject victoryPanel;
+        [SerializeField] Button victoryRestartButton;
 
         [Header("Attributes")]
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
@@ -47,6 +52,7 @@ namespace Spoke.Examples.BaseDefence {
             pregamePanel.SetActive(false);
             gameplayPanel.SetActive(false);
             gameOverPanel.SetActive(false);
+            victoryPanel.SetActive(false);
             northWaveWarning.SetActive(false);
             eastWaveWarning.SetActive(false);
             southWaveWarning.SetActive(false);
@@ -55,6 +61,7 @@ namespace Spoke.Examples.BaseDefence {
             var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
             var isGameOver = s.Memo(s => s.D(GameState.Mode) == GameMode.GameOver);
+            var isVictory = s.Memo(s => s.D(GameState.Mode) == GameMode.Victory);
 
             s.Phase(isPregame, s => {
                 pregamePanel.SetActive(true);
@@ -69,6 +76,8 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => Placing.Set(null));
 
                 s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
+
+                s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
 
                 // Whole seconds derived from the ticking countdown, so the text only
                 // rewrites when the displayed number changes.
@@ -100,6 +109,13 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => gameOverPanel.SetActive(false));
 
                 s.Subscribe(restartButton.onClick, () => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
+            });
+
+            s.Phase(isVictory, s => {
+                victoryPanel.SetActive(true);
+                s.OnCleanup(() => victoryPanel.SetActive(false));
+
+                s.Subscribe(victoryRestartButton.onClick, () => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
             });
         }
 
