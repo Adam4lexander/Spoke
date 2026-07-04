@@ -24,6 +24,21 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(DrawSegments(segments, colour));
         };
 
+        // Shows every node's link to the provider powering it — the grid's whole spanning tree.
+        public static EffectBlock DrawAll(ISignal<Color> colour) => s => {
+            var segments = s.Memo(s => {
+                var list = new List<(Vector3 from, Vector3 to)>();
+                foreach (var node in s.D(PowerNode.All)) {
+                    var parent = s.D(node.Parent);
+                    if (parent == null) continue;
+                    list.Add((node.transform.position, parent.transform.position));
+                }
+                return list;
+            });
+
+            s.Effect(DrawSegments(segments, colour));
+        };
+
         static EffectBlock DrawSegments(ISignal<List<(Vector3 from, Vector3 to)>> segments, ISignal<Color> colour) => s => {
 
             var go = new GameObject("LinkDisplay");

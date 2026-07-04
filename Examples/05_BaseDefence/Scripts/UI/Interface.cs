@@ -126,7 +126,10 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(s => {
                 var hoveredNow = s.D(hovered);
                 var hoverable = hoveredNow?.Owner.GetComponent<IHoverable>();
-                if (hoverable == null) return;
+                if (hoverable == null) {
+                    s.Effect(LinkDisplay.DrawAll(powerLinkColour));
+                    return;
+                }
 
                 var description = s.Memo(s => s.D(hoverable.HoverInfo).Description);
                 s.Effect(s => {
