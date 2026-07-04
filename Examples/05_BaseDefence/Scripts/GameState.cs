@@ -2,6 +2,8 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    public enum GameMode { Pregame, Playing, GameOver }
+
     public class GameState : SpokeSingleton<GameState> {
 
         [Header("Level")]
@@ -36,13 +38,18 @@ namespace Spoke.Examples.BaseDefence {
 
         public static void RecomputeView(Camera camera) => Instance.view.Set(new View(camera, GroundPlane));
 
+        State<GameMode> mode = new();
+        public static IState<GameMode> Mode => Instance.mode;
+
         State<float> money = new();
         public static IState<float> Money => Instance.money;
 
         State<int> collectRate = new();
         public static IState<int> CollectRate => Instance.collectRate;
 
-        protected override void Init(EffectBuilder s) { }
+        protected override void Init(EffectBuilder s) {
+            s.Effect(s => Time.timeScale = s.D(mode) == GameMode.Playing ? 1f : 0f);
+        }
 
         void LateUpdate() {
             powerZone.Tick();

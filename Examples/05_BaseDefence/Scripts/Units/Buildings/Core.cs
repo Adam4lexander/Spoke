@@ -17,6 +17,12 @@ namespace Spoke.Examples.BaseDefence {
                 "Seeds the power grid, all buildings must trace a path to it for receiving power.\n\n" +
                 "Game is over if this building is destroyed.",
                 CoverageType.Power, building.Power));
+
+            // The Core only despawns when destroyed (after its shatter plays out),
+            // so going disabled is the game-over signal.
+            s.Phase(IsEnabled, s => {
+                s.OnCleanup(() => GameState.Mode.Set(GameMode.GameOver));
+            });
         }
     }
 }

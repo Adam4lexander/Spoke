@@ -9,7 +9,10 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float spawnInterval = 2f;
 
         protected override void Init(EffectBuilder s) {
-            s.Effect(SpawnEnemies);
+            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
+            s.Phase(isPlaying, s => {
+                s.Effect(SpawnEnemies);
+            });
         }
 
         EffectBlock SpawnEnemies => s => {

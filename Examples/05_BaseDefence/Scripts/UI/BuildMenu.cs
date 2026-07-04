@@ -25,6 +25,8 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
+                if (s.D(GameState.Mode) != GameMode.Playing) return;
+
                 s.Effect(ControlItem(relayItem));
                 s.Effect(ControlItem(radarItem));
                 s.Effect(ControlItem(turretItem));

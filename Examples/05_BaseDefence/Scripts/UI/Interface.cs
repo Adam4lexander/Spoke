@@ -1,13 +1,23 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
     public class Interface : SpokeBehaviour {
 
-        [Header("References")]
+        [Header("Pregame References")]
+        [SerializeField] GameObject pregamePanel;
+        [SerializeField] Button startButton;
+
+        [Header("Gameplay References")]
+        [SerializeField] GameObject gameplayPanel;
         [SerializeField] Text moneyText;
         [SerializeField] Text messageText;
+
+        [Header("Game Over References")]
+        [SerializeField] GameObject gameOverPanel;
+        [SerializeField] Button restartButton;
 
         [Header("Attributes")]
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
@@ -26,17 +36,45 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             messageText.text = "";
-            s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
+            pregamePanel.SetActive(false);
+            gameplayPanel.SetActive(false);
+            gameOverPanel.SetActive(false);
 
-            var hasMousePoint = s.Memo(s => {
-                var p = s.D(GameState.View).MousePoint;
-                return p != null && GameState.LevelBounds.Contains(p.Value);
+            var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
+            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
+            var isGameOver = s.Memo(s => s.D(GameState.Mode) == GameMode.GameOver);
+
+            s.Phase(isPregame, s => {
+                pregamePanel.SetActive(true);
+                s.OnCleanup(() => pregamePanel.SetActive(false));
+
+                s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
             });
 
-            s.Phase(hasMousePoint, s => {
-                var placingNow = s.D(Placing);
-                if (placingNow == null) s.Effect(ShowHovered);
-                else s.Effect(PlaceBuilding(placingNow));
+            s.Phase(isPlaying, s => {
+                gameplayPanel.SetActive(true);
+                s.OnCleanup(() => gameplayPanel.SetActive(false));
+                s.OnCleanup(() => Placing.Set(null));
+
+                s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
+
+                var hasMousePoint = s.Memo(s => {
+                    var p = s.D(GameState.View).MousePoint;
+                    return p != null && GameState.LevelBounds.Contains(p.Value);
+                });
+
+                s.Phase(hasMousePoint, s => {
+                    var placingNow = s.D(Placing);
+                    if (placingNow == null) s.Effect(ShowHovered);
+                    else s.Effect(PlaceBuilding(placingNow));
+                });
+            });
+
+            s.Phase(isGameOver, s => {
+                gameOverPanel.SetActive(true);
+                s.OnCleanup(() => gameOverPanel.SetActive(false));
+
+                s.Subscribe(restartButton.onClick, () => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
             });
         }
 
