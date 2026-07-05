@@ -114,11 +114,10 @@ namespace Spoke.Examples.BaseDefence {
                         var to = attackPos - transform.position;
                         to.y = 0f;
                         var dist = to.magnitude;
+                        if (dist > 0.001f) transform.rotation = Quaternion.LookRotation(to / dist, Vector3.up);
                         if (dist <= stopDistance + 0.001f) break;
-                        var dir = to / dist;
                         var step = Mathf.Min(moveSpeed * Time.deltaTime, dist - stopDistance);
-                        transform.position += dir * step;
-                        transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                        transform.position += to / dist * step;
                         yield return null;
                     }
 
