@@ -20,6 +20,9 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] Text moneyText;
         [SerializeField] Text resourcesText;
         [SerializeField] Text messageText;
+
+        [Header("Game Overlay References")]
+        [SerializeField] Text onscreenText;
         [SerializeField] GameObject northWaveWarning;
         [SerializeField] GameObject eastWaveWarning;
         [SerializeField] GameObject southWaveWarning;
@@ -44,6 +47,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
         [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
         [SerializeField] float waveWarningLeadTime = 5f;      // seconds before a wave that its direction is revealed
+        [SerializeField] float onscreenMessageTime = 4f;      // seconds an onscreen message lingers
 
         public State<BuildItem> Placing { get; } = new();
 
@@ -55,6 +59,7 @@ namespace Spoke.Examples.BaseDefence {
 
         protected override void Init(EffectBuilder s) {
             messageText.text = "";
+            onscreenText.text = "";
             pregamePanel.SetActive(false);
             gameplayPanel.SetActive(false);
             gameOverPanel.SetActive(false);
@@ -107,6 +112,13 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Effect(ShowWaveWarning(frontKnown));
 
+                // Announce each wave transition; the opening lull has nothing to announce.
+                s.Effect(s => {
+                    var wave = s.D(waveDirector.Wave);
+                    if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} incoming from the {s.D(waveDirector.Front)}, pausing harvesters"));
+                    else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} defeated, resuming harvesters"));
+                });
+
                 var hasMousePoint = s.Memo(s => {
                     var p = s.D(GameState.View).MousePoint;
                     return p != null && GameState.LevelBounds.Contains(p.Value);
@@ -140,6 +152,19 @@ namespace Spoke.Examples.BaseDefence {
                 s.Subscribe(victoryRestartButton.onClick, GameState.Restart);
             });
         }
+
+        // Shows a message in the onscreen text, clearing it after a few seconds.
+        EffectBlock FlashMessage(string message) => s => {
+            onscreenText.text = message;
+            s.OnCleanup(() => onscreenText.text = "");
+
+            IEnumerator onUpdate() {
+                yield return new WaitForSeconds(onscreenMessageTime);
+                onscreenText.text = "";
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
 
         // Publishes the unit under the mouse into the hovering state.
         EffectBlock FindHovered => s => {

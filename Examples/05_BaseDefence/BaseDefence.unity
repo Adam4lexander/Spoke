@@ -176,6 +176,7 @@ MonoBehaviour:
   moneyText: {fileID: 342749939}
   resourcesText: {fileID: 1166456931}
   messageText: {fileID: 1541435722}
+  onscreenText: {fileID: 2023124779}
   northWaveWarning: {fileID: 1407430305}
   eastWaveWarning: {fileID: 1625764508}
   southWaveWarning: {fileID: 123125659}
@@ -479,12 +480,12 @@ GameObject:
   - component: {fileID: 123125662}
   - component: {fileID: 123125661}
   m_Layer: 5
-  m_Name: South
+  m_Name: South Warning
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &123125660
 RectTransform:
   m_ObjectHideFlags: 0
@@ -501,7 +502,7 @@ RectTransform:
   - {fileID: 1301316252}
   - {fileID: 1118056286}
   m_Father: {fileID: 461354279}
-  m_RootOrder: 2
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
@@ -1578,7 +1579,7 @@ GameObject:
   m_Component:
   - component: {fileID: 461354279}
   m_Layer: 5
-  m_Name: Warning Overlay
+  m_Name: Game Overlay
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1596,6 +1597,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 2023124778}
   - {fileID: 1407430306}
   - {fileID: 1625764509}
   - {fileID: 123125660}
@@ -4441,12 +4443,12 @@ GameObject:
   - component: {fileID: 1407430308}
   - component: {fileID: 1407430307}
   m_Layer: 5
-  m_Name: North
+  m_Name: North Warning
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1407430306
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4463,7 +4465,7 @@ RectTransform:
   - {fileID: 930013681}
   - {fileID: 993410976}
   m_Father: {fileID: 461354279}
-  m_RootOrder: 0
+  m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
@@ -4680,12 +4682,12 @@ GameObject:
   - component: {fileID: 1519167725}
   - component: {fileID: 1519167724}
   m_Layer: 5
-  m_Name: West
+  m_Name: West Warning
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1519167723
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4702,7 +4704,7 @@ RectTransform:
   - {fileID: 2000399004}
   - {fileID: 621123016}
   m_Father: {fileID: 461354279}
-  m_RootOrder: 3
+  m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 1}
@@ -5122,12 +5124,12 @@ GameObject:
   - component: {fileID: 1625764511}
   - component: {fileID: 1625764510}
   m_Layer: 5
-  m_Name: East
+  m_Name: East Warning
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &1625764509
 RectTransform:
   m_ObjectHideFlags: 0
@@ -5144,7 +5146,7 @@ RectTransform:
   - {fileID: 1338894558}
   - {fileID: 829900400}
   m_Father: {fileID: 461354279}
-  m_RootOrder: 1
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
@@ -6069,6 +6071,104 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 93d95ef91cfe5be4daacefb0513be3f9, type: 3}
+--- !u!1 &2023124777
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2023124778}
+  - component: {fileID: 2023124780}
+  - component: {fileID: 2023124779}
+  - component: {fileID: 2023124781}
+  m_Layer: 5
+  m_Name: Onscreen Text
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2023124778
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023124777}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 461354279}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 1}
+  m_AnchorMax: {x: 0.5, y: 1}
+  m_AnchoredPosition: {x: 0, y: -150}
+  m_SizeDelta: {x: 400, y: 100}
+  m_Pivot: {x: 0.5, y: 1}
+--- !u!114 &2023124779
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023124777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 24
+    m_FontStyle: 3
+    m_BestFit: 0
+    m_MinSize: 2
+    m_MaxSize: 40
+    m_Alignment: 1
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 1
+    m_VerticalOverflow: 1
+    m_LineSpacing: 1.2
+  m_Text: 'Wave 1 Defeated
+
+    Harvesting Resumed'
+--- !u!222 &2023124780
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023124777}
+  m_CullTransparentMesh: 1
+--- !u!114 &2023124781
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023124777}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 1, y: 1}
+  m_UseGraphicAlpha: 1
 --- !u!1001 &2077517285
 PrefabInstance:
   m_ObjectHideFlags: 0
