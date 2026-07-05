@@ -27,12 +27,11 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float minSpawnInterval = 0.25f;   // ...down to this floor
 
         State<int> wave = new();          // 0 until the first assault begins
-        State<bool> assaulting = new();
         State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
         State<Edge> front = new();        // where the coming (or current) wave attacks from
 
         public ISignal<int> Wave => wave;
-        public ISignal<bool> IsAssaulting => assaulting;
+        public ISignal<bool> IsAssaulting => GameState.Assaulting;
         public ISignal<float> NextWaveIn => nextWaveIn;
         public ISignal<Edge> Front => front;
 
@@ -40,9 +39,9 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(IsEnabled, s => {
                 var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
                 s.Phase(isPlaying, s => {
-                    var isLull = s.Memo(s => !s.D(assaulting));
+                    var isLull = s.Memo(s => !s.D(GameState.Assaulting));
                     s.Phase(isLull, Lull);
-                    s.Phase(assaulting, Assault);
+                    s.Phase(GameState.Assaulting, Assault);
                 });
             });
         }
@@ -59,7 +58,7 @@ namespace Spoke.Examples.BaseDefence {
                     nextWaveIn.Set(Mathf.Max(0f, remaining));
                 }
                 wave.Update(x => x + 1);
-                assaulting.Set(true);
+                GameState.Assaulting.Set(true);
             }
             var routine = StartCoroutine(onUpdate());
             s.OnCleanup(() => StopCoroutine(routine));
@@ -70,7 +69,7 @@ namespace Spoke.Examples.BaseDefence {
         // pool can heal or reuse the instance).
         EffectBlock Assault => s => {
             var waveNow = s.D(wave);
-            var budget = baseBudget + Mathf.FloorToInt(budgetPerWave * (waveNow - 1));
+            var budget = baseBudget + budgetPerWave * (waveNow - 1);
             var interval = Mathf.Max(minSpawnInterval, baseSpawnInterval - spawnIntervalStep * (waveNow - 1));
 
             var doneSpawning = State.Create(false);
@@ -97,21 +96,21 @@ namespace Spoke.Examples.BaseDefence {
             s.OnCleanup(() => StopCoroutine(routine));
 
             s.Effect(s => {
-                if (s.D(doneSpawning) && s.D(remaining) == 0) assaulting.Set(false);
+                if (s.D(doneSpawning) && s.D(remaining) == 0) GameState.Assaulting.Set(false);
             });
         };
 
-        // Each tier costs its health multiple, so the wave budget is total HP thrown at
-        // the player — one tier-3 replaces four basics. Heavier tiers unlock as waves
-        // progress, and a pick never overshoots the budget left.
-        (GameObject prefab, int cost) PickEnemy(int wave, int budget) {
+        // Tiers cost less than their health multiple: all tiers deal the same damage, so
+        // hp concentrated in fewer bodies is worth less than the same hp spread out.
+        // Heavier tiers unlock as waves progress, and a pick never overshoots the budget left.
+        (GameObject prefab, float cost) PickEnemy(int wave, float budget) {
             var maxTier = wave >= enemy3UnlockWave ? 3 : wave >= enemy2UnlockWave ? 2 : 1;
-            if (maxTier > 2 && budget < 4) maxTier = 2;
-            if (maxTier > 1 && budget < 2) maxTier = 1;
+            if (maxTier > 2 && budget < 2.5f) maxTier = 2;
+            if (maxTier > 1 && budget < 1.5f) maxTier = 1;
             return Random.Range(1, maxTier + 1) switch {
-                1 => (enemy1Prefab, 1),
-                2 => (enemy2Prefab, 2),
-                _ => (enemy3Prefab, 4),
+                1 => (enemy1Prefab, 1f),
+                2 => (enemy2Prefab, 1.5f),
+                _ => (enemy3Prefab, 2.5f),
             };
         }
 

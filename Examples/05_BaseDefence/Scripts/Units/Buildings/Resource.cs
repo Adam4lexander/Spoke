@@ -39,7 +39,9 @@ namespace Spoke.Examples.BaseDefence {
                     GameState.ResourcesRemaining.Update(x => x + 1);
                     s.OnCleanup(() => GameState.ResourcesRemaining.Update(x => x - 1));
 
-                    s.Phase(powerNode.HasPower, Harvest);
+                    // Income flows only between waves — an assault pauses every harvester.
+                    var canHarvest = s.Memo(s => s.D(powerNode.HasPower) && !s.D(GameState.Assaulting));
+                    s.Phase(canHarvest, Harvest);
                 });
 
                 s.Phase(isDepleted, s => {
@@ -52,7 +54,7 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock SyncHoverInfo => s => {
             var left = s.D(remaining);
             var description = left > 0
-                ? $"RESOURCE\n\nGenerates money while powered.\n\n{left} remaining."
+                ? $"RESOURCE\n\nGenerates money while powered. Harvesting pauses during an attack.\n\n{left} remaining."
                 : "RESOURCE\n\nDepleted.";
             hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
         };

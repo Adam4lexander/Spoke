@@ -48,6 +48,10 @@ namespace Spoke.Examples.BaseDefence {
         State<int> resourcesRemaining = new();
         public static IState<int> ResourcesRemaining => Instance.resourcesRemaining;
 
+        // True while a wave is on the map; driven by the WaveDirector.
+        State<bool> assaulting = new();
+        public static IState<bool> Assaulting => Instance.assaulting;
+
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);
             s.Effect(s => Time.timeScale = s.D(isPlaying) ? 1f : 0f);

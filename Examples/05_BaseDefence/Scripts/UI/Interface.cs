@@ -7,6 +7,9 @@ namespace Spoke.Examples.BaseDefence {
 
     public class Interface : SpokeBehaviour {
 
+        // Key colours for rich-text accents.
+        static readonly Color amber = new(1f, 0.7372549f, 0f);
+
         [Header("Pregame References")]
         [SerializeField] GameObject pregamePanel;
         [SerializeField] Button startButton;
@@ -76,7 +79,14 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => gameplayPanel.SetActive(false));
                 s.OnCleanup(() => Placing.Set(null));
 
-                s.Effect(s => moneyText.text = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})");
+                s.Effect(s => {
+                    var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})";
+                    var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
+                    var colour = ColorUtility.ToHtmlStringRGBA(amber);
+                    moneyText.text = s.D(GameState.Assaulting)
+                        ? $"{money}\n<size={size}><color=#{colour}>harvesting paused</color></size>"
+                        : money;
+                });
 
                 s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
 
