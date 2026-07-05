@@ -41,8 +41,9 @@ namespace Spoke.Examples.BaseDefence {
         State<float> money = new();
         public static IState<float> Money => Instance.money;
 
-        State<int> collectRate = new();
-        public static IState<int> CollectRate => Instance.collectRate;
+        // Total money earned per second across all active harvesters.
+        State<float> collectRate = new();
+        public static IState<float> CollectRate => Instance.collectRate;
 
         // Resource nodes on the map not yet mined out; victory when it reaches zero.
         State<int> resourcesRemaining = new();

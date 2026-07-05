@@ -80,7 +80,7 @@ namespace Spoke.Examples.BaseDefence {
                 s.OnCleanup(() => Placing.Set(null));
 
                 s.Effect(s => {
-                    var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate)})";
+                    var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
                     var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
                     var colour = ColorUtility.ToHtmlStringRGBA(amber);
                     moneyText.text = s.D(GameState.Assaulting)

@@ -54,7 +54,7 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock SyncHoverInfo => s => {
             var left = s.D(remaining);
             var description = left > 0
-                ? $"RESOURCE\n\nGenerates money while powered. Harvesting pauses during an attack.\n\n{left} remaining."
+                ? $"RESOURCE\n\nGenerates ${1f / collectTime:0.##}/s while powered. Harvesting pauses during an attack.\n\n{left} remaining."
                 : "RESOURCE\n\nDepleted.";
             hoverInfo.Set(new HoverInfo(description, CoverageType.None, powerNode));
         };
@@ -69,8 +69,8 @@ namespace Spoke.Examples.BaseDefence {
             harvestFX.SetActive(true);
             s.OnCleanup(() => harvestFX.SetActive(false));
 
-            GameState.CollectRate.Update(x => x + 1);
-            s.OnCleanup(() => GameState.CollectRate.Update(x => x - 1));
+            GameState.CollectRate.Update(x => x + 1f / collectTime);
+            s.OnCleanup(() => GameState.CollectRate.Update(x => x - 1f / collectTime));
 
             IEnumerator onUpdate() {
                 var timer = 0f;
