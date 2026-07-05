@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Spoke.Examples.BaseDefence {
 
@@ -52,6 +53,12 @@ namespace Spoke.Examples.BaseDefence {
         // True while a wave is on the map; driven by the WaveDirector.
         State<bool> assaulting = new();
         public static IState<bool> Assaulting => Instance.assaulting;
+
+        public static void Restart() {
+            var activeScene = SceneManager.GetActiveScene();
+            UnitySignals.NotifySceneTeardown(activeScene);
+            SceneManager.LoadScene(activeScene.buildIndex);
+        }
 
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);

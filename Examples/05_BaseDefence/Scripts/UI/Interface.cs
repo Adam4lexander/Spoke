@@ -1,6 +1,5 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
@@ -70,7 +69,6 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(isPregame, s => {
                 pregamePanel.SetActive(true);
                 s.OnCleanup(() => pregamePanel.SetActive(false));
-
                 s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
             });
 
@@ -121,15 +119,13 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(isGameOver, s => {
                 gameOverPanel.SetActive(true);
                 s.OnCleanup(() => gameOverPanel.SetActive(false));
-
-                s.Subscribe(restartButton.onClick, () => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
+                s.Subscribe(restartButton.onClick, GameState.Restart);
             });
 
             s.Phase(isVictory, s => {
                 victoryPanel.SetActive(true);
                 s.OnCleanup(() => victoryPanel.SetActive(false));
-
-                s.Subscribe(victoryRestartButton.onClick, () => SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex));
+                s.Subscribe(victoryRestartButton.onClick, GameState.Restart);
             });
         }
 
