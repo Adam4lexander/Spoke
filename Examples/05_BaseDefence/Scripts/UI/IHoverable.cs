@@ -4,9 +4,11 @@ namespace Spoke.Examples.BaseDefence {
 
     public enum CoverageType { None, Power, Radar, Turret, Repair }
 
-    // A unit the pointer can hover — what to say about it and what to show for it.
+    // A unit the pointer can hover — what to say about it, what to show for it,
+    // and the ground it occupies (for the highlight ring).
     public interface IHoverable {
         ISignal<HoverInfo> HoverInfo { get; }
+        Circle Footprint { get; }
     }
 
     public readonly struct HoverInfo : IEquatable<HoverInfo> {

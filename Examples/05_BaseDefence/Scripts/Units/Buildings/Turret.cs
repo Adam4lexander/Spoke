@@ -23,6 +23,7 @@ namespace Spoke.Examples.BaseDefence {
 
         State<HoverInfo> hoverInfo = new();
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
+        public Circle Footprint => building.Footprint;
 
         protected override void Init(EffectBuilder s) {
             hoverInfo.Set(new HoverInfo(

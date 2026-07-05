@@ -23,6 +23,8 @@ namespace Spoke.Examples.BaseDefence {
         public string DisplayName => displayName;
         public int Cost => cost;
         public float Radius => radius;
+
+        public Circle Footprint => new(transform.position, radius);
         public PowerNode Power => powerNode;
 
         protected override void Init(EffectBuilder s) {
@@ -39,7 +41,7 @@ namespace Spoke.Examples.BaseDefence {
 
                     // Physical footprint for hover-picking and blast damage (distinct from the network
                     // receiver the PowerNode registers in the power world).
-                    s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
+                    s.Use(GameState.GroundZone.AddCollider(gameObject, () => Footprint));
 
                     s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
                 });
