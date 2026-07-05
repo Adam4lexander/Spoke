@@ -234,7 +234,7 @@ MonoBehaviour:
   meshFX: {fileID: 7383137929261724295}
   powerNode: {fileID: 3547522816358629646}
   displayName: Relay
-  cost: 10
+  cost: 20
   radius: 0.3
   unpoweredDim:
     value: 0.35

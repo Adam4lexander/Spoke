@@ -41,6 +41,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
         [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
+        [SerializeField] float waveWarningLeadTime = 5f;      // seconds before a wave that its direction is revealed
 
         public State<BuildItem> Placing { get; } = new();
 
@@ -82,15 +83,18 @@ namespace Spoke.Examples.BaseDefence {
                 // Whole seconds derived from the ticking countdown, so the text only
                 // rewrites when the displayed number changes.
                 var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
+
+                // The coming wave's direction is held back until the last seconds of the lull.
+                var frontKnown = s.Memo(s => s.D(waveDirector.IsAssaulting) || s.D(waveDirector.NextWaveIn) <= waveWarningLeadTime);
+
                 s.Effect(s => {
                     var direction = s.D(waveDirector.Front).ToString().ToLower();
-                    waveText.text = s.D(waveDirector.IsAssaulting)
-                        ? $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}"
-                        : $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                    if (s.D(waveDirector.IsAssaulting)) waveText.text = $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}";
+                    else if (s.D(frontKnown)) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                    else waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} in {s.D(countdown)}s";
                 });
 
-                
-                s.Effect(ShowWaveWarning);
+                s.Effect(ShowWaveWarning(frontKnown));
 
                 var hasMousePoint = s.Memo(s => {
                     var p = s.D(GameState.View).MousePoint;
@@ -195,8 +199,9 @@ namespace Spoke.Examples.BaseDefence {
             }
         };
 
-        // Blink along the threatened screen edge while the wave is incoming.
-        EffectBlock ShowWaveWarning => s => {
+        // Blink along the threatened screen edge once the wave's direction is revealed.
+        EffectBlock ShowWaveWarning(ISignal<bool> frontKnown) => s => {
+            if (!s.D(frontKnown)) return;
             if (s.D(waveDirector.IsAssaulting)) return;
             var bar = s.D(waveDirector.Front) switch {
                 Edge.North => northWaveWarning,

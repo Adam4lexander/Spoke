@@ -311,7 +311,7 @@ MonoBehaviour:
   meshFX: {fileID: 5727988383154249024}
   powerNode: {fileID: 7961739304234843577}
   displayName: Repair
-  cost: 150
+  cost: 100
   radius: 0.5
   unpoweredDim:
     value: 0.35
