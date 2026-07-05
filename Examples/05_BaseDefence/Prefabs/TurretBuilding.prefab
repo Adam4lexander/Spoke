@@ -340,7 +340,7 @@ MonoBehaviour:
   pivot: {fileID: 7629657184877623706}
   fireFrom: {fileID: 6221690417680857805}
   beam: {fileID: 6813769431354447905}
-  range: 4
+  range: 5
   rotationSpeed: 180
   damage: 0.5
   fireRate: 2

@@ -25,6 +25,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float baseSpawnInterval = 1f;     // in-wave spacing at wave 1
         [SerializeField] float spawnIntervalStep = 0.1f;   // spacing shrinks per wave...
         [SerializeField] float minSpawnInterval = 0.25f;   // ...down to this floor
+        [SerializeField] float spawnMargin = 2f;           // enemies spawn this far outside the level bounds
 
         State<int> wave = new();          // 0 until the first assault begins
         State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
@@ -114,16 +115,16 @@ namespace Spoke.Examples.BaseDefence {
             };
         }
 
-        // A random point along the given edge of the level bounds.
+        // A random point along the given edge of the level, just outside its bounds.
         Vector3 EdgePoint(Edge edge) {
             var b = GameState.LevelBounds;
             var x = Random.Range(b.min.x, b.max.x);
             var z = Random.Range(b.min.z, b.max.z);
             return edge switch {
-                Edge.West => new Vector3(b.min.x, 0f, z),
-                Edge.East => new Vector3(b.max.x, 0f, z),
-                Edge.South => new Vector3(x, 0f, b.min.z),
-                _ => new Vector3(x, 0f, b.max.z),
+                Edge.West => new Vector3(b.min.x - spawnMargin, 0f, z),
+                Edge.East => new Vector3(b.max.x + spawnMargin, 0f, z),
+                Edge.South => new Vector3(x, 0f, b.min.z - spawnMargin),
+                _ => new Vector3(x, 0f, b.max.z + spawnMargin),
             };
         }
     }

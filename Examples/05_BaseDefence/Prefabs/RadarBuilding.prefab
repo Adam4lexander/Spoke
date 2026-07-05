@@ -891,7 +891,7 @@ MonoBehaviour:
   meshFX: {fileID: 5238254981829936414}
   powerNode: {fileID: 158370638330680247}
   displayName: Radar
-  cost: 100
+  cost: 50
   radius: 0.4
   unpoweredDim:
     value: 0.35
