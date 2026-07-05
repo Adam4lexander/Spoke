@@ -85,9 +85,10 @@ namespace Spoke.Examples.BaseDefence {
                 var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
 
                 s.Effect(s => {
-                    var direction = s.D(waveDirector.Front).ToString().ToLower();
+                    var front = s.D(waveDirector.Front);
+                    var direction = front.ToString().ToLower();
                     if (s.D(waveDirector.IsAssaulting)) waveText.text = $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}";
-                    else if (s.D(waveDirector.FrontKnown)) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                    else if (front != WaveFront.None) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
                     else waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} in {s.D(countdown)}s";
                 });
 

@@ -54,8 +54,8 @@ namespace Spoke.Examples.BaseDefence {
                 // Announce each wave transition; the opening lull has nothing to announce.
                 s.Effect(s => {
                     var wave = s.D(waveDirector.Wave);
-                    if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} incoming from the {s.D(waveDirector.Front)}, pausing harvesters"));
-                    else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} defeated, resuming harvesters"));
+                    if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} From The {s.D(waveDirector.Front)}\nHarvesting Paused"));
+                    else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
                 });
 
                 var hasMousePoint = s.Memo(s => {
@@ -163,14 +163,15 @@ namespace Spoke.Examples.BaseDefence {
 
         // Blink along the threatened screen edge once the wave's direction is revealed.
         EffectBlock ShowWaveWarning => s => {
-            if (!s.D(waveDirector.FrontKnown)) return;
             if (s.D(waveDirector.IsAssaulting)) return;
             var bar = s.D(waveDirector.Front) switch {
-                Edge.North => northWaveWarning,
-                Edge.East => eastWaveWarning,
-                Edge.South => southWaveWarning,
-                _ => westWaveWarning,
+                WaveFront.North => northWaveWarning,
+                WaveFront.East => eastWaveWarning,
+                WaveFront.South => southWaveWarning,
+                WaveFront.West => westWaveWarning,
+                _ => null,
             };
+            if (bar == null) return;
 
             IEnumerator onUpdate() {
                 bar.SetActive(true);

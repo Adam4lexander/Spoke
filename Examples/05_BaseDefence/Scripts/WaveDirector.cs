@@ -3,12 +3,12 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    public enum Edge { West, East, South, North }
+    public enum WaveFront { None, West, East, South, North }
 
     // Sends enemies in waves: each assault pours in from one edge of the level,
     // and each wave is bigger, faster and heavier than the last, with a lull in
-    // between. The next wave's front is chosen when the lull begins, so the UI can
-    // warn where the attack will come from while the countdown runs.
+    // between. The next wave's front is chosen when the lull begins, but reads as
+    // None until the countdown's last seconds — the UI can't leak an unrevealed direction.
     public class WaveDirector : SpokeBehaviour {
 
         [Header("References")]
@@ -30,14 +30,12 @@ namespace Spoke.Examples.BaseDefence {
 
         State<int> wave = new();          // 0 until the first assault begins
         State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
-        State<Edge> front = new();        // where the coming (or current) wave attacks from
-        State<bool> frontKnown = new();   // whether the coming wave's front has been revealed to the player
+        State<WaveFront> front = new();   // where the coming (or current) wave attacks from; None until revealed
 
         public ISignal<int> Wave => wave;
         public ISignal<bool> IsAssaulting => GameState.Assaulting;
         public ISignal<float> NextWaveIn => nextWaveIn;
-        public ISignal<Edge> Front => front;
-        public ISignal<bool> FrontKnown => frontKnown;
+        public ISignal<WaveFront> Front => front;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
@@ -46,15 +44,14 @@ namespace Spoke.Examples.BaseDefence {
                     var isLull = s.Memo(s => !s.D(GameState.Assaulting));
                     s.Phase(isLull, Lull);
                     s.Phase(GameState.Assaulting, Assault);
-
-                    // The front is decided at lull start but held back until the countdown's last seconds.
-                    s.Effect(s => frontKnown.Set(s.D(GameState.Assaulting) || s.D(nextWaveIn) <= frontRevealTime));
                 });
             });
         }
 
         EffectBlock Lull => s => {
-            front.Set((Edge)Random.Range(0, 4));
+            // The front is decided now, but only published in the countdown's last seconds.
+            var chosen = (WaveFront)Random.Range(1, 5);
+            front.Set(WaveFront.None);
             nextWaveIn.Set(lullDuration);
 
             IEnumerator onUpdate() {
@@ -63,6 +60,7 @@ namespace Spoke.Examples.BaseDefence {
                     yield return null;
                     remaining -= Time.deltaTime;
                     nextWaveIn.Set(Mathf.Max(0f, remaining));
+                    if (remaining <= frontRevealTime) front.Set(chosen);
                 }
                 wave.Update(x => x + 1);
                 GameState.Assaulting.Set(true);
@@ -121,15 +119,15 @@ namespace Spoke.Examples.BaseDefence {
             };
         }
 
-        // A random point along the given edge of the level, just outside its bounds.
-        Vector3 EdgePoint(Edge edge) {
+        // A random point along the given front's edge of the level, just outside its bounds.
+        Vector3 EdgePoint(WaveFront front) {
             var b = GameState.LevelBounds;
             var x = Random.Range(b.min.x, b.max.x);
             var z = Random.Range(b.min.z, b.max.z);
-            return edge switch {
-                Edge.West => new Vector3(b.min.x - spawnMargin, 0f, z),
-                Edge.East => new Vector3(b.max.x + spawnMargin, 0f, z),
-                Edge.South => new Vector3(x, 0f, b.min.z - spawnMargin),
+            return front switch {
+                WaveFront.West => new Vector3(b.min.x - spawnMargin, 0f, z),
+                WaveFront.East => new Vector3(b.max.x + spawnMargin, 0f, z),
+                WaveFront.South => new Vector3(x, 0f, b.min.z - spawnMargin),
                 _ => new Vector3(x, 0f, b.max.z + spawnMargin),
             };
         }
