@@ -130,6 +130,9 @@ namespace Spoke.Examples.BaseDefence {
                     timer += dt;
                     yield return null;
                 }
+                foreach (var p in pieces) {
+                    if (p.Renderer) p.Renderer.enabled = false;
+                }
                 isShattered.Set(true);
             }
             var routine = StartCoroutine(onUpdate());
@@ -138,6 +141,7 @@ namespace Spoke.Examples.BaseDefence {
                 isShattered.Set(false);
                 foreach (var p in pieces) {
                     if (!p.Renderer) continue;
+                    p.Renderer.enabled = true;
                     p.Renderer.transform.localPosition = p.HomePosition;
                     p.Renderer.transform.localRotation = p.HomeRotation;
                 }
