@@ -1,0 +1,171 @@
+using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Spoke.Examples.BaseDefence {
+
+    [Serializable]
+    public class BuildItem {
+        public Building Prefab;
+        public Button Button;
+        public string Hotkey;
+        public CoverageType Coverage;   // shown while placing, alongside power coverage
+    }
+
+    public class SideBar : SpokeBehaviour {
+
+        // Key colours for rich-text accents.
+        static readonly Color amber = new(1f, 0.7372549f, 0f);
+
+        [Header("References")]
+        [SerializeField] Interface ui;
+        [SerializeField] WaveDirector waveDirector;
+
+        [Header("Pregame References")]
+        [SerializeField] GameObject pregamePanel;
+        [SerializeField] Button startButton;
+
+        [Header("Gameplay References")]
+        [SerializeField] GameObject gameplayPanel;
+        [SerializeField] Text waveText;
+        [SerializeField] Text moneyText;
+        [SerializeField] Text resourcesText;
+        [SerializeField] Text messageText;
+
+        [Header("Game Over References")]
+        [SerializeField] GameObject gameOverPanel;
+        [SerializeField] Button restartButton;
+
+        [Header("Victory References")]
+        [SerializeField] GameObject victoryPanel;
+        [SerializeField] Button victoryRestartButton;
+
+        [Header("Build Items")]
+        [SerializeField] BuildItem relayItem;
+        [SerializeField] BuildItem radarItem;
+        [SerializeField] BuildItem turretItem;
+        [SerializeField] BuildItem repairItem;
+
+        protected override void Init(EffectBuilder s) {
+            messageText.text = "";
+            pregamePanel.SetActive(false);
+            gameplayPanel.SetActive(false);
+            gameOverPanel.SetActive(false);
+            victoryPanel.SetActive(false);
+
+            var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
+            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
+            var isGameOver = s.Memo(s => s.D(GameState.Mode) == GameMode.GameOver);
+            var isVictory = s.Memo(s => s.D(GameState.Mode) == GameMode.Victory);
+
+            s.Phase(isPregame, s => {
+                pregamePanel.SetActive(true);
+                s.OnCleanup(() => pregamePanel.SetActive(false));
+                s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
+            });
+
+            s.Phase(isPlaying, s => {
+                gameplayPanel.SetActive(true);
+                s.OnCleanup(() => gameplayPanel.SetActive(false));
+
+                s.Effect(s => {
+                    var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
+                    var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
+                    var colour = ColorUtility.ToHtmlStringRGBA(amber);
+                    moneyText.text = s.D(GameState.Assaulting)
+                        ? $"{money}\n<size={size}><color=#{colour}>harvesting paused</color></size>"
+                        : money;
+                });
+
+                s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
+
+                // Whole seconds derived from the ticking countdown, so the text only
+                // rewrites when the displayed number changes.
+                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
+
+                s.Effect(s => {
+                    var direction = s.D(waveDirector.Front).ToString().ToLower();
+                    if (s.D(waveDirector.IsAssaulting)) waveText.text = $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}";
+                    else if (s.D(waveDirector.FrontKnown)) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                    else waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} in {s.D(countdown)}s";
+                });
+
+                s.Effect(ShowMessage);
+
+                s.Effect(ControlBuildItem(relayItem));
+                s.Effect(ControlBuildItem(radarItem));
+                s.Effect(ControlBuildItem(turretItem));
+                s.Effect(ControlBuildItem(repairItem));
+            });
+
+            s.Phase(isGameOver, s => {
+                gameOverPanel.SetActive(true);
+                s.OnCleanup(() => gameOverPanel.SetActive(false));
+                s.Subscribe(restartButton.onClick, GameState.Restart);
+            });
+
+            s.Phase(isVictory, s => {
+                victoryPanel.SetActive(true);
+                s.OnCleanup(() => victoryPanel.SetActive(false));
+                s.Subscribe(victoryRestartButton.onClick, GameState.Restart);
+            });
+        }
+
+        // The message line: placement instructions take priority, then the hovered unit's description.
+        EffectBlock ShowMessage => s => {
+            var placing = s.D(ui.Placing);
+            var hovered = s.D(ui.Hovering);
+            if (placing != null) messageText.text = $"Placing {placing.Prefab.DisplayName} — press Escape to cancel";
+            else if (hovered != null) messageText.text = s.D(hovered.HoverInfo).Description;
+            else messageText.text = "";
+        };
+
+        EffectBlock ControlBuildItem(BuildItem item) => s => {
+            var buttonText = item.Button.GetComponentInChildren<Text>();
+            var idleLabel = $"{item.Prefab.DisplayName} ({item.Hotkey}) - ${item.Prefab.Cost}";
+            buttonText.text = idleLabel;
+
+            var hotkey = item.Hotkey.ToLower();
+            var canAfford = s.Memo(s => item.Prefab.Cost <= s.D(GameState.Money));
+            var isPlacing = s.Memo(s => s.D(ui.Placing) != null);
+            var isNotPlacing = s.Memo(s => !s.D(isPlacing));
+
+            s.Phase(isNotPlacing, s => {
+                s.Effect(s => item.Button.interactable = s.D(canAfford));
+
+                void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item); }
+                s.Subscribe(item.Button.onClick, beginPlacing);
+                s.Effect(WatchHotkey(hotkey, beginPlacing));
+            });
+
+            s.Phase(isPlacing, s => {
+                var isPlacingThis = s.Memo(s => s.D(ui.Placing) == item);
+
+                // Only the selected button stays live — it becomes the cancel affordance.
+                s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
+
+                s.Phase(isPlacingThis, s => {
+                    buttonText.text = $"Cancel ({item.Hotkey})";
+                    s.OnCleanup(() => buttonText.text = idleLabel);
+
+                    void cancel() => ui.Placing.Set(null);
+                    s.Subscribe(item.Button.onClick, cancel);
+                    s.Effect(WatchHotkey("escape", cancel));
+                });
+            });
+        };
+
+        // Invokes onPressed on the frame the key goes down, for as long as this is mounted.
+        EffectBlock WatchHotkey(string key, Action onPressed) => s => {
+            IEnumerator onUpdate() {
+                while (true) {
+                    if (Input.GetKeyDown(key)) onPressed();
+                    yield return null;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
+    }
+}

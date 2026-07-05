@@ -134,7 +134,7 @@ GameObject:
   - component: {fileID: 6361558}
   - component: {fileID: 6361559}
   m_Layer: 0
-  m_Name: '[!--Interface--!]'
+  m_Name: '[!--UI--!]'
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -168,23 +168,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 020e8454dede2974bac1cb63025f247e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pregamePanel: {fileID: 1285916201}
-  startButton: {fileID: 976683645}
-  gameplayPanel: {fileID: 535518730}
   waveDirector: {fileID: 1738952518}
-  waveText: {fileID: 753679438}
-  moneyText: {fileID: 342749939}
-  resourcesText: {fileID: 1166456931}
-  messageText: {fileID: 1541435722}
   onscreenText: {fileID: 2023124779}
   northWaveWarning: {fileID: 1407430305}
   eastWaveWarning: {fileID: 1625764508}
   southWaveWarning: {fileID: 123125659}
   westWaveWarning: {fileID: 1519167722}
-  gameOverPanel: {fileID: 81561303}
-  restartButton: {fileID: 1331290346}
-  victoryPanel: {fileID: 1370911113}
-  victoryRestartButton: {fileID: 1921808492}
   powerCoverageColour:
     value: {r: 0, g: 1, b: 1, a: 1}
   radarCoverageColour:
@@ -202,7 +191,7 @@ MonoBehaviour:
   invalidPlacementColour:
     value: {r: 1, g: 0, b: 0, a: 1}
   waveWarningBlinkTime: 0.5
-  waveWarningLeadTime: 5
+  onscreenMessageTime: 4
 --- !u!114 &6361559
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -216,6 +205,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ui: {fileID: 6361558}
+  waveDirector: {fileID: 1738952518}
+  pregamePanel: {fileID: 1285916201}
+  startButton: {fileID: 976683645}
+  gameplayPanel: {fileID: 535518730}
+  waveText: {fileID: 753679438}
+  moneyText: {fileID: 342749939}
+  resourcesText: {fileID: 1166456931}
+  messageText: {fileID: 1541435722}
+  gameOverPanel: {fileID: 81561303}
+  restartButton: {fileID: 1331290346}
+  victoryPanel: {fileID: 1370911113}
+  victoryRestartButton: {fileID: 1921808492}
   relayItem:
     Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
     Button: {fileID: 440189158}
@@ -5375,6 +5376,7 @@ MonoBehaviour:
   enemy2Prefab: {fileID: 6920224175962368326, guid: 0014e3a59c5ccea4e98bd8ae51475213, type: 3}
   enemy3Prefab: {fileID: 4990086787066691017, guid: ae325cae895a1964899eb08129ffbadb, type: 3}
   lullDuration: 30
+  frontRevealTime: 5
   baseBudget: 2
   budgetPerWave: 1
   enemy2UnlockWave: 4

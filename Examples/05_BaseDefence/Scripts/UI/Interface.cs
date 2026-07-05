@@ -4,37 +4,17 @@ using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // The UI overlaid onto the game board itself: hover and placement interaction,
+    // coverage and link displays, wave warnings and onscreen announcements.
     public class Interface : SpokeBehaviour {
 
-        // Key colours for rich-text accents.
-        static readonly Color amber = new(1f, 0.7372549f, 0f);
-
-        [Header("Pregame References")]
-        [SerializeField] GameObject pregamePanel;
-        [SerializeField] Button startButton;
-
-        [Header("Gameplay References")]
-        [SerializeField] GameObject gameplayPanel;
+        [Header("References")]
         [SerializeField] WaveDirector waveDirector;
-        [SerializeField] Text waveText;
-        [SerializeField] Text moneyText;
-        [SerializeField] Text resourcesText;
-        [SerializeField] Text messageText;
-
-        [Header("Game Overlay References")]
         [SerializeField] Text onscreenText;
         [SerializeField] GameObject northWaveWarning;
         [SerializeField] GameObject eastWaveWarning;
         [SerializeField] GameObject southWaveWarning;
         [SerializeField] GameObject westWaveWarning;
-
-        [Header("Game Over References")]
-        [SerializeField] GameObject gameOverPanel;
-        [SerializeField] Button restartButton;
-
-        [Header("Victory References")]
-        [SerializeField] GameObject victoryPanel;
-        [SerializeField] Button victoryRestartButton;
 
         [Header("Attributes")]
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
@@ -46,71 +26,30 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
         [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
-        [SerializeField] float waveWarningLeadTime = 5f;      // seconds before a wave that its direction is revealed
         [SerializeField] float onscreenMessageTime = 4f;      // seconds an onscreen message lingers
 
         public State<BuildItem> Placing { get; } = new();
 
         // The unit under the mouse; null when nothing hoverable is there.
         State<IHoverable> hovering = new();
+        public ISignal<IHoverable> Hovering => hovering;
 
         Trigger onLeftClick = Trigger.Create();
         Trigger onRightClick = Trigger.Create();
 
         protected override void Init(EffectBuilder s) {
-            messageText.text = "";
             onscreenText.text = "";
-            pregamePanel.SetActive(false);
-            gameplayPanel.SetActive(false);
-            gameOverPanel.SetActive(false);
-            victoryPanel.SetActive(false);
             northWaveWarning.SetActive(false);
             eastWaveWarning.SetActive(false);
             southWaveWarning.SetActive(false);
             westWaveWarning.SetActive(false);
 
-            var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
-            var isGameOver = s.Memo(s => s.D(GameState.Mode) == GameMode.GameOver);
-            var isVictory = s.Memo(s => s.D(GameState.Mode) == GameMode.Victory);
-
-            s.Phase(isPregame, s => {
-                pregamePanel.SetActive(true);
-                s.OnCleanup(() => pregamePanel.SetActive(false));
-                s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
-            });
 
             s.Phase(isPlaying, s => {
-                gameplayPanel.SetActive(true);
-                s.OnCleanup(() => gameplayPanel.SetActive(false));
                 s.OnCleanup(() => Placing.Set(null));
 
-                s.Effect(s => {
-                    var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
-                    var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
-                    var colour = ColorUtility.ToHtmlStringRGBA(amber);
-                    moneyText.text = s.D(GameState.Assaulting)
-                        ? $"{money}\n<size={size}><color=#{colour}>harvesting paused</color></size>"
-                        : money;
-                });
-
-                s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
-
-                // Whole seconds derived from the ticking countdown, so the text only
-                // rewrites when the displayed number changes.
-                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
-
-                // The coming wave's direction is held back until the last seconds of the lull.
-                var frontKnown = s.Memo(s => s.D(waveDirector.IsAssaulting) || s.D(waveDirector.NextWaveIn) <= waveWarningLeadTime);
-
-                s.Effect(s => {
-                    var direction = s.D(waveDirector.Front).ToString().ToLower();
-                    if (s.D(waveDirector.IsAssaulting)) waveText.text = $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}";
-                    else if (s.D(frontKnown)) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
-                    else waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} in {s.D(countdown)}s";
-                });
-
-                s.Effect(ShowWaveWarning(frontKnown));
+                s.Effect(ShowWaveWarning);
 
                 // Announce each wave transition; the opening lull has nothing to announce.
                 s.Effect(s => {
@@ -138,18 +77,6 @@ namespace Spoke.Examples.BaseDefence {
                     if (placingNow == null) s.Effect(FindHovered);
                     else s.Effect(PlaceBuilding(placingNow));
                 });
-            });
-
-            s.Phase(isGameOver, s => {
-                gameOverPanel.SetActive(true);
-                s.OnCleanup(() => gameOverPanel.SetActive(false));
-                s.Subscribe(restartButton.onClick, GameState.Restart);
-            });
-
-            s.Phase(isVictory, s => {
-                victoryPanel.SetActive(true);
-                s.OnCleanup(() => victoryPanel.SetActive(false));
-                s.Subscribe(victoryRestartButton.onClick, GameState.Restart);
             });
         }
 
@@ -180,12 +107,6 @@ namespace Spoke.Examples.BaseDefence {
             var hoverable = s.D(hovering);
             if (hoverable == null) return;
 
-            var description = s.Memo(s => s.D(hoverable.HoverInfo).Description);
-            s.Effect(s => {
-                messageText.text = s.D(description);
-                s.OnCleanup(() => messageText.text = "");
-            });
-
             var coverage = s.Memo(s => s.D(hoverable.HoverInfo).Coverage);
             s.Effect(s => s.Effect(ShowCoverage(s.D(coverage))));
 
@@ -206,9 +127,6 @@ namespace Spoke.Examples.BaseDefence {
         // spot buys and places the building.
         EffectBlock PlaceBuilding(BuildItem item) => s => {
             var prefab = item.Prefab;
-            messageText.text = $"Placing {prefab.DisplayName} — press Escape to cancel";
-            s.OnCleanup(() => messageText.text = "");
-
             s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider));
             if (item.Coverage != CoverageType.Power) s.Effect(ShowCoverage(item.Coverage));
 
@@ -244,8 +162,8 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         // Blink along the threatened screen edge once the wave's direction is revealed.
-        EffectBlock ShowWaveWarning(ISignal<bool> frontKnown) => s => {
-            if (!s.D(frontKnown)) return;
+        EffectBlock ShowWaveWarning => s => {
+            if (!s.D(waveDirector.FrontKnown)) return;
             if (s.D(waveDirector.IsAssaulting)) return;
             var bar = s.D(waveDirector.Front) switch {
                 Edge.North => northWaveWarning,

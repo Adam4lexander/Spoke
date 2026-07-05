@@ -18,6 +18,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Attributes")]
         [SerializeField] float lullDuration = 8f;          // calm between assaults
+        [SerializeField] float frontRevealTime = 5f;       // seconds before a wave that its direction is revealed
         [SerializeField] int baseBudget = 4;               // wave 1's spend, in basic-enemy units
         [SerializeField] float budgetPerWave = 2f;         // extra budget each wave (fractions accumulate across waves)
         [SerializeField] int enemy2UnlockWave = 3;         // first wave that can field tier 2
@@ -30,11 +31,13 @@ namespace Spoke.Examples.BaseDefence {
         State<int> wave = new();          // 0 until the first assault begins
         State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
         State<Edge> front = new();        // where the coming (or current) wave attacks from
+        State<bool> frontKnown = new();   // whether the coming wave's front has been revealed to the player
 
         public ISignal<int> Wave => wave;
         public ISignal<bool> IsAssaulting => GameState.Assaulting;
         public ISignal<float> NextWaveIn => nextWaveIn;
         public ISignal<Edge> Front => front;
+        public ISignal<bool> FrontKnown => frontKnown;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
@@ -43,6 +46,9 @@ namespace Spoke.Examples.BaseDefence {
                     var isLull = s.Memo(s => !s.D(GameState.Assaulting));
                     s.Phase(isLull, Lull);
                     s.Phase(GameState.Assaulting, Assault);
+
+                    // The front is decided at lull start but held back until the countdown's last seconds.
+                    s.Effect(s => frontKnown.Set(s.D(GameState.Assaulting) || s.D(nextWaveIn) <= frontRevealTime));
                 });
             });
         }
