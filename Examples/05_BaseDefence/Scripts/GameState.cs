@@ -18,14 +18,14 @@ namespace Spoke.Examples.BaseDefence {
         CollisionWorld<Radar> radarZone = new();
         CollisionWorld<Turret> turretZone = new();
         CollisionWorld<Repair> repairZone = new();
-        CollisionWorld<Enemy> trackedEnemyZone = new();
+        CollisionWorld<Enemy> enemyZone = new();
 
         public static CollisionWorld<PowerBody> PowerZone => Instance.powerZone;
         public static CollisionWorld<GameObject> GroundZone => Instance.groundZone;
         public static CollisionWorld<Radar> RadarZone => Instance.radarZone;
         public static CollisionWorld<Turret> TurretZone => Instance.turretZone;
         public static CollisionWorld<Repair> RepairZone => Instance.repairZone;
-        public static CollisionWorld<Enemy> TrackedEnemyZone => Instance.trackedEnemyZone;
+        public static CollisionWorld<Enemy> EnemyZone => Instance.enemyZone;
 
         public static Plane GroundPlane => new(Vector3.up, LevelBounds.center);
 
@@ -71,7 +71,7 @@ namespace Spoke.Examples.BaseDefence {
             radarZone.Tick();
             turretZone.Tick();
             repairZone.Tick();
-            trackedEnemyZone.Tick();
+            enemyZone.Tick();
         }
 
         void OnDrawGizmosSelected() {

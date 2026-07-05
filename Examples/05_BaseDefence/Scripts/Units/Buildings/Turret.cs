@@ -44,8 +44,13 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Use(GameState.TurretZone.AddCollider(this, () => new Circle(transform.position, range)));
 
-                var sensor = s.Use(GameState.TrackedEnemyZone.AddSensor(() => new Circle(transform.position, range)));
-                var target = s.Memo(s => sensor.Overlaps.Count == 0 ? null : sensor.Overlaps[0].Owner, sensor.OverlapsChanged);
+                // Overlaps are nearest-first, so this picks the closest radar-revealed enemy.
+                var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(transform.position, range)));
+                var target = s.Memo(s => {
+                    foreach (var c in sensor.Overlaps)
+                        if (s.D(c.Owner.IsTracked)) return c.Owner;
+                    return null;
+                }, sensor.OverlapsChanged);
 
                 s.Effect(s => {
                     var targetNow = s.D(target);

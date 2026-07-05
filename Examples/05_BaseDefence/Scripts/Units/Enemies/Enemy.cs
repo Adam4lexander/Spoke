@@ -23,9 +23,14 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float stopDistance = 1.2f;   // gap kept from the target building's centre
         [SerializeField] float fireRate = 1f;         // shots per second
         [SerializeField] float proximityBias = 0.5f;  // 0 = follow the heading line, higher favours nearby buildings
+        [SerializeField] float separationDistance = 1.5f; // enemies closer than this push apart
+        [SerializeField] float separationStrength = 2f;   // how hard overlapping enemies repel
 
         public Health Health => health;
         public Vector3 CenterOfMass => flightRoot.transform.position;
+
+        State<bool> tracked = new();
+        public ISignal<bool> IsTracked => tracked;
 
         Vector3 flightRootStartPos;
 
@@ -41,8 +46,11 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(IsEnabled, s => {
                 s.Phase(health.IsAlive, s => {
+                    s.Use(GameState.EnemyZone.AddCollider(this, () => new Circle(transform.position, radius)));
+
                     s.Effect(RadarTrack);
                     s.Effect(Bob);
+                    s.Effect(Separate);
                     s.Subscribe(health.Damaged, () => meshFX.Blink(Color.red));
 
                     var target = s.Effect(ChooseTarget);
@@ -133,15 +141,41 @@ namespace Spoke.Examples.BaseDefence {
             s.OnCleanup(() => StopCoroutine(routine));
         };
 
+        // A gentle repulsion between living enemies, so they spread out instead of
+        // stacking when several converge on the same building.
+        EffectBlock Separate => s => {
+            var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(transform.position, separationDistance)));
+
+            IEnumerator onUpdate() {
+                while (true) {
+                    yield return null;
+                    var push = Vector3.zero;
+                    foreach (var c in sensor.Overlaps) {
+                        if (c.Owner == this) continue;
+                        var away = transform.position - c.Owner.transform.position;
+                        away.y = 0f;
+                        var dist = away.magnitude;
+                        if (dist < 0.001f || dist >= separationDistance) continue;
+                        // Full strength when stacked, fading to zero at the separation distance.
+                        push += away / dist * (1f - dist / separationDistance);
+                    }
+                    transform.position += separationStrength * Time.deltaTime * push;
+                }
+            }
+            var routine = StartCoroutine(onUpdate());
+            s.OnCleanup(() => StopCoroutine(routine));
+        };
+
         EffectBlock RadarTrack => s => {
             var sensor = s.Use(GameState.RadarZone.AddSensor(() => new Circle(transform.position, radius)));
 
             var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.OverlapsChanged);
             s.Phase(isTracked, s => {
+                tracked.Set(true);
+                s.OnCleanup(() => tracked.Set(false));
+
                 showOnTracked.SetActive(true);
                 s.OnCleanup(() => showOnTracked.SetActive(false));
-
-                s.Use(GameState.TrackedEnemyZone.AddCollider(this, () => new Circle(transform.position, radius)));
             });
         };
 

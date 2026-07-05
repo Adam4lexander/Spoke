@@ -94,6 +94,8 @@ MonoBehaviour:
   stopDistance: 1.2
   fireRate: 1
   proximityBias: 0.5
+  separationDistance: 0.6
+  separationStrength: 0.2
 --- !u!114 &4990086787066691023
 MonoBehaviour:
   m_ObjectHideFlags: 0
