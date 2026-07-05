@@ -118,11 +118,13 @@ namespace Spoke.Examples.BaseDefence {
                     if (target == null) break;
                     var attackPos = target.transform.position;
 
+                    // Yaw lives on the flight root, so children of the enemy root (like the
+                    // health bar) never inherit rotation.
                     while (true) {
                         var to = attackPos - transform.position;
                         to.y = 0f;
                         var dist = to.magnitude;
-                        if (dist > 0.001f) transform.rotation = Quaternion.LookRotation(to / dist, Vector3.up);
+                        if (dist > 0.001f) flightRoot.transform.rotation = Quaternion.LookRotation(to / dist, Vector3.up);
                         if (dist <= stopDistance + 0.001f) break;
                         var step = Mathf.Min(moveSpeed * Time.deltaTime, dist - stopDistance);
                         transform.position += to / dist * step;
