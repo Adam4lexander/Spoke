@@ -11,6 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] Health health;
+        [SerializeField] HealthBar healthBar;
         [SerializeField] MeshFX meshFX;
         [SerializeField] GameObject flightRoot;
         [SerializeField] GameObject fireFrom;
@@ -31,6 +32,12 @@ namespace Spoke.Examples.BaseDefence {
         protected override void Init(EffectBuilder s) {
             flightRootStartPos = flightRoot.transform.localPosition;
             showOnTracked.SetActive(false);
+
+            s.Effect(s => {
+                var showHealth = s.D(health.IsAlive) && s.D(health.HPFraction) < 1f;
+                healthBar.gameObject.SetActive(showHealth);
+                healthBar.Fraction.Set(s.D(health.HPFraction));
+            });
 
             s.Phase(IsEnabled, s => {
                 s.Phase(health.IsAlive, s => {
