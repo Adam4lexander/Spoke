@@ -82,7 +82,7 @@ namespace Spoke.Examples.BaseDefence {
                 while (budget > 0) {
                     var (prefab, cost) = PickEnemy(waveNow, budget);
                     budget -= cost;
-                    var enemy = Pool.Spawn(prefab, EdgePoint(front.Now, prefab), Quaternion.identity).GetComponent<Enemy>();
+                    var enemy = Pool.Spawn(prefab, EdgePoint(front.Now), Quaternion.identity).GetComponent<Enemy>();
                     remaining.Update(x => x + 1);
                     dock.Effect(enemy, s => {
                         if (s.D(enemy.Health.IsAlive)) return;
@@ -115,17 +115,16 @@ namespace Spoke.Examples.BaseDefence {
             };
         }
 
-        // A random point along the given edge of the level bounds, at the prefab's height.
-        Vector3 EdgePoint(Edge edge, GameObject prefab) {
+        // A random point along the given edge of the level bounds.
+        Vector3 EdgePoint(Edge edge) {
             var b = GameState.LevelBounds;
-            var y = prefab.transform.position.y;
             var x = Random.Range(b.min.x, b.max.x);
             var z = Random.Range(b.min.z, b.max.z);
             return edge switch {
-                Edge.West => new Vector3(b.min.x, y, z),
-                Edge.East => new Vector3(b.max.x, y, z),
-                Edge.South => new Vector3(x, y, b.min.z),
-                _ => new Vector3(x, y, b.max.z),
+                Edge.West => new Vector3(b.min.x, 0f, z),
+                Edge.East => new Vector3(b.max.x, 0f, z),
+                Edge.South => new Vector3(x, 0f, b.min.z),
+                _ => new Vector3(x, 0f, b.max.z),
             };
         }
     }

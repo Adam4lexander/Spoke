@@ -1,5 +1,39 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &887685032124419997
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1884269157745448475}
+  m_Layer: 0
+  m_Name: flight-root
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1884269157745448475
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 887685032124419997}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.8, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 4990086787403593832}
+  - {fileID: 4990086787784888469}
+  - {fileID: 4990086788514598738}
+  m_Father: {fileID: 4990086787066691021}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4990086787066691017
 GameObject:
   m_ObjectHideFlags: 0
@@ -27,13 +61,11 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4990086787066691017}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.8, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 4990086787403593832}
-  - {fileID: 4990086787784888469}
-  - {fileID: 4990086788514598738}
+  - {fileID: 1884269157745448475}
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -52,12 +84,14 @@ MonoBehaviour:
   bombBlastPrefab: {fileID: 8761192204346659007, guid: 8721d4519158738409316c7d69f13b3e, type: 3}
   health: {fileID: 4990086787066691023}
   meshFX: {fileID: 4990086787066691016}
+  flightRoot: {fileID: 887685032124419997}
   fireFrom: {fileID: 4990086787403593833}
   showOnTracked: {fileID: 4990086788514598739}
   radius: 0.5
   moveSpeed: 1
   stopDistance: 1.2
   fireRate: 1
+  proximityBias: 0.5
 --- !u!114 &4990086787066691023
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -119,11 +153,11 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4990086787403593833}
   m_LocalRotation: {x: 0.16846846, y: -0.0000000074505797, z: 0.000000005587935, w: 0.98570704}
-  m_LocalPosition: {x: 0, y: -0.3856882, z: 0.27686265}
+  m_LocalPosition: {x: 0, y: -0.3856882, z: 0.2768631}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 4990086787066691021}
+  m_Father: {fileID: 1884269157745448475}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4990086787502543001
@@ -315,7 +349,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4990086787784888470}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1.2, y: 1.2, z: 1.2}
   m_ConstrainProportionsScale: 0
@@ -325,7 +359,7 @@ Transform:
   - {fileID: 4990086788831626585}
   - {fileID: 4990086788993367511}
   - {fileID: 4990086788722875852}
-  m_Father: {fileID: 4990086787066691021}
+  m_Father: {fileID: 1884269157745448475}
   m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4990086788117599122
@@ -517,7 +551,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4990086788514598739}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1.2, y: 1.2, z: 1.2}
   m_ConstrainProportionsScale: 0
@@ -525,7 +559,7 @@ Transform:
   - {fileID: 4990086788117599121}
   - {fileID: 4990086787755079172}
   - {fileID: 4990086787502543000}
-  m_Father: {fileID: 4990086787066691021}
+  m_Father: {fileID: 1884269157745448475}
   m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4990086788722875853

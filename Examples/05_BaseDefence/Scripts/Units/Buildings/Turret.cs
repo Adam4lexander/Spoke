@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -101,7 +100,7 @@ namespace Spoke.Examples.BaseDefence {
                         // Flash the beam first, then land the hit — so the killing shot is seen
                         // before the enemy dies and we retarget.
                         beam.SetPosition(0, fireFrom.transform.position);
-                        beam.SetPosition(1, target.transform.position);
+                        beam.SetPosition(1, target.CenterOfMass);
                         beam.gameObject.SetActive(true);
                         yield return new WaitForSeconds(beamFlashTime);
                         beam.gameObject.SetActive(false);

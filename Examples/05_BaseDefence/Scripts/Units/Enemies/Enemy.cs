@@ -12,6 +12,7 @@ namespace Spoke.Examples.BaseDefence {
         [Header("References")]
         [SerializeField] Health health;
         [SerializeField] MeshFX meshFX;
+        [SerializeField] GameObject flightRoot;
         [SerializeField] GameObject fireFrom;
         [SerializeField] GameObject showOnTracked;
 
@@ -23,8 +24,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float proximityBias = 0.5f;  // 0 = follow the heading line, higher favours nearby buildings
 
         public Health Health => health;
+        public Vector3 CenterOfMass => flightRoot.transform.position;
+
+        Vector3 flightRootStartPos;
 
         protected override void Init(EffectBuilder s) {
+            flightRootStartPos = flightRoot.transform.localPosition;
             showOnTracked.SetActive(false);
 
             s.Phase(IsEnabled, s => {
@@ -138,13 +143,11 @@ namespace Spoke.Examples.BaseDefence {
             const float bobAmplitude = 0.05f;
             const float bobSpeed = 6f;
             IEnumerator onUpdate() {
-                var baseY = transform.position.y;
                 var phase = UnityEngine.Random.value * Mathf.PI * 2f;   // desync enemies so they don't bob in lockstep
                 while (true) {
                     yield return null;
-                    var p = transform.position;
-                    p.y = baseY + Mathf.Sin(Time.time * bobSpeed + phase) * bobAmplitude;
-                    transform.position = p;
+                    var p = flightRootStartPos + Vector3.up * Mathf.Sin(Time.time * bobSpeed + phase) * bobAmplitude;
+                    flightRoot.transform.localPosition = p;
                 }
             }
             var routine = StartCoroutine(onUpdate());
