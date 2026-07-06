@@ -5,6 +5,28 @@ namespace Spoke.Examples.BaseDefence {
 
     public enum WaveFront { None, West, East, South, North }
 
+    public readonly struct WaveStatus : System.IEquatable<WaveStatus> {
+
+        public readonly int Number;
+        public readonly WaveFront Front;
+        public readonly int StartsIn;
+
+        public bool IsAssaulting => StartsIn == 0;
+
+        public WaveStatus(int number, WaveFront front, int startsIn) {
+            Number = number;
+            Front = front;
+            StartsIn = startsIn;
+        }
+
+        public bool Equals(WaveStatus other) =>
+            Number == other.Number && Front == other.Front && StartsIn == other.StartsIn;
+        public override bool Equals(object obj) => obj is WaveStatus status && Equals(status);
+        public override int GetHashCode() => System.HashCode.Combine(Number, Front, StartsIn);
+        public static bool operator ==(WaveStatus left, WaveStatus right) => left.Equals(right);
+        public static bool operator !=(WaveStatus left, WaveStatus right) => !(left == right);
+    }
+
     // Sends enemies in waves: each assault pours in from one edge of the level,
     // and each wave is bigger, faster and heavier than the last, with a lull in
     // between. The next wave's front is chosen when the lull begins, but reads as
@@ -28,20 +50,15 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float minSpawnInterval = 0.25f;   // ...down to this floor
         [SerializeField] float spawnMargin = 2f;           // enemies spawn this far outside the level bounds
 
-        State<int> wave = new();          // 0 until the first assault begins
-        State<bool> isAssaulting = new(); // true while a wave is on the map
-        State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
-        State<WaveFront> front = new();   // where the coming (or current) wave attacks from; None until revealed
-
-        public ISignal<int> Wave => wave;
-        public ISignal<bool> IsAssaulting => isAssaulting;
-        public ISignal<float> NextWaveIn => nextWaveIn;
-        public ISignal<WaveFront> Front => front;
+        State<WaveStatus> wave = new();
+        public ISignal<WaveStatus> Wave => wave;
 
         protected override void Init(EffectBuilder s) {
+            wave.Set(new WaveStatus(1, WaveFront.None, Mathf.CeilToInt(lullDuration)));
             s.Phase(IsEnabled, s => {
                 var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
                 s.Phase(isPlaying, s => {
+                    var isAssaulting = s.Memo(s => s.D(wave).IsAssaulting);
                     var isLull = s.Memo(s => !s.D(isAssaulting));
                     s.Phase(isLull, Lull);
                     s.Phase(isAssaulting, Assault);
@@ -52,19 +69,16 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock Lull => s => {
             // The front is decided now, but only published in the countdown's last seconds.
             var chosen = (WaveFront)Random.Range(1, 5);
-            front.Set(WaveFront.None);
-            nextWaveIn.Set(lullDuration);
 
             IEnumerator onUpdate() {
                 var remaining = lullDuration;
                 while (remaining > 0f) {
+                    var front = remaining <= frontRevealTime ? chosen : WaveFront.None;
+                    wave.Update(x => new WaveStatus(x.Number, front, Mathf.CeilToInt(remaining)));
                     yield return null;
                     remaining -= Time.deltaTime;
-                    nextWaveIn.Set(Mathf.Max(0f, remaining));
-                    if (remaining <= frontRevealTime) front.Set(chosen);
                 }
-                wave.Update(x => x + 1);
-                isAssaulting.Set(true);
+                wave.Update(x => new WaveStatus(x.Number, x.Front, 0));
             }
             s.Coroutine(onUpdate());
         };
@@ -73,7 +87,7 @@ namespace Spoke.Examples.BaseDefence {
         // tracker that counts its death exactly once, then undocks (long before the
         // pool can heal or reuse the instance).
         EffectBlock Assault => s => {
-            var waveNow = s.D(wave);
+            var waveNow = wave.Now.Number;
             var budget = baseBudget + budgetPerWave * (waveNow - 1);
             var interval = Mathf.Max(minSpawnInterval, baseSpawnInterval - spawnIntervalStep * (waveNow - 1));
 
@@ -86,7 +100,7 @@ namespace Spoke.Examples.BaseDefence {
                 while (budget > 0) {
                     var (prefab, cost) = PickEnemy(waveNow, budget);
                     budget -= cost;
-                    var enemy = Pool.Spawn(prefab, EdgePoint(front.Now), Quaternion.identity).GetComponent<Enemy>();
+                    var enemy = Pool.Spawn(prefab, EdgePoint(wave.Now.Front), Quaternion.identity).GetComponent<Enemy>();
                     remaining.Update(x => x + 1);
                     dock.Effect(enemy, s => {
                         if (s.D(enemy.Health.IsAlive)) return;
@@ -100,7 +114,7 @@ namespace Spoke.Examples.BaseDefence {
             s.Coroutine(onUpdate());
 
             s.Effect(s => {
-                if (s.D(doneSpawning) && s.D(remaining) == 0) isAssaulting.Set(false);
+                if (s.D(doneSpawning) && s.D(remaining) == 0) wave.Set(new WaveStatus(waveNow + 1, WaveFront.None, Mathf.CeilToInt(lullDuration)));
             });
         };
 

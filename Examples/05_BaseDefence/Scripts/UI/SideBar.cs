@@ -79,23 +79,19 @@ namespace Spoke.Examples.BaseDefence {
                     var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
                     var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
                     var colour = ColorUtility.ToHtmlStringRGBA(amber);
-                    moneyText.text = s.D(GameState.Director.IsAssaulting)
+                    moneyText.text = s.D(GameState.Director.Wave).IsAssaulting
                         ? $"{money}\n<size={size}><color=#{colour}>harvesting paused</color></size>"
                         : money;
                 });
 
                 s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
 
-                // Whole seconds derived from the ticking countdown, so the text only
-                // rewrites when the displayed number changes.
-                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(GameState.Director.NextWaveIn)));
-
                 s.Effect(s => {
-                    var front = s.D(GameState.Director.Front);
-                    var direction = front.ToString().ToLower();
-                    if (s.D(GameState.Director.IsAssaulting)) waveText.text = $"Wave {s.D(GameState.Director.Wave)} — attacking from the {direction}";
-                    else if (front != WaveFront.None) waveText.text = $"Wave {s.D(GameState.Director.Wave) + 1} from the {direction} in {s.D(countdown)}s";
-                    else waveText.text = $"Wave {s.D(GameState.Director.Wave) + 1} in {s.D(countdown)}s";
+                    var wave = s.D(GameState.Director.Wave);
+                    var direction = wave.Front.ToString().ToLower();
+                    if (wave.IsAssaulting) waveText.text = $"Wave {wave.Number} — attacking from the {direction}";
+                    else if (wave.Front != WaveFront.None) waveText.text = $"Wave {wave.Number} from the {direction} in {wave.StartsIn}s";
+                    else waveText.text = $"Wave {wave.Number} in {wave.StartsIn}s";
                 });
 
                 s.Effect(ShowMessage);

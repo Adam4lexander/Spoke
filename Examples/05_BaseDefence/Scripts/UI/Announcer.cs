@@ -33,10 +33,14 @@ namespace Spoke.Examples.BaseDefence {
                     s.Effect(ShowWaveWarning);
 
                     // Announce each wave transition; the opening lull has nothing to announce.
-                    s.Effect(s => {
+                    var transition = s.Memo(s => {
                         var wave = s.D(GameState.Director.Wave);
-                        if (s.D(GameState.Director.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} Incoming\nHarvesters Paused"));
-                        else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
+                        return (wave.IsAssaulting, wave.Number);
+                    });
+                    s.Effect(s => {
+                        var (isAssaulting, number) = s.D(transition);
+                        if (isAssaulting) s.Effect(FlashMessage($"Wave {number} Incoming\nHarvesters Paused"));
+                        else if (number > 1) s.Effect(FlashMessage($"Wave {number - 1} Defeated"));
                     });
                 });
             });
@@ -56,26 +60,32 @@ namespace Spoke.Examples.BaseDefence {
 
         // Blink along the threatened screen edge once the wave's direction is revealed.
         EffectBlock ShowWaveWarning => s => {
-            if (s.D(GameState.Director.IsAssaulting)) return;
-            var bar = s.D(GameState.Director.Front) switch {
-                WaveFront.North => northWaveWarning,
-                WaveFront.East => eastWaveWarning,
-                WaveFront.South => southWaveWarning,
-                WaveFront.West => westWaveWarning,
-                _ => null,
-            };
-            if (bar == null) return;
+            var waveFront = s.Memo(s => {
+                var wave = s.D(GameState.Director.Wave);
+                return wave.IsAssaulting ? WaveFront.None : wave.Front;
+            });
 
-            bar.SetActive(true);
-            s.OnCleanup(() => bar.SetActive(false));
+            s.Effect(s => {
+                var bar = s.D(waveFront) switch {
+                    WaveFront.North => northWaveWarning,
+                    WaveFront.East => eastWaveWarning,
+                    WaveFront.South => southWaveWarning,
+                    WaveFront.West => westWaveWarning,
+                    _ => null,
+                };
+                if (bar == null) return;
 
-            var timer = 0f;
-            s.Coroutine(() => {
-                timer += Time.unscaledDeltaTime;
-                if (timer >= waveWarningBlinkTime) {
-                    timer = 0f;
-                    bar.SetActive(!bar.activeSelf);
-                }
+                bar.SetActive(true);
+                s.OnCleanup(() => bar.SetActive(false));
+
+                var timer = 0f;
+                s.Coroutine(() => {
+                    timer += Time.unscaledDeltaTime;
+                    if (timer >= waveWarningBlinkTime) {
+                        timer = 0f;
+                        bar.SetActive(!bar.activeSelf);
+                    }
+                });
             });
         };
     }

@@ -39,7 +39,7 @@ namespace Spoke.Examples.BaseDefence {
                     s.OnCleanup(() => GameState.ResourcesRemaining.Update(x => x - 1));
 
                     // Income flows only between waves — an assault pauses every harvester.
-                    var canHarvest = s.Memo(s => s.D(powerNode.HasPower) && !s.D(GameState.Director.IsAssaulting));
+                    var canHarvest = s.Memo(s => s.D(powerNode.HasPower) && !s.D(GameState.Director.Wave).IsAssaulting);
                     s.Phase(canHarvest, Harvest);
                 });
 
