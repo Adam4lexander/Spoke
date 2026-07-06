@@ -59,7 +59,6 @@ namespace Spoke.Examples.BaseDefence {
         [Serializable]
         class Gameplay {
             [SerializeField] BoardInteractions interactions;
-            [SerializeField] WaveDirector waveDirector;
             [SerializeField] GameObject root;
             [SerializeField] Text waveText;
             [SerializeField] Text moneyText;
@@ -80,7 +79,7 @@ namespace Spoke.Examples.BaseDefence {
                     var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
                     var size = Mathf.RoundToInt(moneyText.fontSize * 0.6f);
                     var colour = ColorUtility.ToHtmlStringRGBA(amber);
-                    moneyText.text = s.D(GameState.Assaulting)
+                    moneyText.text = s.D(GameState.Director.IsAssaulting)
                         ? $"{money}\n<size={size}><color=#{colour}>harvesting paused</color></size>"
                         : money;
                 });
@@ -89,14 +88,14 @@ namespace Spoke.Examples.BaseDefence {
 
                 // Whole seconds derived from the ticking countdown, so the text only
                 // rewrites when the displayed number changes.
-                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(waveDirector.NextWaveIn)));
+                var countdown = s.Memo(s => Mathf.CeilToInt(s.D(GameState.Director.NextWaveIn)));
 
                 s.Effect(s => {
-                    var front = s.D(waveDirector.Front);
+                    var front = s.D(GameState.Director.Front);
                     var direction = front.ToString().ToLower();
-                    if (s.D(waveDirector.IsAssaulting)) waveText.text = $"Wave {s.D(waveDirector.Wave)} — attacking from the {direction}";
-                    else if (front != WaveFront.None) waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} from the {direction} in {s.D(countdown)}s";
-                    else waveText.text = $"Wave {s.D(waveDirector.Wave) + 1} in {s.D(countdown)}s";
+                    if (s.D(GameState.Director.IsAssaulting)) waveText.text = $"Wave {s.D(GameState.Director.Wave)} — attacking from the {direction}";
+                    else if (front != WaveFront.None) waveText.text = $"Wave {s.D(GameState.Director.Wave) + 1} from the {direction} in {s.D(countdown)}s";
+                    else waveText.text = $"Wave {s.D(GameState.Director.Wave) + 1} in {s.D(countdown)}s";
                 });
 
                 s.Effect(ShowMessage);

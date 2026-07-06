@@ -9,7 +9,6 @@ namespace Spoke.Examples.BaseDefence {
     public class Announcer : SpokeBehaviour {
 
         [Header("References")]
-        [SerializeField] WaveDirector waveDirector;
         [SerializeField] Text onscreenText;
         [SerializeField] GameObject northWaveWarning;
         [SerializeField] GameObject eastWaveWarning;
@@ -35,8 +34,8 @@ namespace Spoke.Examples.BaseDefence {
 
                     // Announce each wave transition; the opening lull has nothing to announce.
                     s.Effect(s => {
-                        var wave = s.D(waveDirector.Wave);
-                        if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} From The {s.D(waveDirector.Front)}\nHarvesting Paused"));
+                        var wave = s.D(GameState.Director.Wave);
+                        if (s.D(GameState.Director.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} Incoming\nHarvesters Paused"));
                         else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
                     });
                 });
@@ -57,8 +56,8 @@ namespace Spoke.Examples.BaseDefence {
 
         // Blink along the threatened screen edge once the wave's direction is revealed.
         EffectBlock ShowWaveWarning => s => {
-            if (s.D(waveDirector.IsAssaulting)) return;
-            var bar = s.D(waveDirector.Front) switch {
+            if (s.D(GameState.Director.IsAssaulting)) return;
+            var bar = s.D(GameState.Director.Front) switch {
                 WaveFront.North => northWaveWarning,
                 WaveFront.East => eastWaveWarning,
                 WaveFront.South => southWaveWarning,

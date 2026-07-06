@@ -29,11 +29,12 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float spawnMargin = 2f;           // enemies spawn this far outside the level bounds
 
         State<int> wave = new();          // 0 until the first assault begins
+        State<bool> isAssaulting = new(); // true while a wave is on the map
         State<float> nextWaveIn = new();  // seconds of lull remaining; 0 while assaulting
         State<WaveFront> front = new();   // where the coming (or current) wave attacks from; None until revealed
 
         public ISignal<int> Wave => wave;
-        public ISignal<bool> IsAssaulting => GameState.Assaulting;
+        public ISignal<bool> IsAssaulting => isAssaulting;
         public ISignal<float> NextWaveIn => nextWaveIn;
         public ISignal<WaveFront> Front => front;
 
@@ -41,9 +42,9 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(IsEnabled, s => {
                 var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
                 s.Phase(isPlaying, s => {
-                    var isLull = s.Memo(s => !s.D(GameState.Assaulting));
+                    var isLull = s.Memo(s => !s.D(isAssaulting));
                     s.Phase(isLull, Lull);
-                    s.Phase(GameState.Assaulting, Assault);
+                    s.Phase(isAssaulting, Assault);
                 });
             });
         }
@@ -63,7 +64,7 @@ namespace Spoke.Examples.BaseDefence {
                     if (remaining <= frontRevealTime) front.Set(chosen);
                 }
                 wave.Update(x => x + 1);
-                GameState.Assaulting.Set(true);
+                isAssaulting.Set(true);
             }
             s.Coroutine(onUpdate());
         };
@@ -99,7 +100,7 @@ namespace Spoke.Examples.BaseDefence {
             s.Coroutine(onUpdate());
 
             s.Effect(s => {
-                if (s.D(doneSpawning) && s.D(remaining) == 0) GameState.Assaulting.Set(false);
+                if (s.D(doneSpawning) && s.D(remaining) == 0) isAssaulting.Set(false);
             });
         };
 

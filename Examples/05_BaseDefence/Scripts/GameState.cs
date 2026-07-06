@@ -7,9 +7,14 @@ namespace Spoke.Examples.BaseDefence {
 
     public class GameState : SpokeSingleton<GameState> {
 
+        [Header("References")]
+        [SerializeField] WaveDirector waveDirector;
+
         [Header("Attributes")]
         [SerializeField] float startMoney;
         [SerializeField] Vector2 dimensions = new Vector2(40f, 40f);
+
+        public static WaveDirector Director => Instance.waveDirector;
 
         State<View> view = new();
         public static ISignal<View> View => Instance.view;
@@ -49,10 +54,6 @@ namespace Spoke.Examples.BaseDefence {
         // Resource nodes on the map not yet mined out; victory when it reaches zero.
         State<int> resourcesRemaining = new();
         public static IState<int> ResourcesRemaining => Instance.resourcesRemaining;
-
-        // True while a wave is on the map; driven by the WaveDirector.
-        State<bool> assaulting = new();
-        public static IState<bool> Assaulting => Instance.assaulting;
 
         public static void Restart() {
             var activeScene = SceneManager.GetActiveScene();
