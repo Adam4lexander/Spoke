@@ -4,7 +4,7 @@ namespace Spoke.Examples.BaseDefence {
 
     // The player's interaction with the game board: hover and placement,
     // with the coverage and link displays that support them.
-    public class Interface : SpokeBehaviour {
+    public class BoardInteractions : SpokeBehaviour {
 
         [Header("Attributes")]
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));

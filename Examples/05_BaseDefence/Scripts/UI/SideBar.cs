@@ -18,7 +18,7 @@ namespace Spoke.Examples.BaseDefence {
         static readonly Color amber = new(1f, 0.7372549f, 0f);
 
         [Header("References")]
-        [SerializeField] Interface ui;
+        [SerializeField] BoardInteractions interactions;
         [SerializeField] WaveDirector waveDirector;
 
         [Header("Pregame References")]
@@ -114,8 +114,8 @@ namespace Spoke.Examples.BaseDefence {
 
         // The message line: placement instructions take priority, then the hovered unit's description.
         EffectBlock ShowMessage => s => {
-            var placing = s.D(ui.Placing);
-            var hovered = s.D(ui.Hovering);
+            var placing = s.D(interactions.Placing);
+            var hovered = s.D(interactions.Hovering);
             if (placing != null) messageText.text = $"Placing {placing.Prefab.DisplayName} — press Escape to cancel";
             else if (hovered != null) messageText.text = s.D(hovered.HoverInfo).Description;
             else messageText.text = "";
@@ -128,19 +128,19 @@ namespace Spoke.Examples.BaseDefence {
 
             var hotkey = item.Hotkey.ToLower();
             var canAfford = s.Memo(s => item.Prefab.Cost <= s.D(GameState.Money));
-            var isPlacing = s.Memo(s => s.D(ui.Placing) != null);
+            var isPlacing = s.Memo(s => s.D(interactions.Placing) != null);
             var isNotPlacing = s.Memo(s => !s.D(isPlacing));
 
             s.Phase(isNotPlacing, s => {
                 s.Effect(s => item.Button.interactable = s.D(canAfford));
 
-                void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item); }
+                void beginPlacing() { if (canAfford.Now) interactions.Placing.Set(item); }
                 s.Subscribe(item.Button.onClick, beginPlacing);
                 s.Subscribe(InputSignals.KeyDown(hotkey), beginPlacing);
             });
 
             s.Phase(isPlacing, s => {
-                var isPlacingThis = s.Memo(s => s.D(ui.Placing) == item);
+                var isPlacingThis = s.Memo(s => s.D(interactions.Placing) == item);
 
                 // Only the selected button stays live — it becomes the cancel affordance.
                 s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
@@ -149,7 +149,7 @@ namespace Spoke.Examples.BaseDefence {
                     buttonText.text = $"Cancel ({item.Hotkey})";
                     s.OnCleanup(() => buttonText.text = idleLabel);
 
-                    void cancel() => ui.Placing.Set(null);
+                    void cancel() => interactions.Placing.Set(null);
                     s.Subscribe(item.Button.onClick, cancel);
                     s.Subscribe(InputSignals.KeyDown("escape"), cancel);
                 });

@@ -197,7 +197,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74c1fdbca7a8a844980fb6b0bb77237e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ui: {fileID: 6361558}
+  interactions: {fileID: 6361558}
   waveDirector: {fileID: 1738952518}
   pregamePanel: {fileID: 1285916201}
   startButton: {fileID: 976683645}
