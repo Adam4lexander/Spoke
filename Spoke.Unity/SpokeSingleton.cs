@@ -46,6 +46,10 @@ namespace Spoke {
         // Override to change default GameObject name
         protected virtual string OverrideName => $"[!-------{typeof(T).Name}-------!]";
 
+        // Override to disable auto-instantiation, for singletons that must be hand-placed
+        // in the scene (e.g. to wire up serialized references)
+        protected virtual bool OverrideAutoInstantiate => true;
+
         static void EnsureStaticInit() {
             if (isInitialized) return;
             isInitialized = true;
@@ -62,17 +66,27 @@ namespace Spoke {
         }
 
         static void FindOrCreateInstance() {
-            T nextInstance;
             var managers = FindObjectsOfType(typeof(T)) as T[];
-            if (managers.Length == 0) {
-                var go = new GameObject();
-                nextInstance = go.AddComponent<T>();
-                if (nextInstance.OverrideDontDestroyOnLoad) DontDestroyOnLoad(go);
-                go.name = nextInstance.OverrideName;
-            } else {
-                nextInstance = managers[0];
+            if (managers.Length > 0) {
+                instance = managers[0];
+                return;
             }
+
+            // Built inactive so Awake/OnEnable don't fire until we've confirmed
+            // this singleton is allowed to auto-instantiate
+            var go = new GameObject();
+            go.SetActive(false);
+            var nextInstance = go.AddComponent<T>();
+            if (!nextInstance.OverrideAutoInstantiate) {
+                Debug.LogError($"{typeof(T).Name} instance not found in scene, and auto-instantiate is disabled.");
+                Destroy(go);
+                return;
+            }
+
+            if (nextInstance.OverrideDontDestroyOnLoad) DontDestroyOnLoad(go);
+            go.name = nextInstance.OverrideName;
             instance = nextInstance;
+            go.SetActive(true);
         }
 
         protected override void Awake() {
