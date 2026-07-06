@@ -22,9 +22,6 @@ namespace Spoke.Examples.BaseDefence {
         State<IHoverable> hovering = new();
         public ISignal<IHoverable> Hovering => hovering;
 
-        Trigger onLeftClick = Trigger.Create();
-        Trigger onRightClick = Trigger.Create();
-
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
 
@@ -101,14 +98,14 @@ namespace Spoke.Examples.BaseDefence {
             
             s.Effect(CoverageDisplay.Draw(footprint, colour));
 
-            s.Subscribe(onLeftClick, () => {
+            s.Subscribe(InputSignals.LeftClick, () => {
                 if (!isValid.Now) return;
                 Pool.Spawn(prefab.gameObject, new Vector3(mousePos.Now.x, prefab.transform.position.y, mousePos.Now.z), Quaternion.identity);
                 GameState.Money.Update(x => x - prefab.Cost);
                 Placing.Set(null);
             });
 
-            s.Subscribe(onRightClick, () => Placing.Set(null));
+            s.Subscribe(InputSignals.RightClick, () => Placing.Set(null));
         };
 
         // One coverage type → its zone drawn in its palette colour.
@@ -120,10 +117,5 @@ namespace Spoke.Examples.BaseDefence {
                 case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
             }
         };
-
-        void Update() {
-            if (Input.GetMouseButtonDown(0)) onLeftClick.Invoke();
-            if (Input.GetMouseButtonDown(1)) onRightClick.Invoke();
-        }
     }
 }

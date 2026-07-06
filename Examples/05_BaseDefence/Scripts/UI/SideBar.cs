@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -137,7 +136,7 @@ namespace Spoke.Examples.BaseDefence {
 
                 void beginPlacing() { if (canAfford.Now) ui.Placing.Set(item); }
                 s.Subscribe(item.Button.onClick, beginPlacing);
-                s.Effect(WatchHotkey(hotkey, beginPlacing));
+                s.Subscribe(InputSignals.KeyDown(hotkey), beginPlacing);
             });
 
             s.Phase(isPlacing, s => {
@@ -152,21 +151,9 @@ namespace Spoke.Examples.BaseDefence {
 
                     void cancel() => ui.Placing.Set(null);
                     s.Subscribe(item.Button.onClick, cancel);
-                    s.Effect(WatchHotkey("escape", cancel));
+                    s.Subscribe(InputSignals.KeyDown("escape"), cancel);
                 });
             });
-        };
-
-        // Invokes onPressed on the frame the key goes down, for as long as this is mounted.
-        EffectBlock WatchHotkey(string key, Action onPressed) => s => {
-            IEnumerator onUpdate() {
-                while (true) {
-                    if (Input.GetKeyDown(key)) onPressed();
-                    yield return null;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
         };
     }
 }
