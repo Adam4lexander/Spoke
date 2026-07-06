@@ -14,27 +14,27 @@ namespace Spoke.Examples.BaseDefence {
         // Coverage circles for a zone, gathered within the camera's ground view (a sensor sized to
         // that view, recentred as it changes; dedups when stationary). The filter, if given, keeps
         // only matching colliders.
-        public static EffectBlock Draw<T>(CollisionWorld<T> zone, ISignal<Color> colour, System.Func<T, bool> filter = null) => s => {
+        public static EffectBlock Draw<T>(CollisionWorld<T> zone, ISignal<Color> colour, Material material, System.Func<T, bool> filter = null) => s => {
             var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea, filter));
             var circles = s.Memo(s => {
                 var list = new List<Circle>();
                 foreach (var collider in sensor.Overlaps) list.Add(collider.Circle);
                 return list;
             }, sensor.OverlapsChanged);
-            s.Effect(DrawCircles(circles, colour));
+            s.Effect(DrawCircles(circles, colour, material));
         };
 
-        public static EffectBlock Draw(Circle circle, ISignal<Color> colour) => s => {
+        public static EffectBlock Draw(Circle circle, ISignal<Color> colour, Material material) => s => {
             var circles = State.Create(new List<Circle> { circle });
-            s.Effect(DrawCircles(circles, colour));
+            s.Effect(DrawCircles(circles, colour, material));
         };
 
-        public static EffectBlock Draw(ISignal<Circle> circle, ISignal<Color> colour) => s => {
+        public static EffectBlock Draw(ISignal<Circle> circle, ISignal<Color> colour, Material material) => s => {
             var circles = s.Memo(s => new List<Circle> { s.D(circle) });
-            s.Effect(DrawCircles(circles, colour));
+            s.Effect(DrawCircles(circles, colour, material));
         };
 
-        static EffectBlock DrawCircles(ISignal<List<Circle>> circles, ISignal<Color> colour) => s => {
+        static EffectBlock DrawCircles(ISignal<List<Circle>> circles, ISignal<Color> colour, Material material) => s => {
 
             var go = new GameObject("CoverageDisplay");
             go.transform.position = Vector3.up * 0.01f;
@@ -50,11 +50,11 @@ namespace Spoke.Examples.BaseDefence {
             meshFilter.sharedMesh = mesh;
             s.Effect("WithSafeDestroy", WithSafeDestroy(mesh));
 
-            var material = new Material(Shader.Find("Sprites/Default"));
-            meshRenderer.sharedMaterial = material;
-            s.Effect("WithSafeDestroy", WithSafeDestroy(material));
+            var instance = new Material(material);
+            meshRenderer.sharedMaterial = instance;
+            s.Effect("WithSafeDestroy", WithSafeDestroy(instance));
 
-            s.Effect(s => material.color = s.D(colour));
+            s.Effect(s => instance.color = s.D(colour));
 
             s.Effect("BuildOutline", s => BuildOutline(mesh, s.D(circles)));
         };

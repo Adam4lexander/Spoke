@@ -185,6 +185,7 @@ MonoBehaviour:
     value: {r: 0, g: 1, b: 0, a: 1}
   invalidPlacementColour:
     value: {r: 1, g: 0, b: 0, a: 1}
+  lineMaterial: {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
 --- !u!114 &6361559
 MonoBehaviour:
   m_ObjectHideFlags: 0

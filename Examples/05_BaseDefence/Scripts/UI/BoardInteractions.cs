@@ -15,6 +15,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
+        [SerializeField] Material lineMaterial;
 
         public State<BuildItem> Placing { get; } = new();
 
@@ -38,7 +39,7 @@ namespace Spoke.Examples.BaseDefence {
                 // focus, or a placement is in progress.
                 s.Effect(s => {
                     if (s.D(hovering) != null || s.D(Placing) != null) return;
-                    s.Effect(LinkDisplay.DrawAll(powerLinkColour));
+                    s.Effect(LinkDisplay.DrawAll(powerLinkColour, lineMaterial));
                 });
 
                 s.Effect(ShowHovered);
@@ -75,12 +76,12 @@ namespace Spoke.Examples.BaseDefence {
             var powerNode = s.Memo(s => s.D(hoverable.HoverInfo).PowerNode);
             s.Effect(s => {
                 var node = s.D(powerNode);
-                if (node != null) s.Effect(LinkDisplay.Draw(node, powerLinkColour));
+                if (node != null) s.Effect(LinkDisplay.Draw(node, powerLinkColour, lineMaterial));
             });
 
             // Highlight ring, slightly larger than the unit's footprint.
             var circle = s.D(hoveringCircle);
-            s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.5f), unitRingColour));
+            s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.5f), unitRingColour, lineMaterial));
         };
 
         // The placement experience: power coverage and the placed type's own coverage show while
@@ -89,7 +90,7 @@ namespace Spoke.Examples.BaseDefence {
         // spot buys and places the building.
         EffectBlock PlaceBuilding(BuildItem item) => s => {
             var prefab = item.Prefab;
-            s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider));
+            s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, lineMaterial, body => body.IsProvider));
             if (item.Coverage != CoverageType.Power) s.Effect(ShowCoverage(item.Coverage));
 
             var mousePos = s.Memo(s => s.D(GameState.View).MousePoint.Value);
@@ -101,7 +102,7 @@ namespace Spoke.Examples.BaseDefence {
                 groundSensor.OverlapsChanged, powerSensor.OverlapsChanged);
             var colour = s.Memo(s => s.D(isValid) ? s.D(validPlacementColour) : s.D(invalidPlacementColour));
             
-            s.Effect(CoverageDisplay.Draw(footprint, colour));
+            s.Effect(CoverageDisplay.Draw(footprint, colour, lineMaterial));
 
             s.Subscribe(InputSignals.LeftClick, () => {
                 if (!isValid.Now) return;
@@ -116,10 +117,10 @@ namespace Spoke.Examples.BaseDefence {
         // One coverage type → its zone drawn in its palette colour.
         EffectBlock ShowCoverage(CoverageType type) => s => {
             switch (type) {
-                case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, body => body.IsProvider)); break;
-                case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour)); break;
-                case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
-                case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
+                case CoverageType.Power: s.Effect(CoverageDisplay.Draw(GameState.PowerZone, powerCoverageColour, lineMaterial, body => body.IsProvider)); break;
+                case CoverageType.Radar: s.Effect(CoverageDisplay.Draw(GameState.RadarZone, radarCoverageColour, lineMaterial)); break;
+                case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour, lineMaterial)); break;
+                case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour, lineMaterial)); break;
             }
         };
     }
