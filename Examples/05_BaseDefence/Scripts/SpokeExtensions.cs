@@ -14,9 +14,8 @@ namespace Spoke.Examples.BaseDefence {
         /// </summary>
         public static void Coroutine(this EffectBuilder s, IEnumerator routine) {
             s.Effect("Coroutine", s => {
-                // SpokeBehaviour hands its tree a UnitySpokeLogger built around itself,
-                // so the logger's context is the MonoBehaviour that can host coroutines.
-                var host = s.Import<UnitySpokeLogger>().context as SpokeBehaviour;
+                // The tree's host behaviour, from the UnityContext every SpokeBehaviour exports.
+                var host = s.Import<UnityContext>().Behaviour as SpokeBehaviour;
                 if (host == null) {
                     throw new InvalidOperationException("s.Coroutine: this tree has no SpokeBehaviour host to run coroutines on");
                 }
