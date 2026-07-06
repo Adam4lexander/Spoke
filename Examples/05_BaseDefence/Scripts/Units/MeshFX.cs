@@ -93,11 +93,8 @@ namespace Spoke.Examples.BaseDefence {
                 }
                 flash.Set(new Color(colour.r, colour.g, colour.b, 0f));
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => { 
-                StopCoroutine(routine); 
-                flash.Set(new Color(1, 1, 1, 0)); 
-            });
+            s.Coroutine(onUpdate());
+            s.OnCleanup(() => flash.Set(new Color(1, 1, 1, 0)));
         };
 
         EffectBlock Shattering => s => {
@@ -135,9 +132,8 @@ namespace Spoke.Examples.BaseDefence {
                 }
                 isShattered.Set(true);
             }
-            var routine = StartCoroutine(onUpdate());
+            s.Coroutine(onUpdate());
             s.OnCleanup(() => {
-                StopCoroutine(routine);
                 isShattered.Set(false);
                 foreach (var p in pieces) {
                     if (!p.Renderer) continue;

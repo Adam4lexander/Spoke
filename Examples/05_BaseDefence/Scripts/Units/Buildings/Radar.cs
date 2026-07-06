@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -34,14 +32,7 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         EffectBlock DishAnimation => s => {
-            IEnumerator onUpdate() {
-                while (true) {
-                    dishPivot.transform.Rotate(Vector3.up, dishRotationSpeed * Time.deltaTime);
-                    yield return null;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(() => dishPivot.transform.Rotate(Vector3.up, dishRotationSpeed * Time.deltaTime));
         };
 
         void OnDrawGizmosSelected() {

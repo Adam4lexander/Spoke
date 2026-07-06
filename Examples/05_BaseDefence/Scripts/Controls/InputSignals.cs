@@ -10,7 +10,6 @@ namespace Spoke.Examples.BaseDefence {
         Trigger leftClick = Trigger.Create();
         Trigger rightClick = Trigger.Create();
         Dictionary<string, Trigger> keyDowns = new();
-        List<Trigger> firing = new();
 
         public static ITrigger LeftClick => Instance.leftClick;
         public static ITrigger RightClick => Instance.rightClick;
@@ -22,19 +21,23 @@ namespace Spoke.Examples.BaseDefence {
             return trigger;
         }
 
-        protected override void Init(EffectBuilder s) { }
+        protected override void Init(EffectBuilder s) {
+            s.Phase(IsEnabled, s => {
+                List<Trigger> firing = new();
 
-        void Update() {
-            if (Input.GetMouseButtonDown(0)) leftClick.Invoke();
-            if (Input.GetMouseButtonDown(1)) rightClick.Invoke();
+                s.Coroutine(() => {
+                    if (Input.GetMouseButtonDown(0)) leftClick.Invoke();
+                    if (Input.GetMouseButtonDown(1)) rightClick.Invoke();
 
-            // A handler may request a new key mid-invoke, so collect the triggers
-            // to fire before invoking any of them.
-            foreach (var kv in keyDowns) {
-                if (Input.GetKeyDown(kv.Key)) firing.Add(kv.Value);
-            }
-            foreach (var trigger in firing) trigger.Invoke();
-            firing.Clear();
+                    // A handler may request a new key mid-invoke, so collect the triggers
+                    // to fire before invoking any of them.
+                    foreach (var kv in keyDowns) {
+                        if (Input.GetKeyDown(kv.Key)) firing.Add(kv.Value);
+                    }
+                    foreach (var trigger in firing) trigger.Invoke();
+                    firing.Clear();
+                });
+            });
         }
     }
 }

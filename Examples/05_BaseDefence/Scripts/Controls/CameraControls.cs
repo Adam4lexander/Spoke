@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -37,37 +35,31 @@ namespace Spoke.Examples.BaseDefence {
                 }
             }
 
-            IEnumerator onUpdate() {
-                while (true) {
-                    // Pan the target across the board plane, relative to the camera's facing.
-                    var forward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
-                    var right = Vector3.ProjectOnPlane(cam.transform.right, Vector3.up).normalized;
+            s.Coroutine(() => {
+                // Pan the target across the board plane, relative to the camera's facing.
+                var forward = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized;
+                var right = Vector3.ProjectOnPlane(cam.transform.right, Vector3.up).normalized;
 
-                    var input = Vector3.zero;
-                    if (Input.GetKey(KeyCode.W)) input += forward;
-                    if (Input.GetKey(KeyCode.S)) input -= forward;
-                    if (Input.GetKey(KeyCode.D)) input += right;
-                    if (Input.GetKey(KeyCode.A)) input -= right;
+                var input = Vector3.zero;
+                if (Input.GetKey(KeyCode.W)) input += forward;
+                if (Input.GetKey(KeyCode.S)) input -= forward;
+                if (Input.GetKey(KeyCode.D)) input += right;
+                if (Input.GetKey(KeyCode.A)) input -= right;
 
-                    // Ease velocity toward the input so it ramps up on press and glides to a
-                    // stop on release. The exp() keeps the easing frame-rate independent.
-                    var targetVelocity = input.normalized * panSpeed;
-                    velocity = Vector3.Lerp(velocity, targetVelocity, 1f - Mathf.Exp(-acceleration * Time.deltaTime));
-                    target += velocity * Time.deltaTime;
+                // Ease velocity toward the input so it ramps up on press and glides to a
+                // stop on release. The exp() keeps the easing frame-rate independent.
+                var targetVelocity = input.normalized * panSpeed;
+                velocity = Vector3.Lerp(velocity, targetVelocity, 1f - Mathf.Exp(-acceleration * Time.deltaTime));
+                target += velocity * Time.deltaTime;
 
-                    // Keep the looked-at point inside the level, then place the camera.
-                    var bounds = GameState.LevelBounds;
-                    target.x = Mathf.Clamp(target.x, bounds.min.x, bounds.max.x);
-                    target.z = Mathf.Clamp(target.z, bounds.min.z, bounds.max.z);
-                    cam.transform.position = target + rigOffset;
+                // Keep the looked-at point inside the level, then place the camera.
+                var bounds = GameState.LevelBounds;
+                target.x = Mathf.Clamp(target.x, bounds.min.x, bounds.max.x);
+                target.z = Mathf.Clamp(target.z, bounds.min.z, bounds.max.z);
+                cam.transform.position = target + rigOffset;
 
-                    GameState.RecomputeView(cam);
-
-                    yield return null;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+                GameState.RecomputeView(cam);
+            });
         };
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -74,20 +73,15 @@ namespace Spoke.Examples.BaseDefence {
             GameState.CollectRate.Update(x => x + 1f / collectTime);
             s.OnCleanup(() => GameState.CollectRate.Update(x => x - 1f / collectTime));
 
-            IEnumerator onUpdate() {
-                var timer = 0f;
-                while (true) {
-                    timer += Time.deltaTime;
-                    if (timer > collectTime) {
-                        timer = 0f;
-                        GameState.Money.Update(x => x + 1);
-                        remaining.Update(x => x - 1);
-                    }
-                    yield return null;
+            var timer = 0f;
+            s.Coroutine(() => {
+                timer += Time.deltaTime;
+                if (timer > collectTime) {
+                    timer = 0f;
+                    GameState.Money.Update(x => x + 1);
+                    remaining.Update(x => x - 1);
                 }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            });
         };
 
         void OnDrawGizmosSelected() {

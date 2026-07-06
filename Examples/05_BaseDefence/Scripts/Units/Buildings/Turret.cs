@@ -62,18 +62,13 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         EffectBlock RotateToTarget => s => {
-            IEnumerator onUpdate() {
-                while (true) {
-                    var flat = Vector3.ProjectOnPlane(targetDirection, Vector3.up);
-                    if (flat.sqrMagnitude > 0.0001f) {
-                        var target = Quaternion.LookRotation(flat, Vector3.up);
-                        pivot.transform.rotation = Quaternion.RotateTowards(pivot.transform.rotation, target, rotationSpeed * Time.deltaTime);
-                    }
-                    yield return null;
+            s.Coroutine(() => {
+                var flat = Vector3.ProjectOnPlane(targetDirection, Vector3.up);
+                if (flat.sqrMagnitude > 0.0001f) {
+                    var target = Quaternion.LookRotation(flat, Vector3.up);
+                    pivot.transform.rotation = Quaternion.RotateTowards(pivot.transform.rotation, target, rotationSpeed * Time.deltaTime);
                 }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            });
         };
 
         EffectBlock IdleBehaviour => s => {
@@ -86,8 +81,7 @@ namespace Spoke.Examples.BaseDefence {
                     targetDirection = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
                 }
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(onUpdate());
         };
 
         EffectBlock AttackBehaviour(Enemy target) => s => {
@@ -115,11 +109,8 @@ namespace Spoke.Examples.BaseDefence {
                     yield return null;
                 }
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => {
-                StopCoroutine(routine);
-                beam.gameObject.SetActive(false);
-            });
+            s.Coroutine(onUpdate());
+            s.OnCleanup(() => beam.gameObject.SetActive(false));
         };
 
         void OnDrawGizmosSelected() {

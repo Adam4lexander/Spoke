@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
@@ -88,14 +87,7 @@ namespace Spoke.Examples.BaseDefence {
             beam.gameObject.SetActive(true);
             s.OnCleanup(() => beam.gameObject.SetActive(false));
 
-            IEnumerator onUpdate() {
-                while (true) {
-                    yield return null;
-                    patient.Repair(repairRate * Time.deltaTime);
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(() => patient.Repair(repairRate * Time.deltaTime));
         };
 
         void OnDrawGizmosSelected() {

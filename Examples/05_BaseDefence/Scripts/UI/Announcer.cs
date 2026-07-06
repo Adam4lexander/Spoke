@@ -27,16 +27,18 @@ namespace Spoke.Examples.BaseDefence {
             southWaveWarning.SetActive(false);
             westWaveWarning.SetActive(false);
 
-            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
+            s.Phase(IsEnabled, s => {
+                var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
 
-            s.Phase(isPlaying, s => {
-                s.Effect(ShowWaveWarning);
+                s.Phase(isPlaying, s => {
+                    s.Effect(ShowWaveWarning);
 
-                // Announce each wave transition; the opening lull has nothing to announce.
-                s.Effect(s => {
-                    var wave = s.D(waveDirector.Wave);
-                    if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} From The {s.D(waveDirector.Front)}\nHarvesting Paused"));
-                    else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
+                    // Announce each wave transition; the opening lull has nothing to announce.
+                    s.Effect(s => {
+                        var wave = s.D(waveDirector.Wave);
+                        if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} From The {s.D(waveDirector.Front)}\nHarvesting Paused"));
+                        else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
+                    });
                 });
             });
         }
@@ -50,8 +52,7 @@ namespace Spoke.Examples.BaseDefence {
                 yield return new WaitForSeconds(onscreenMessageTime);
                 onscreenText.text = "";
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(onUpdate());
         };
 
         // Blink along the threatened screen edge once the wave's direction is revealed.
@@ -66,22 +67,16 @@ namespace Spoke.Examples.BaseDefence {
             };
             if (bar == null) return;
 
-            IEnumerator onUpdate() {
-                bar.SetActive(true);
-                var timer = 0f;
-                while (true) {
-                    yield return null;
-                    timer += Time.unscaledDeltaTime;
-                    if (timer >= waveWarningBlinkTime) {
-                        timer = 0f;
-                        bar.SetActive(!bar.activeSelf);
-                    }
+            bar.SetActive(true);
+            s.OnCleanup(() => bar.SetActive(false));
+
+            var timer = 0f;
+            s.Coroutine(() => {
+                timer += Time.unscaledDeltaTime;
+                if (timer >= waveWarningBlinkTime) {
+                    timer = 0f;
+                    bar.SetActive(!bar.activeSelf);
                 }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => {
-                StopCoroutine(routine);
-                bar.SetActive(false);
             });
         };
     }

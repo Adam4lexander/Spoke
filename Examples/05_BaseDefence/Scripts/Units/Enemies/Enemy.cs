@@ -88,27 +88,22 @@ namespace Spoke.Examples.BaseDefence {
             heading.y = 0f;
             heading.Normalize();
 
-            IEnumerator onUpdate() {
-                while (true) {
-                    yield return null;
-                    Building bestTarget = null;
-                    var bestScore = float.MaxValue;
-                    foreach (var building in Building.All) {
-                        var v = building.transform.position - transform.position;
-                        v.y = 0f;
-                        var along = Mathf.Max(0f, Vector3.Dot(v, heading));
-                        var offLine = (v - along * heading).magnitude;
-                        var score = offLine + proximityBias * v.magnitude;
-                        if (score < bestScore) {
-                            bestScore = score;
-                            bestTarget = building;
-                        }
+            s.Coroutine(() => {
+                Building bestTarget = null;
+                var bestScore = float.MaxValue;
+                foreach (var building in Building.All) {
+                    var v = building.transform.position - transform.position;
+                    v.y = 0f;
+                    var along = Mathf.Max(0f, Vector3.Dot(v, heading));
+                    var offLine = (v - along * heading).magnitude;
+                    var score = offLine + proximityBias * v.magnitude;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestTarget = building;
                     }
-                    target.Set(bestTarget);
                 }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+                target.Set(bestTarget);
+            });
             return target;
         };
 
@@ -139,8 +134,8 @@ namespace Spoke.Examples.BaseDefence {
                     yield return null;
                 }
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            
+            s.Coroutine(onUpdate());
         };
 
         // A gentle repulsion between living enemies, so they spread out instead of
@@ -148,24 +143,19 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock Separate => s => {
             var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(transform.position, separationDistance)));
 
-            IEnumerator onUpdate() {
-                while (true) {
-                    yield return null;
-                    var push = Vector3.zero;
-                    foreach (var c in sensor.Overlaps) {
-                        if (c.Owner == this) continue;
-                        var away = transform.position - c.Owner.transform.position;
-                        away.y = 0f;
-                        var dist = away.magnitude;
-                        if (dist < 0.001f || dist >= separationDistance) continue;
-                        // Full strength when stacked, fading to zero at the separation distance.
-                        push += away / dist * (1f - dist / separationDistance);
-                    }
-                    transform.position += separationStrength * Time.deltaTime * push;
+            s.Coroutine(() => {
+                var push = Vector3.zero;
+                foreach (var c in sensor.Overlaps) {
+                    if (c.Owner == this) continue;
+                    var away = transform.position - c.Owner.transform.position;
+                    away.y = 0f;
+                    var dist = away.magnitude;
+                    if (dist < 0.001f || dist >= separationDistance) continue;
+                    // Full strength when stacked, fading to zero at the separation distance.
+                    push += away / dist * (1f - dist / separationDistance);
                 }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+                transform.position += separationStrength * Time.deltaTime * push;
+            });
         };
 
         EffectBlock RadarTrack => s => {
@@ -184,16 +174,11 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock Bob => s => {
             const float bobAmplitude = 0.05f;
             const float bobSpeed = 6f;
-            IEnumerator onUpdate() {
-                var phase = UnityEngine.Random.value * Mathf.PI * 2f;   // desync enemies so they don't bob in lockstep
-                while (true) {
-                    yield return null;
-                    var p = flightRootStartPos + Vector3.up * Mathf.Sin(Time.time * bobSpeed + phase) * bobAmplitude;
-                    flightRoot.transform.localPosition = p;
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            var phase = UnityEngine.Random.value * Mathf.PI * 2f;   // desync enemies so they don't bob in lockstep
+            s.Coroutine(() => {
+                var p = flightRootStartPos + Vector3.up * Mathf.Sin(Time.time * bobSpeed + phase) * bobAmplitude;
+                flightRoot.transform.localPosition = p;
+            });
         };
 
         void OnDrawGizmosSelected() {

@@ -63,8 +63,7 @@ namespace Spoke.Examples.BaseDefence {
                     yield return new WaitForSeconds(powerDelay);
                     hasPower.Set(nextHasPower.Now);
                 }
-                var routine = StartCoroutine(settle());
-                s.OnCleanup(() => StopCoroutine(routine));
+                s.Coroutine(settle());
             });
             s.OnCleanup(() => hasPower.Set(false));
         };

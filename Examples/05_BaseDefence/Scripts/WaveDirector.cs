@@ -65,8 +65,7 @@ namespace Spoke.Examples.BaseDefence {
                 wave.Update(x => x + 1);
                 GameState.Assaulting.Set(true);
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(onUpdate());
         };
 
         // The assault ends when every enemy it spawned is dead — each spawn docks a
@@ -97,8 +96,7 @@ namespace Spoke.Examples.BaseDefence {
                 }
                 doneSpawning.Set(true);
             }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
+            s.Coroutine(onUpdate());
 
             s.Effect(s => {
                 if (s.D(doneSpawning) && s.D(remaining) == 0) GameState.Assaulting.Set(false);

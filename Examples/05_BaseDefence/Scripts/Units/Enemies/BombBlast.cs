@@ -29,11 +29,8 @@ namespace Spoke.Examples.BaseDefence {
                     }
                     Pool.Despawn(gameObject);
                 }
-                var routine = StartCoroutine(onUpdate());
-                s.OnCleanup(() => {
-                    StopCoroutine(routine);
-                    fxRoot.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                });
+                s.Coroutine(onUpdate());
+                s.OnCleanup(() => fxRoot.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear));
             });
         }
 
