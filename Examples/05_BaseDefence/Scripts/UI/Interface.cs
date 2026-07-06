@@ -1,20 +1,10 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // The UI overlaid onto the game board itself: hover and placement interaction,
-    // coverage and link displays, wave warnings and onscreen announcements.
+    // The player's interaction with the game board: hover and placement,
+    // with the coverage and link displays that support them.
     public class Interface : SpokeBehaviour {
-
-        [Header("References")]
-        [SerializeField] WaveDirector waveDirector;
-        [SerializeField] Text onscreenText;
-        [SerializeField] GameObject northWaveWarning;
-        [SerializeField] GameObject eastWaveWarning;
-        [SerializeField] GameObject southWaveWarning;
-        [SerializeField] GameObject westWaveWarning;
 
         [Header("Attributes")]
         [SerializeField] UState<Color> powerCoverageColour = new(new Color(1f, 0.7372549f, 0f));
@@ -25,8 +15,6 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> unitRingColour = new(Color.cyan);
         [SerializeField] UState<Color> validPlacementColour = new(Color.green);
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
-        [SerializeField] float waveWarningBlinkTime = 0.5f;   // seconds per on/off phase
-        [SerializeField] float onscreenMessageTime = 4f;      // seconds an onscreen message lingers
 
         public State<BuildItem> Placing { get; } = new();
 
@@ -38,25 +26,10 @@ namespace Spoke.Examples.BaseDefence {
         Trigger onRightClick = Trigger.Create();
 
         protected override void Init(EffectBuilder s) {
-            onscreenText.text = "";
-            northWaveWarning.SetActive(false);
-            eastWaveWarning.SetActive(false);
-            southWaveWarning.SetActive(false);
-            westWaveWarning.SetActive(false);
-
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
 
             s.Phase(isPlaying, s => {
                 s.OnCleanup(() => Placing.Set(null));
-
-                s.Effect(ShowWaveWarning);
-
-                // Announce each wave transition; the opening lull has nothing to announce.
-                s.Effect(s => {
-                    var wave = s.D(waveDirector.Wave);
-                    if (s.D(waveDirector.IsAssaulting)) s.Effect(FlashMessage($"Wave {wave} From The {s.D(waveDirector.Front)}\nHarvesting Paused"));
-                    else if (wave > 0) s.Effect(FlashMessage($"Wave {wave} Defeated"));
-                });
 
                 var hasMousePoint = s.Memo(s => {
                     var p = s.D(GameState.View).MousePoint;
@@ -79,19 +52,6 @@ namespace Spoke.Examples.BaseDefence {
                 });
             });
         }
-
-        // Shows a message in the onscreen text, clearing it after a few seconds.
-        EffectBlock FlashMessage(string message) => s => {
-            onscreenText.text = message;
-            s.OnCleanup(() => onscreenText.text = "");
-
-            IEnumerator onUpdate() {
-                yield return new WaitForSeconds(onscreenMessageTime);
-                onscreenText.text = "";
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => StopCoroutine(routine));
-        };
 
         // Publishes the unit under the mouse into the hovering state.
         EffectBlock FindHovered => s => {
@@ -159,37 +119,6 @@ namespace Spoke.Examples.BaseDefence {
                 case CoverageType.Turret: s.Effect(CoverageDisplay.Draw(GameState.TurretZone, turretCoverageColour)); break;
                 case CoverageType.Repair: s.Effect(CoverageDisplay.Draw(GameState.RepairZone, repairCoverageColour)); break;
             }
-        };
-
-        // Blink along the threatened screen edge once the wave's direction is revealed.
-        EffectBlock ShowWaveWarning => s => {
-            if (s.D(waveDirector.IsAssaulting)) return;
-            var bar = s.D(waveDirector.Front) switch {
-                WaveFront.North => northWaveWarning,
-                WaveFront.East => eastWaveWarning,
-                WaveFront.South => southWaveWarning,
-                WaveFront.West => westWaveWarning,
-                _ => null,
-            };
-            if (bar == null) return;
-
-            IEnumerator onUpdate() {
-                bar.SetActive(true);
-                var timer = 0f;
-                while (true) {
-                    yield return null;
-                    timer += Time.unscaledDeltaTime;
-                    if (timer >= waveWarningBlinkTime) {
-                        timer = 0f;
-                        bar.SetActive(!bar.activeSelf);
-                    }
-                }
-            }
-            var routine = StartCoroutine(onUpdate());
-            s.OnCleanup(() => {
-                StopCoroutine(routine);
-                bar.SetActive(false);
-            });
         };
 
         void Update() {

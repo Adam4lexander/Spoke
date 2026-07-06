@@ -132,6 +132,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6361557}
   - component: {fileID: 6361558}
+  - component: {fileID: 6361560}
   - component: {fileID: 6361559}
   m_Layer: 0
   m_Name: '[!--UI--!]'
@@ -168,12 +169,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 020e8454dede2974bac1cb63025f247e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  waveDirector: {fileID: 1738952518}
-  onscreenText: {fileID: 2023124779}
-  northWaveWarning: {fileID: 1407430305}
-  eastWaveWarning: {fileID: 1625764508}
-  southWaveWarning: {fileID: 123125659}
-  westWaveWarning: {fileID: 1519167722}
   powerCoverageColour:
     value: {r: 0, g: 1, b: 1, a: 1}
   radarCoverageColour:
@@ -190,8 +185,6 @@ MonoBehaviour:
     value: {r: 0, g: 1, b: 0, a: 1}
   invalidPlacementColour:
     value: {r: 1, g: 0, b: 0, a: 1}
-  waveWarningBlinkTime: 0.5
-  onscreenMessageTime: 4
 --- !u!114 &6361559
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -237,6 +230,26 @@ MonoBehaviour:
     Button: {fileID: 1000647246}
     Hotkey: y
     Coverage: 4
+--- !u!114 &6361560
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6361556}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 587ef8bf06d542fba082151392195c86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  waveDirector: {fileID: 1738952518}
+  onscreenText: {fileID: 2023124779}
+  northWaveWarning: {fileID: 1407430305}
+  eastWaveWarning: {fileID: 1625764508}
+  southWaveWarning: {fileID: 123125659}
+  westWaveWarning: {fileID: 1519167722}
+  waveWarningBlinkTime: 0.5
+  onscreenMessageTime: 4
 --- !u!1001 &13727372
 PrefabInstance:
   m_ObjectHideFlags: 0
