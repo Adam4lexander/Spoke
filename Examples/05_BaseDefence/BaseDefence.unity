@@ -202,7 +202,6 @@ MonoBehaviour:
     startButton: {fileID: 976683645}
   gameplay:
     interactions: {fileID: 6361558}
-    waveDirector: {fileID: 0}
     root: {fileID: 535518730}
     waveText: {fileID: 753679438}
     moneyText: {fileID: 342749939}
@@ -243,7 +242,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 587ef8bf06d542fba082151392195c86, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  waveDirector: {fileID: 0}
   onscreenText: {fileID: 2023124779}
   northWaveWarning: {fileID: 1407430305}
   eastWaveWarning: {fileID: 1625764508}
