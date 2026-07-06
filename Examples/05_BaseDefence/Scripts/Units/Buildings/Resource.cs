@@ -18,8 +18,6 @@ namespace Spoke.Examples.BaseDefence {
         State<HoverInfo> hoverInfo = new();
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
-        public Circle Footprint => new(transform.position, radius);
-
         State<int> remaining = new();
 
         protected override void Init(EffectBuilder s) {
@@ -31,7 +29,7 @@ namespace Spoke.Examples.BaseDefence {
                 s.Effect(SyncHoverInfo);
                 s.Effect(SyncHealthBar);
 
-                s.Use(GameState.GroundZone.AddCollider(gameObject, () => Footprint));
+                s.Use(GameState.GroundZone.AddCollider(gameObject, () => new Circle(transform.position, radius)));
 
                 var hasResources = s.Memo(s => s.D(remaining) > 0);
                 var isDepleted = s.Memo(s => !s.D(hasResources));

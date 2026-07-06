@@ -8,7 +8,6 @@ namespace Spoke.Examples.BaseDefence {
     // and the ground it occupies (for the highlight ring).
     public interface IHoverable {
         ISignal<HoverInfo> HoverInfo { get; }
-        Circle Footprint { get; }
     }
 
     public readonly struct HoverInfo : IEquatable<HoverInfo> {

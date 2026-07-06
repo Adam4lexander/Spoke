@@ -21,6 +21,7 @@ namespace Spoke.Examples.BaseDefence {
         // The unit under the mouse; null when nothing hoverable is there.
         State<IHoverable> hovering = new();
         public ISignal<IHoverable> Hovering => hovering;
+        State<Circle> hoveringCircle = new();
 
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
@@ -53,10 +54,14 @@ namespace Spoke.Examples.BaseDefence {
         // Publishes the unit under the mouse into the hovering state.
         EffectBlock FindHovered => s => {
             var sensor = s.Use(GameState.GroundZone.AddSensor(() => new Circle(GameState.View.Now.MousePoint.Value, 0f)));
-            s.OnCleanup(() => hovering.Set(null));
+            s.OnCleanup(() => {
+                hovering.Set(null);
+                hoveringCircle.Set(default);
+            });
             s.Effect(s => {
                 var overlap = sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null;
                 hovering.Set(overlap?.Owner.GetComponent<IHoverable>());
+                hoveringCircle.Set(overlap?.Circle ?? default);
             }, sensor.OverlapsChanged);
         };
 
@@ -74,7 +79,7 @@ namespace Spoke.Examples.BaseDefence {
             });
 
             // Highlight ring, slightly larger than the unit's footprint.
-            var circle = hoverable.Footprint;
+            var circle = s.D(hoveringCircle);
             s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.5f), unitRingColour));
         };
 
