@@ -32,16 +32,11 @@ namespace Spoke.Examples.BaseDefence {
                 s.Phase(isPlaying, s => {
                     s.Effect(ShowWaveWarning);
 
-                    // Announce each wave transition; the opening lull has nothing to announce.
-                    var transition = s.Memo(s => {
-                        var wave = s.D(GameState.Director.Wave);
-                        return (wave.IsAssaulting, wave.Number);
-                    });
-                    s.Effect(s => {
-                        var (isAssaulting, number) = s.D(transition);
-                        if (isAssaulting) s.Effect(FlashMessage($"Wave {number} Incoming\nHarvesters Paused"));
-                        else if (number > 1) s.Effect(FlashMessage($"Wave {number - 1} Defeated"));
-                    });
+                    var dock = s.Dock();
+                    s.Subscribe(GameState.Director.WaveStarted, wave =>
+                        dock.Effect("announce", FlashMessage($"Wave {wave.Number} Incoming\nHarvesters Paused")));
+                    s.Subscribe(GameState.Director.WaveDefeated, wave =>
+                        dock.Effect("announce", FlashMessage($"Wave {wave.Number} Defeated")));
                 });
             });
         }

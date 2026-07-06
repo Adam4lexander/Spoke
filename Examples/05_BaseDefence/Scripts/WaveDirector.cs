@@ -53,6 +53,11 @@ namespace Spoke.Examples.BaseDefence {
         State<WaveStatus> wave = new();
         public ISignal<WaveStatus> Wave => wave;
 
+        Trigger<WaveStatus> waveStarted = Trigger.Create<WaveStatus>();
+        Trigger<WaveStatus> waveDefeated = Trigger.Create<WaveStatus>();
+        public ITrigger<WaveStatus> WaveStarted => waveStarted;
+        public ITrigger<WaveStatus> WaveDefeated => waveDefeated;
+
         protected override void Init(EffectBuilder s) {
             wave.Set(new WaveStatus(1, WaveFront.None, Mathf.CeilToInt(lullDuration)));
             s.Phase(IsEnabled, s => {
@@ -79,6 +84,7 @@ namespace Spoke.Examples.BaseDefence {
                     remaining -= Time.deltaTime;
                 }
                 wave.Update(x => new WaveStatus(x.Number, x.Front, 0));
+                waveStarted.Invoke(wave.Now);
             }
             s.Coroutine(onUpdate());
         };
@@ -114,7 +120,11 @@ namespace Spoke.Examples.BaseDefence {
             s.Coroutine(onUpdate());
 
             s.Effect(s => {
-                if (s.D(doneSpawning) && s.D(remaining) == 0) wave.Set(new WaveStatus(waveNow + 1, WaveFront.None, Mathf.CeilToInt(lullDuration)));
+                if (s.D(doneSpawning) && s.D(remaining) == 0) {
+                    var defeated = wave.Now;
+                    wave.Set(new WaveStatus(defeated.Number + 1, WaveFront.None, Mathf.CeilToInt(lullDuration)));
+                    waveDefeated.Invoke(defeated);
+                }
             });
         };
 
