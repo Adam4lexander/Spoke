@@ -7,6 +7,8 @@ namespace Spoke.Examples.BaseDefence {
 
     public class GameState : SpokeSingleton<GameState> {
 
+        protected override bool OverrideAutoInstantiate => false;
+
         [Header("References")]
         [SerializeField] WaveDirector waveDirector;
 
