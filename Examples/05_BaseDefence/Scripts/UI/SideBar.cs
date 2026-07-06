@@ -12,61 +12,69 @@ namespace Spoke.Examples.BaseDefence {
         public CoverageType Coverage;   // shown while placing, alongside power coverage
     }
 
+    // The sidebar routes the game mode to one of four panels; each panel class owns
+    // its scene refs and the recipe that runs while its mode is active.
     public class SideBar : SpokeBehaviour {
 
         // Key colours for rich-text accents.
         static readonly Color amber = new(1f, 0.7372549f, 0f);
 
-        [Header("References")]
-        [SerializeField] BoardInteractions interactions;
-        [SerializeField] WaveDirector waveDirector;
-
-        [Header("Pregame References")]
-        [SerializeField] GameObject pregamePanel;
-        [SerializeField] Button startButton;
-
-        [Header("Gameplay References")]
-        [SerializeField] GameObject gameplayPanel;
-        [SerializeField] Text waveText;
-        [SerializeField] Text moneyText;
-        [SerializeField] Text resourcesText;
-        [SerializeField] Text messageText;
-
-        [Header("Game Over References")]
-        [SerializeField] GameObject gameOverPanel;
-        [SerializeField] Button restartButton;
-
-        [Header("Victory References")]
-        [SerializeField] GameObject victoryPanel;
-        [SerializeField] Button victoryRestartButton;
-
-        [Header("Build Items")]
-        [SerializeField] BuildItem relayItem;
-        [SerializeField] BuildItem radarItem;
-        [SerializeField] BuildItem turretItem;
-        [SerializeField] BuildItem repairItem;
+        [Header("Panels")]
+        [SerializeField] Pregame pregame;
+        [SerializeField] Gameplay gameplay;
+        [SerializeField] EndScreen gameOver;
+        [SerializeField] EndScreen victory;
 
         protected override void Init(EffectBuilder s) {
-            messageText.text = "";
-            pregamePanel.SetActive(false);
-            gameplayPanel.SetActive(false);
-            gameOverPanel.SetActive(false);
-            victoryPanel.SetActive(false);
+            pregame.Setup();
+            gameplay.Setup();
+            gameOver.Setup();
+            victory.Setup();
 
-            var isPregame = s.Memo(s => s.D(GameState.Mode) == GameMode.Pregame);
-            var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
-            var isGameOver = s.Memo(s => s.D(GameState.Mode) == GameMode.GameOver);
-            var isVictory = s.Memo(s => s.D(GameState.Mode) == GameMode.Victory);
-
-            s.Phase(isPregame, s => {
-                pregamePanel.SetActive(true);
-                s.OnCleanup(() => pregamePanel.SetActive(false));
-                s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
+            s.Effect(s => {
+                var panel = s.D(GameState.Mode) switch {
+                    GameMode.Pregame => pregame.Mount,
+                    GameMode.Playing => gameplay.Mount,
+                    GameMode.GameOver => gameOver.Mount,
+                    _ => victory.Mount,
+                };
+                s.Effect(panel);
             });
+        }
 
-            s.Phase(isPlaying, s => {
-                gameplayPanel.SetActive(true);
-                s.OnCleanup(() => gameplayPanel.SetActive(false));
+        [Serializable]
+        class Pregame {
+            [SerializeField] GameObject root;
+            [SerializeField] Button startButton;
+
+            public void Setup() => root.SetActive(false);
+
+            public EffectBlock Mount => s => {
+                root.SetActive(true);
+                s.OnCleanup(() => root.SetActive(false));
+                s.Subscribe(startButton.onClick, () => GameState.Mode.Set(GameMode.Playing));
+            };
+        }
+
+        [Serializable]
+        class Gameplay {
+            [SerializeField] BoardInteractions interactions;
+            [SerializeField] WaveDirector waveDirector;
+            [SerializeField] GameObject root;
+            [SerializeField] Text waveText;
+            [SerializeField] Text moneyText;
+            [SerializeField] Text resourcesText;
+            [SerializeField] Text messageText;
+            [SerializeField] BuildItem[] buildItems;
+
+            public void Setup() {
+                messageText.text = "";
+                root.SetActive(false);
+            }
+
+            public EffectBlock Mount => s => {
+                root.SetActive(true);
+                s.OnCleanup(() => root.SetActive(false));
 
                 s.Effect(s => {
                     var money = $"${s.D(GameState.Money)} (+{s.D(GameState.CollectRate):0.#})";
@@ -93,67 +101,66 @@ namespace Spoke.Examples.BaseDefence {
 
                 s.Effect(ShowMessage);
 
-                s.Effect(ControlBuildItem(relayItem));
-                s.Effect(ControlBuildItem(radarItem));
-                s.Effect(ControlBuildItem(turretItem));
-                s.Effect(ControlBuildItem(repairItem));
-            });
+                foreach (var item in buildItems) s.Effect(ControlBuildItem(item));
+            };
 
-            s.Phase(isGameOver, s => {
-                gameOverPanel.SetActive(true);
-                s.OnCleanup(() => gameOverPanel.SetActive(false));
-                s.Subscribe(restartButton.onClick, GameState.Restart);
-            });
+            // The message line: placement instructions take priority, then the hovered unit's description.
+            EffectBlock ShowMessage => s => {
+                var placing = s.D(interactions.Placing);
+                var hovered = s.D(interactions.Hovering);
+                if (placing != null) messageText.text = $"Placing {placing.Prefab.DisplayName} — press Escape to cancel";
+                else if (hovered != null) messageText.text = s.D(hovered.HoverInfo).Description;
+                else messageText.text = "";
+            };
 
-            s.Phase(isVictory, s => {
-                victoryPanel.SetActive(true);
-                s.OnCleanup(() => victoryPanel.SetActive(false));
-                s.Subscribe(victoryRestartButton.onClick, GameState.Restart);
-            });
+            EffectBlock ControlBuildItem(BuildItem item) => s => {
+                var buttonText = item.Button.GetComponentInChildren<Text>();
+                var idleLabel = $"{item.Prefab.DisplayName} ({item.Hotkey}) - ${item.Prefab.Cost}";
+                buttonText.text = idleLabel;
+
+                var hotkey = item.Hotkey.ToLower();
+                var canAfford = s.Memo(s => item.Prefab.Cost <= s.D(GameState.Money));
+                var isPlacing = s.Memo(s => s.D(interactions.Placing) != null);
+                var isNotPlacing = s.Memo(s => !s.D(isPlacing));
+
+                s.Phase(isNotPlacing, s => {
+                    s.Effect(s => item.Button.interactable = s.D(canAfford));
+
+                    void beginPlacing() { if (canAfford.Now) interactions.Placing.Set(item); }
+                    s.Subscribe(item.Button.onClick, beginPlacing);
+                    s.Subscribe(InputSignals.KeyDown(hotkey), beginPlacing);
+                });
+
+                s.Phase(isPlacing, s => {
+                    var isPlacingThis = s.Memo(s => s.D(interactions.Placing) == item);
+
+                    // Only the selected button stays live — it becomes the cancel affordance.
+                    s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
+
+                    s.Phase(isPlacingThis, s => {
+                        buttonText.text = $"Cancel ({item.Hotkey})";
+                        s.OnCleanup(() => buttonText.text = idleLabel);
+
+                        void cancel() => interactions.Placing.Set(null);
+                        s.Subscribe(item.Button.onClick, cancel);
+                        s.Subscribe(InputSignals.KeyDown("escape"), cancel);
+                    });
+                });
+            };
         }
 
-        // The message line: placement instructions take priority, then the hovered unit's description.
-        EffectBlock ShowMessage => s => {
-            var placing = s.D(interactions.Placing);
-            var hovered = s.D(interactions.Hovering);
-            if (placing != null) messageText.text = $"Placing {placing.Prefab.DisplayName} — press Escape to cancel";
-            else if (hovered != null) messageText.text = s.D(hovered.HoverInfo).Description;
-            else messageText.text = "";
-        };
+        [Serializable]
+        class EndScreen {
+            [SerializeField] GameObject root;
+            [SerializeField] Button restartButton;
 
-        EffectBlock ControlBuildItem(BuildItem item) => s => {
-            var buttonText = item.Button.GetComponentInChildren<Text>();
-            var idleLabel = $"{item.Prefab.DisplayName} ({item.Hotkey}) - ${item.Prefab.Cost}";
-            buttonText.text = idleLabel;
+            public void Setup() => root.SetActive(false);
 
-            var hotkey = item.Hotkey.ToLower();
-            var canAfford = s.Memo(s => item.Prefab.Cost <= s.D(GameState.Money));
-            var isPlacing = s.Memo(s => s.D(interactions.Placing) != null);
-            var isNotPlacing = s.Memo(s => !s.D(isPlacing));
-
-            s.Phase(isNotPlacing, s => {
-                s.Effect(s => item.Button.interactable = s.D(canAfford));
-
-                void beginPlacing() { if (canAfford.Now) interactions.Placing.Set(item); }
-                s.Subscribe(item.Button.onClick, beginPlacing);
-                s.Subscribe(InputSignals.KeyDown(hotkey), beginPlacing);
-            });
-
-            s.Phase(isPlacing, s => {
-                var isPlacingThis = s.Memo(s => s.D(interactions.Placing) == item);
-
-                // Only the selected button stays live — it becomes the cancel affordance.
-                s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
-
-                s.Phase(isPlacingThis, s => {
-                    buttonText.text = $"Cancel ({item.Hotkey})";
-                    s.OnCleanup(() => buttonText.text = idleLabel);
-
-                    void cancel() => interactions.Placing.Set(null);
-                    s.Subscribe(item.Button.onClick, cancel);
-                    s.Subscribe(InputSignals.KeyDown("escape"), cancel);
-                });
-            });
-        };
+            public EffectBlock Mount => s => {
+                root.SetActive(true);
+                s.OnCleanup(() => root.SetActive(false));
+                s.Subscribe(restartButton.onClick, GameState.Restart);
+            };
+        }
     }
 }

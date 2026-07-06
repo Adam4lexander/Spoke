@@ -197,39 +197,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74c1fdbca7a8a844980fb6b0bb77237e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  interactions: {fileID: 6361558}
-  waveDirector: {fileID: 1738952518}
-  pregamePanel: {fileID: 1285916201}
-  startButton: {fileID: 976683645}
-  gameplayPanel: {fileID: 535518730}
-  waveText: {fileID: 753679438}
-  moneyText: {fileID: 342749939}
-  resourcesText: {fileID: 1166456931}
-  messageText: {fileID: 1541435722}
-  gameOverPanel: {fileID: 81561303}
-  restartButton: {fileID: 1331290346}
-  victoryPanel: {fileID: 1370911113}
-  victoryRestartButton: {fileID: 1921808492}
-  relayItem:
-    Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
-    Button: {fileID: 440189158}
-    Hotkey: e
-    Coverage: 0
-  radarItem:
-    Prefab: {fileID: 42374699712382174, guid: bd59b9c7a37273f4e8c6ad0000adb7dd, type: 3}
-    Button: {fileID: 514170805}
-    Hotkey: r
-    Coverage: 2
-  turretItem:
-    Prefab: {fileID: 1199900657066672085, guid: 2c416eb962e2cc0489755804edaef22a, type: 3}
-    Button: {fileID: 300938600}
-    Hotkey: t
-    Coverage: 3
-  repairItem:
-    Prefab: {fileID: 2041115908920840070, guid: 3ac9072bb40b56f48826f334be3f96b8, type: 3}
-    Button: {fileID: 1000647246}
-    Hotkey: y
-    Coverage: 4
+  pregame:
+    root: {fileID: 1285916201}
+    startButton: {fileID: 976683645}
+  gameplay:
+    interactions: {fileID: 6361558}
+    waveDirector: {fileID: 1738952518}
+    root: {fileID: 535518730}
+    waveText: {fileID: 753679438}
+    moneyText: {fileID: 342749939}
+    resourcesText: {fileID: 1166456931}
+    messageText: {fileID: 1541435722}
+    buildItems:
+    - Prefab: {fileID: 1289336978666534750, guid: 0bca30f8fb3f0204f85a9cb50d17b878, type: 3}
+      Button: {fileID: 440189158}
+      Hotkey: e
+      Coverage: 0
+    - Prefab: {fileID: 42374699712382174, guid: bd59b9c7a37273f4e8c6ad0000adb7dd, type: 3}
+      Button: {fileID: 514170805}
+      Hotkey: r
+      Coverage: 2
+    - Prefab: {fileID: 1199900657066672085, guid: 2c416eb962e2cc0489755804edaef22a, type: 3}
+      Button: {fileID: 300938600}
+      Hotkey: t
+      Coverage: 3
+    - Prefab: {fileID: 2041115908920840070, guid: 3ac9072bb40b56f48826f334be3f96b8, type: 3}
+      Button: {fileID: 1000647246}
+      Hotkey: y
+      Coverage: 4
+  gameOver:
+    root: {fileID: 81561303}
+    restartButton: {fileID: 1331290346}
+  victory:
+    root: {fileID: 1370911113}
+    restartButton: {fileID: 1921808492}
 --- !u!114 &6361560
 MonoBehaviour:
   m_ObjectHideFlags: 0
