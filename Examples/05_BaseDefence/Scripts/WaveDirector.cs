@@ -79,11 +79,11 @@ namespace Spoke.Examples.BaseDefence {
                 var remaining = lullDuration;
                 while (remaining > 0f) {
                     var front = remaining <= frontRevealTime ? chosen : WaveFront.None;
-                    wave.Update(x => new WaveStatus(x.Number, front, Mathf.CeilToInt(remaining)));
+                    wave.Set(new WaveStatus(wave.Now.Number, front, Mathf.CeilToInt(remaining)));
                     yield return null;
                     remaining -= Time.deltaTime;
                 }
-                wave.Update(x => new WaveStatus(x.Number, x.Front, 0));
+                wave.Set(new WaveStatus(wave.Now.Number, wave.Now.Front, 0));
                 waveStarted.Invoke(wave.Now);
             }
             s.Coroutine(onUpdate());
