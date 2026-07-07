@@ -2775,18 +2775,21 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: '- Relays extend your power grid
+  m_Text: '- WASD to pan camera
 
 
-    - Radar tracks enemies for turrets
-    to attack
+    - Relays extend your power grid
 
 
-    - Harvest resources by placing a relay nearby
+    - Radar
+    tracks enemies for turrets to attack
 
 
-    - Income
-    is paused during attack'
+    - Harvest resources by placing a relay
+    nearby
+
+
+    - Income is paused during attack'
 --- !u!222 &786880934
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -3463,7 +3466,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -496}
+  m_AnchoredPosition: {x: 0, y: -504.5}
   m_SizeDelta: {x: -12, y: 40}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &976683645
@@ -6306,7 +6309,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -219.7}
-  m_SizeDelta: {x: 0, y: 250}
+  m_SizeDelta: {x: 0, y: 260}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!114 &1703136173
 MonoBehaviour:
