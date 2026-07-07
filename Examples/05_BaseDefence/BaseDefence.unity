@@ -2826,6 +2826,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waveDirector: {fileID: 822357751}
+  core: {fileID: 5643938790439110407}
   startMoney: 100
   dimensions: {x: 40, y: 40}
 --- !u!4 &822357750
@@ -7696,6 +7697,18 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 95ae15746708517468ad02426f7554f2, type: 3}
+--- !u!114 &5643938790439110407 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4706809502174951687, guid: 95ae15746708517468ad02426f7554f2,
+    type: 3}
+  m_PrefabInstance: {fileID: 1081635907867115008}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: da54233d9b2ce13428ca1bb0f441fa88, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &5588769945778289054
 PrefabInstance:
   m_ObjectHideFlags: 0

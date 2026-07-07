@@ -5,8 +5,12 @@ namespace Spoke.Examples.BaseDefence {
     // The base's root building — the origin of the power network.
     public class Core : SpokeBehaviour, IHoverable {
 
+        [Header("Prefabs")]
+        [SerializeField] GameObject coreExplodePrefab;
+
         [Header("References")]
         [SerializeField] Building building;
+        [SerializeField] Health health;
 
         State<HoverInfo> hoverInfo = new();
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
@@ -18,13 +22,11 @@ namespace Spoke.Examples.BaseDefence {
                 "Game is over if this building is destroyed.",
                 CoverageType.Power, building.Power));
 
-            // The Core only despawns when destroyed (after its shatter plays out),
-            // so going disabled is the game-over signal. The guard keeps a Core
-            // torn down after the game has already ended from rewriting the mode.
             s.Phase(IsEnabled, s => {
-                s.OnCleanup(() => {
-                    if (GameState.Mode.Now == GameMode.Playing) GameState.Mode.Set(GameMode.GameOver);
-                });
+                if (s.D(health.IsAlive)) return;
+
+                var explodeFx = Pool.Spawn(coreExplodePrefab, transform.position);
+                s.OnCleanup(() => Pool.Despawn(explodeFx));
             });
         }
     }

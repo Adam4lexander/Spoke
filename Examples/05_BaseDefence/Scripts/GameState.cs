@@ -11,6 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] WaveDirector waveDirector;
+        [SerializeField] Core core;
 
         [Header("Attributes")]
         [SerializeField] float startMoney;
@@ -72,6 +73,11 @@ namespace Spoke.Examples.BaseDefence {
                 // The map is won when every resource on it has been mined out.
                 var allMined = s.Memo(s => s.D(resourcesRemaining) == 0);
                 s.Phase(allMined, s => mode.Set(GameMode.Victory));
+
+                // And lost when the Core leaves the field — it only despawns when
+                // destroyed, after its shatter plays out.
+                var coreLost = s.Memo(s => !s.D(core.IsEnabled));
+                s.Phase(coreLost, s => mode.Set(GameMode.GameOver));
             });
         }
 

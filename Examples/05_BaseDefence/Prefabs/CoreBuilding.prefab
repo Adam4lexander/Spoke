@@ -251,7 +251,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: da54233d9b2ce13428ca1bb0f441fa88, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  coreExplodePrefab: {fileID: 3576359426679109431, guid: 26413dae3ca66ae4499c449b01eb58d8, type: 3}
   building: {fileID: 6561391522022659384}
+  health: {fileID: 1652143216942797496}
 --- !u!114 &6561391522022659384
 MonoBehaviour:
   m_ObjectHideFlags: 0
