@@ -18,6 +18,8 @@ namespace Spoke.Examples.BaseDefence {
 
         // Key colours for rich-text accents.
         static readonly Color amber = new(1f, 0.7372549f, 0f);
+        static readonly Color danger = new(1f, 0.3f, 0.3f);
+        static readonly Color paleBlue = new(0.6f, 0.8f, 1f);
 
         [Header("Panels")]
         [SerializeField] Pregame pregame;
@@ -89,15 +91,32 @@ namespace Spoke.Examples.BaseDefence {
                 s.Effect(s => {
                     var wave = s.D(GameState.Director.Wave);
                     var direction = wave.Front.ToString();
-                    if (wave.IsAssaulting) waveText.text = $"Wave {wave.Number}\n{direction} attacking";
-                    else if (wave.Front != WaveFront.None) waveText.text = $"Wave {wave.Number}\n{direction} in {wave.StartsIn}s";
-                    else waveText.text = $"Wave {wave.Number}\nin {wave.StartsIn}s";
+                    var header = $"<b>Wave {wave.Number}</b>";
+                    if (wave.IsAssaulting) {
+                        var colour = ColorUtility.ToHtmlStringRGBA(danger);
+                        waveText.text = $"{header}\n<color=#{colour}><b>{direction} attacking</b></color>";
+                    } else if (wave.Front != WaveFront.None) {
+                        var colour = ColorUtility.ToHtmlStringRGBA(CountdownColour(wave.StartsIn));
+                        waveText.text = $"{header}\n{direction} in <color=#{colour}>{wave.StartsIn}s</color>";
+                    } else {
+                        var colour = ColorUtility.ToHtmlStringRGBA(CountdownColour(wave.StartsIn));
+                        waveText.text = $"{header}\nin <color=#{colour}>{wave.StartsIn}s</color>";
+                    }
                 });
 
                 s.Effect(ShowMessage);
 
                 foreach (var item in buildItems) s.Effect(ControlBuildItem(item));
             };
+
+            // Pale blue far out, sliding through amber to red as the wave gets close.
+            static Color CountdownColour(int startsIn) {
+                var lull = GameState.Director.LullDuration;
+                var closeness = lull > 0f ? Mathf.Clamp01(1f - startsIn / lull) : 1f;
+                return closeness < 0.5f
+                    ? Color.Lerp(paleBlue, amber, closeness / 0.5f)
+                    : Color.Lerp(amber, danger, (closeness - 0.5f) / 0.5f);
+            }
 
             // The message line: placement instructions take priority, then the hovered unit's description.
             EffectBlock ShowMessage => s => {

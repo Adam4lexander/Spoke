@@ -52,6 +52,7 @@ namespace Spoke.Examples.BaseDefence {
 
         State<WaveStatus> wave = new();
         public ISignal<WaveStatus> Wave => wave;
+        public float LullDuration => lullDuration;
 
         Trigger<WaveStatus> waveStarted = Trigger.Create<WaveStatus>();
         Trigger<WaveStatus> waveDefeated = Trigger.Create<WaveStatus>();
