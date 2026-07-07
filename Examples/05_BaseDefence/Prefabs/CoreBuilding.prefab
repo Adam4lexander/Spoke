@@ -308,10 +308,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   isRoot: 1
-  receiveRange:
-    value: 0.1
-  provideRange:
-    value: 4
+  receiveRange: 0.1
+  provideRange: 4
 --- !u!114 &4863930116280884562
 MonoBehaviour:
   m_ObjectHideFlags: 0

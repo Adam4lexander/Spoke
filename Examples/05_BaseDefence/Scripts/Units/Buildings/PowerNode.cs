@@ -30,8 +30,8 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("Attributes")]
         [SerializeField] bool isRoot = false;
-        [SerializeField] UState<float> receiveRange = new(0.1f);
-        [SerializeField] UState<float> provideRange = new(4f);
+        [SerializeField] float receiveRange = 0.1f;
+        [SerializeField] float provideRange = 4f;
 
         State<PowerNode> parent = new();
         public ISignal<PowerNode> Parent => parent;
@@ -40,7 +40,7 @@ namespace Spoke.Examples.BaseDefence {
         public ISignal<bool> HasPower => hasPower;
 
         // A leaf only draws power; it never relays it onward to other nodes.
-        public bool IsLeaf => provideRange.Now <= 0;
+        public bool IsLeaf => provideRange <= 0;
 
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
@@ -71,7 +71,7 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock ReceivePower => s => {
             var collider = s.Use(GameState.PowerZone.AddCollider(
                 new PowerBody(this, false),
-                () => new Circle(transform.position, receiveRange.Now),
+                () => new Circle(transform.position, receiveRange),
                 body => body.IsProvider));
 
             s.OnCleanup(() => parent.Set(null));
@@ -93,7 +93,7 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock ProvidePower => s => {
             var collider = s.Use(GameState.PowerZone.AddCollider(
                 new PowerBody(this, true), 
-                () => new Circle(transform.position, provideRange.Now), 
+                () => new Circle(transform.position, provideRange),
                 body => !body.IsProvider));
 
             // One walk up the chain answers both questions: who my ancestors are
@@ -129,8 +129,8 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         void OnDrawGizmosSelected() {
-            if (!isRoot) new Circle(transform.position, receiveRange.Now).DrawGizmo(Color.magenta);
-            if (!IsLeaf) new Circle(transform.position, provideRange.Now).DrawGizmo(Color.red);
+            if (!isRoot) new Circle(transform.position, receiveRange).DrawGizmo(Color.magenta);
+            if (!IsLeaf) new Circle(transform.position, provideRange).DrawGizmo(Color.red);
         }
     }
 }
