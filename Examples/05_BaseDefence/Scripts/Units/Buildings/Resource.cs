@@ -34,10 +34,14 @@ namespace Spoke.Examples.BaseDefence {
                 var hasResources = s.Memo(s => s.D(remaining) > 0);
                 var isDepleted = s.Memo(s => !s.D(hasResources));
 
-                s.Phase(hasResources, s => {
+                // A mined-out site keeps its place in the count until its shatter finishes.
+                var standing = s.Memo(s => !s.D(meshFX.IsShattered));
+                s.Phase(standing, s => {
                     GameState.ResourcesRemaining.Update(x => x + 1);
                     s.OnCleanup(() => GameState.ResourcesRemaining.Update(x => x - 1));
+                });
 
+                s.Phase(hasResources, s => {
                     // Income flows only between waves — an assault pauses every harvester.
                     var canHarvest = s.Memo(s => s.D(powerNode.HasPower) && !s.D(GameState.Director.Wave).IsAssaulting);
                     s.Phase(canHarvest, Harvest);
