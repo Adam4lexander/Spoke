@@ -2786,7 +2786,7 @@ MonoBehaviour:
 
 
     - Income
-    is paused during wave attack'
+    is paused during attack'
 --- !u!222 &786880934
 CanvasRenderer:
   m_ObjectHideFlags: 0
