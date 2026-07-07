@@ -84,14 +84,14 @@ namespace Spoke.Examples.BaseDefence {
                         : money;
                 });
 
-                s.Effect(s => resourcesText.text = $"Resources left: {s.D(GameState.ResourcesRemaining)}");
+                s.Effect(s => resourcesText.text = $"Resource Sites: {s.D(GameState.ResourcesRemaining)}");
 
                 s.Effect(s => {
                     var wave = s.D(GameState.Director.Wave);
-                    var direction = wave.Front.ToString().ToLower();
-                    if (wave.IsAssaulting) waveText.text = $"Wave {wave.Number} — attacking from the {direction}";
-                    else if (wave.Front != WaveFront.None) waveText.text = $"Wave {wave.Number} from the {direction} in {wave.StartsIn}s";
-                    else waveText.text = $"Wave {wave.Number} in {wave.StartsIn}s";
+                    var direction = wave.Front.ToString();
+                    if (wave.IsAssaulting) waveText.text = $"Wave {wave.Number}\n{direction} attacking";
+                    else if (wave.Front != WaveFront.None) waveText.text = $"Wave {wave.Number}\n{direction} in {wave.StartsIn}s";
+                    else waveText.text = $"Wave {wave.Number}\nin {wave.StartsIn}s";
                 });
 
                 s.Effect(ShowMessage);
