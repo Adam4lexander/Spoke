@@ -9,7 +9,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] GameObject dishPivot;
 
         [Header("Attributes")]
-        [SerializeField] UState<float> range = new(5f);
+        [SerializeField] float range = 8f;
         [SerializeField] float dishRotationSpeed;
 
         State<HoverInfo> hoverInfo = new();
@@ -26,7 +26,7 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Phase(isRunning, s => {
                 s.Effect(DishAnimation);
-                s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(transform.position, range.Now)));
+                s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(transform.position, range)));
             });
         }
 
@@ -35,7 +35,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         void OnDrawGizmosSelected() {
-            var circle = new Circle(transform.position, range.Now);
+            var circle = new Circle(transform.position, range);
             circle.DrawGizmo(Color.red);
         }
     }
