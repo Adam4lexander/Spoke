@@ -3,6 +3,13 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // I included an object pool in this game for realism, and because object pooling introduces a
+    // lifecycle-management problem (which is Spoke's strength).
+    // Pools are a classic source of lifecycle bugs: a reused object can carry state left over from its
+    // previous life if something wasn't reset on despawn.
+    // This is exactly the surface area for bugs that Spoke can eliminate.
+
+    /// <summary>A minimal object pool. Despawn disables an instance and stashes it; Spawn re-enables an idle one, or instantiates a new one.</summary>
     public class Pool : SpokeSingleton<Pool> {
 
         [System.Serializable]
@@ -16,6 +23,7 @@ namespace Spoke.Examples.BaseDefence {
         Dictionary<GameObject, Stack<GameObject>> idle = new();
         Dictionary<GameObject, GameObject> origin = new();
 
+        /// <summary>Returns an active instance of prefab — reused from its idle pool if one's free, otherwise freshly instantiated.</summary>
         public static GameObject Spawn(GameObject prefab, Vector3 pos, Quaternion rot = default) {
             var pool = Instance;
             if (pool.idle.TryGetValue(prefab, out var stack) && stack.Count > 0) {
@@ -29,6 +37,7 @@ namespace Spoke.Examples.BaseDefence {
             return instance;
         }
 
+        /// <summary>Disables an instance and returns it to its prefab's idle pool for reuse. Destroys it instead if it never came from the pool.</summary>
         public static void Despawn(GameObject instance) {
             var pool = Instance;
             if (!pool.origin.TryGetValue(instance, out var prefab)) {
