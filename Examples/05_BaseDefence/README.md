@@ -8,7 +8,7 @@ It was built to show how a game looks when it goes all-in on Spoke's idioms, usi
 
 ## Game Mechanics
 
-The player starts with a **core** building that seeds their power grid. New buildings may only be built on the power grid.
+The player starts with a **core** building that seeds their power grid.
 
 Resource sites are scattered across the map, and are harvested while they overlap the power grid. The game is won once all their resources have been collected.
 
@@ -18,7 +18,7 @@ There are four buildings the player can place:
 
 - **relay**: extends the base's power grid
 - **radar**: tracks nearby enemies for turrets to attack
-- **turret**: fires at nearby enemies that are tracked by any radar
+- **turret**: fires at nearby enemies that are tracked by a radar
 - **repair**: repairs nearby buildings
 
 Every building must be connected to the power grid to function, tracing a path through the relays back to the **core**. If a relay is destroyed, it can cause an entire branch of buildings to lose power.
