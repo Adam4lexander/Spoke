@@ -3,14 +3,19 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    /// <summary>Which edge of the level a wave attacks from.</summary>
     public enum WaveFront { None, West, East, South, North }
 
     public readonly struct WaveStatus : System.IEquatable<WaveStatus> {
 
+        /// <summary>The wave number.</summary>
         public readonly int Number;
+        /// <summary>The edge this wave attacks from, or None before it's revealed.</summary>
         public readonly WaveFront Front;
+        /// <summary>Seconds until the wave begins; 0 once it's attacking.</summary>
         public readonly int StartsIn;
 
+        /// <summary>True while the wave is underway (countdown has reached zero).</summary>
         public bool IsAssaulting => StartsIn == 0;
 
         public WaveStatus(int number, WaveFront front, int startsIn) {
@@ -27,10 +32,8 @@ namespace Spoke.Examples.BaseDefence {
         public static bool operator !=(WaveStatus left, WaveStatus right) => !(left == right);
     }
 
-    // Sends enemies in waves: each assault pours in from one edge of the level,
-    // and each wave is bigger, faster and heavier than the last, with a lull in
-    // between. The next wave's front is chosen when the lull begins, but reads as
-    // None until the countdown's last seconds — the UI can't leak an unrevealed direction.
+    // Sends enemies in waves: each assault pours in from one edge of the level, and each wave is
+    // bigger, faster and heavier than the last, with a lull in between.
     public class WaveDirector : SpokeBehaviour {
 
         [Header("References")]
@@ -39,24 +42,28 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] GameObject enemy3Prefab;
 
         [Header("Attributes")]
-        [SerializeField] float lullDuration = 8f;          // calm between assaults
-        [SerializeField] float frontRevealTime = 5f;       // seconds before a wave that its direction is revealed
-        [SerializeField] int baseBudget = 4;               // wave 1's spend, in basic-enemy units
-        [SerializeField] float budgetPerWave = 2f;         // extra budget each wave (fractions accumulate across waves)
-        [SerializeField] int enemy2UnlockWave = 3;         // first wave that can field tier 2
-        [SerializeField] int enemy3UnlockWave = 6;         // first wave that can field tier 3
-        [SerializeField] float baseSpawnInterval = 1f;     // in-wave spacing at wave 1
-        [SerializeField] float spawnIntervalStep = 0.1f;   // spacing shrinks per wave...
-        [SerializeField] float minSpawnInterval = 0.25f;   // ...down to this floor
+        [SerializeField] float lullDuration = 8f;          // seconds of calm between waves
+        [SerializeField] float frontRevealTime = 5f;       // the direction is revealed this many seconds before a wave hits
+        [SerializeField] int baseBudget = 4;               // wave 1's spawn budget (a basic enemy costs 1)
+        [SerializeField] float budgetPerWave = 2f;         // extra budget added each wave
+        [SerializeField] int enemy2UnlockWave = 3;         // first wave with tier 2 enemies
+        [SerializeField] int enemy3UnlockWave = 6;         // first wave with tier 3 enemies
+        [SerializeField] float baseSpawnInterval = 1f;     // interval between spawns on wave 1
+        [SerializeField] float spawnIntervalStep = 0.1f;   // the interval drops this much each wave
+        [SerializeField] float minSpawnInterval = 0.25f;   // smallest the interval gets
         [SerializeField] float spawnMargin = 2f;           // enemies spawn this far outside the level bounds
 
         State<WaveStatus> wave = new();
-        public ISignal<WaveStatus> Wave => wave;
-        public float LullDuration => lullDuration;
-
         Trigger<WaveStatus> waveStarted = Trigger.Create<WaveStatus>();
         Trigger<WaveStatus> waveDefeated = Trigger.Create<WaveStatus>();
+
+        /// <summary>The current wave's status.</summary>
+        public ISignal<WaveStatus> Wave => wave;
+        /// <summary>Seconds of calm between waves.</summary>
+        public float LullDuration => lullDuration;
+        /// <summary>Fires when a wave's assault begins.</summary>
         public ITrigger<WaveStatus> WaveStarted => waveStarted;
+        /// <summary>Fires when a wave is fully cleared.</summary>
         public ITrigger<WaveStatus> WaveDefeated => waveDefeated;
 
         protected override void Init(EffectBuilder s) {
@@ -90,9 +97,8 @@ namespace Spoke.Examples.BaseDefence {
             s.Coroutine(onUpdate());
         };
 
-        // The assault ends when every enemy it spawned is dead — each spawn docks a
-        // tracker that counts its death exactly once, then undocks (long before the
-        // pool can heal or reuse the instance).
+        // The assault ends when every enemy it spawned is dead. Each spawn docks a
+        // tracker that counts its death exactly once, then undocks.
         EffectBlock Assault => s => {
             var waveNow = wave.Now.Number;
             var budget = baseBudget + budgetPerWave * (waveNow - 1);
