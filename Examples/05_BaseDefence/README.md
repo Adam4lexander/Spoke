@@ -8,7 +8,7 @@ It was built to demonstrate how Spoke can be used in real projects.
 
 ## Game Mechanics
 
-The player starts with a **core** building that seeds their power grid. Buildings may only be built inside the power grid.
+The player starts with a **core** building that seeds their power grid. New buildings may only be built on the power grid.
 
 Resource sites are scattered around the map that are harvested when they are overlapping the power grid. The game is won when all of the resource sites are harvested.
 
@@ -27,9 +27,17 @@ Buildings only function when they are connected to the power grid, and trace a p
 
 ## Architecture
 
+All scripts use `SpokeBehaviour` in place of `MonoBehaviour`, except for some plain classes. Some of the most important classes are listed below.
+
 ---
 
 ### GameState
+
+A `SpokeSingleton` manager class that owns global game state:
+
+- Are we playing or in a menu?
+- How many resources does the player have?
+- Controlling the enemy attack waves.
 
 ---
 
