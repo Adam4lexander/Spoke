@@ -52,6 +52,8 @@ void Init(EffectBuilder s) {
 
 👉 In Spoke, the entire behaviour lives in one expressive block. Setup, reaction, and cleanup happen automatically.
 
+For a complete game built entirely with Spoke, see **[Base Defence](./Examples/05_BaseDefence/)**.
+
 ---
 
 ## 💡 Why Spoke?
