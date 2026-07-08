@@ -5,11 +5,16 @@ using UnityEngine.EventSystems;
 
 namespace Spoke.Examples.BaseDefence {
 
+    /// <summary>A per-frame snapshot of the camera's view of the board.</summary>
     public readonly struct View : IEquatable<View> {
 
+        /// <summary>Camera position in world space.</summary>
         public readonly Vector3 Position;
+        /// <summary>Camera rotation.</summary>
         public readonly Quaternion Rotation;
+        /// <summary>Bounding circle of the ground the camera can see.</summary>
         public readonly Circle GroundArea;
+        /// <summary>Where the cursor hits the ground, or null over UI or off the plane.</summary>
         public readonly Vector3? MousePoint;
 
         public View(Camera camera, Plane groundPlane) {
@@ -21,8 +26,6 @@ namespace Spoke.Examples.BaseDefence {
             MousePoint = FindMousePoint(groundPlane, camera);
         }
 
-        // The cursor's point on the ground plane — null while the cursor is over screen-space UI,
-        // or its ray misses the plane.
         static Vector3? FindMousePoint(Plane plane, Camera cam) {
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
             var ray = cam.ScreenPointToRay(Input.mousePosition);
