@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // Reveals enemies within its coverage so turrets can target them. Runs only while powered.
     public class Radar : SpokeBehaviour, IHoverable {
 
         [Header("References")]
@@ -25,14 +26,11 @@ namespace Spoke.Examples.BaseDefence {
             var isRunning = s.Memo(s => s.D(IsEnabled) && s.D(building.Power.HasPower));
 
             s.Phase(isRunning, s => {
-                s.Effect(DishAnimation);
                 s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(transform.position, range)));
+
+                s.Coroutine(() => dishPivot.transform.Rotate(Vector3.up, dishRotationSpeed * Time.deltaTime));
             });
         }
-
-        EffectBlock DishAnimation => s => {
-            s.Coroutine(() => dishPivot.transform.Rotate(Vector3.up, dishRotationSpeed * Time.deltaTime));
-        };
 
         void OnDrawGizmosSelected() {
             var circle = new Circle(transform.position, range);

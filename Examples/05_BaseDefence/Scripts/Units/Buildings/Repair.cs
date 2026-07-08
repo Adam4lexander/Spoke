@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // Heals the most damaged building in its coverage, one at a time, while powered.
     public class Repair : SpokeBehaviour, IHoverable {
 
         [Header("References")]
@@ -40,7 +41,7 @@ namespace Spoke.Examples.BaseDefence {
             });
         }
 
-        // Takes the most damaged building in range (excluding its own — repair towers can
+        // Takes the most damaged building in range (excluding its own; repair towers can
         // cover each other, but not themselves). Idle while everyone's at full health.
         EffectBlock<Health> FindPatient => s => {
             var patient = State.Create<Health>();
@@ -79,7 +80,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         // Heals the patient with the beam held on them, releasing them once they're healed
-        // or gone (out of range or dead — either way their collider has left the sensor).
+        // or gone (out of range or dead; either way their collider has left the sensor).
         EffectBlock DoRepair(Health patient) => s => {
             beam.SetPosition(0, fireFrom.transform.position);
             beam.SetPosition(1, patient.transform.position);

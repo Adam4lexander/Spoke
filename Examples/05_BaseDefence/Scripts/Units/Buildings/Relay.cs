@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // A building that extends the power network's reach.
+    // A building that extends the power network's reach. The relaying is handled by its PowerNode;
+    // this component only supplies the hover info.
     public class Relay : SpokeBehaviour, IHoverable {
 
         [Header("References")]

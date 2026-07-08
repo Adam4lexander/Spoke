@@ -5,21 +5,24 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // Owner for the power world. Every building's PowerNode puts a Receiver collider (its footprint in
-    // the network — how providers find it) in the world, and unless it's a leaf a Provider collider
-    // (its coverage range). Queries filter on IsProvider to tell the two apart.
+    // One entry in the power zone (GameState.PowerZone): a node, tagged as either a provider
+    // (coverage range) or a receiver (footprint). Queries filter on IsProvider to tell the two apart.
     public class PowerBody {
         public readonly PowerNode Node;
         public readonly bool IsProvider;
         public PowerBody(PowerNode node, bool isProvider) { Node = node; IsProvider = isProvider; }
     }
 
+    // A building's link to the power grid. Nodes form a tree rooted at the Core: each draws power
+    // from a parent provider whose coverage it overlaps, and is powered only if that chain reaches
+    // the root.
     public class PowerNode : SpokeBehaviour {
 
         static readonly State<ReadOnlyList<PowerNode>> all = new(new ReadOnlyList<PowerNode>(new List<PowerNode>()));
+        /// <summary>Every power node currently in the scene.</summary>
         public static ISignal<ReadOnlyList<PowerNode>> All => all;
 
-        // Publishes a fresh list each change — the wrapper compares by inner-list
+        // Publishes a fresh list each change. The wrapper compares by inner-list
         // reference, and State dedups equal values.
         static void UpdateAll(Action<List<PowerNode>> mutate) {
             var next = new List<PowerNode>();
@@ -34,12 +37,15 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float provideRange = 4f;
 
         State<PowerNode> parent = new();
+        State<bool> hasPower = new(false);
+
+        /// <summary>The provider this node draws power from; null for the root or an unpowered node.</summary>
         public ISignal<PowerNode> Parent => parent;
 
-        State<bool> hasPower = new(false);
+        /// <summary>Whether this node is currently powered.</summary>
         public ISignal<bool> HasPower => hasPower;
 
-        // A leaf only draws power; it never relays it onward to other nodes.
+        /// <summary>A leaf only draws power; it never relays it onward to other nodes.</summary>
         public bool IsLeaf => provideRange <= 0;
 
         protected override void Init(EffectBuilder s) {
@@ -116,7 +122,7 @@ namespace Spoke.Examples.BaseDefence {
                     var canConnect = s.Memo(s => {
                         var parentNow = s.D(node.parent);
                         if (parentNow == null || parentNow == this) return true;
-                        // Steal the node from a farther provider — unless it's an
+                        // Steal the node from a farther provider, unless it's an
                         // ancestor of this one, which would loop the chain.
                         var mine = (node.transform.position - transform.position).sqrMagnitude;
                         var theirs = (node.transform.position - parentNow.transform.position).sqrMagnitude;

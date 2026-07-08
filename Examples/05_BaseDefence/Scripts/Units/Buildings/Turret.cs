@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // Fires at the nearest radar-revealed enemy in its coverage, while powered. Blind without radar.
     public class Turret : SpokeBehaviour, IHoverable {
 
         [Header("References")]
@@ -20,8 +21,8 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float beamFlashTime = 0.05f;
 
         Vector3 targetDirection = Vector3.zero;
-
         State<HoverInfo> hoverInfo = new();
+
         public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
@@ -96,7 +97,7 @@ namespace Spoke.Examples.BaseDefence {
                     var aim = Vector3.ProjectOnPlane(toTarget, Vector3.up);
                     if (cooldown <= 0f && Vector3.Angle(muzzle, aim) <= fireAngle) {
                         cooldown = 1f / fireRate;
-                        // Flash the beam first, then land the hit — so the killing shot is seen
+                        // Flash the beam first, then land the hit, so the killing shot is seen
                         // before the enemy dies and we retarget.
                         beam.SetPosition(0, fireFrom.transform.position);
                         beam.SetPosition(1, target.CenterOfMass);

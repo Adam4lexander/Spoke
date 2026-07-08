@@ -2,6 +2,8 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A minable resource site. While powered and between waves it generates money and depletes;
+    // once mined out it shatters. Clearing every site on the map is the win condition.
     public class Resource : SpokeBehaviour, IHoverable {
 
         [Header("References")]
@@ -15,10 +17,10 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float collectTime = 2f;
         [SerializeField] int startResources = 20;
 
-        State<HoverInfo> hoverInfo = new();
-        public ISignal<HoverInfo> HoverInfo => hoverInfo;
-
         State<int> remaining = new();
+        State<HoverInfo> hoverInfo = new();
+
+        public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
         protected override void Init(EffectBuilder s) {
             harvestFX.SetActive(false);
@@ -42,7 +44,7 @@ namespace Spoke.Examples.BaseDefence {
                 });
 
                 s.Phase(hasResources, s => {
-                    // Income flows only between waves — an assault pauses every harvester.
+                    // Income flows only between waves; an assault pauses every harvester.
                     var canHarvest = s.Memo(s => s.D(powerNode.HasPower) && !s.D(GameState.Director.Wave).IsAssaulting);
                     s.Phase(canHarvest, Harvest);
                 });

@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
-    // The base's root building — the origin of the power network.
+    // The base's root building: the origin of the power grid, and the one whose destruction
+    // ends the game.
     public class Core : SpokeBehaviour, IHoverable {
 
         [Header("Prefabs")]
@@ -25,6 +26,7 @@ namespace Spoke.Examples.BaseDefence {
             s.Phase(IsEnabled, s => {
                 if (s.D(health.IsAlive)) return;
 
+                // Once the Core dies, play its explosion, cleaned up when the phase unmounts.
                 var explodeFx = Pool.Spawn(coreExplodePrefab, transform.position);
                 s.OnCleanup(() => Pool.Despawn(explodeFx));
             });
