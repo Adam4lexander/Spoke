@@ -3,9 +3,12 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // The common component on every building. Adds the behaviour every building shares
+    // (health bar, footprint collider, damage flash, death shatter).
     public class Building : SpokeBehaviour {
 
         static readonly List<Building> all = new();
+        /// <summary>Every building currently alive on the map.</summary>
         public static ReadOnlyList<Building> All => new(all);
 
         [Header("References")]
