@@ -11,6 +11,7 @@ namespace Spoke.Examples.BaseDefence {
 
         [Header("References")]
         [SerializeField] WaveDirector waveDirector;
+        [SerializeField] CameraControls cameraControls;
         [SerializeField] Core core;
 
         [Header("Attributes")]
@@ -19,8 +20,7 @@ namespace Spoke.Examples.BaseDefence {
 
         public static WaveDirector Director => Instance.waveDirector;
 
-        State<View> view = new();
-        public static ISignal<View> View => Instance.view;
+        public static ISignal<View> View => Instance.cameraControls.View;
 
         CollisionWorld<PowerBody> powerZone = new();
         CollisionWorld<GameObject> groundZone = new();
@@ -41,8 +41,6 @@ namespace Spoke.Examples.BaseDefence {
         // A little height so Contains tolerates points a float-epsilon off the ground plane.
         Bounds levelBounds => new Bounds(transform.position, new Vector3(dimensions.x, 0.1f, dimensions.y));
         public static Bounds LevelBounds => Instance.levelBounds;
-
-        public static void RecomputeView(Camera camera) => Instance.view.Set(new View(camera, GroundPlane));
 
         State<GameMode> mode = new();
         public static IState<GameMode> Mode => Instance.mode;

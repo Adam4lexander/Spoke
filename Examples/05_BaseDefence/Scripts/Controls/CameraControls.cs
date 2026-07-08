@@ -11,6 +11,9 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float panSpeed = 10f;
         [SerializeField] float acceleration = 16f;
 
+        State<View> view = new();
+        public ISignal<View> View => view;
+
         protected override void Init(EffectBuilder s) {
             s.Phase(IsEnabled, s => {
                 s.Effect(PanControls);
@@ -58,7 +61,7 @@ namespace Spoke.Examples.BaseDefence {
                 target.z = Mathf.Clamp(target.z, bounds.min.z, bounds.max.z);
                 cam.transform.position = target + rigOffset;
 
-                GameState.RecomputeView(cam);
+                view.Set(new View(cam, GameState.GroundPlane));
             });
         };
     }
