@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // Pans the camera across the board with WASD, and publishes the resulting View each frame.
     public class CameraControls : SpokeBehaviour {
 
         [Header("References")]
@@ -12,6 +13,7 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] float acceleration = 16f;
 
         State<View> view = new();
+        /// <summary>The camera's current view of the board, updated each frame.</summary>
         public ISignal<View> View => view;
 
         protected override void Init(EffectBuilder s) {

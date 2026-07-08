@@ -11,10 +11,12 @@ namespace Spoke.Examples.BaseDefence {
         Trigger rightClick = Trigger.Create();
         Dictionary<string, Trigger> keyDowns = new();
 
+        /// <summary>Fires on the frame the left mouse button goes down.</summary>
         public static ITrigger LeftClick => Instance.leftClick;
+        /// <summary>Fires on the frame the right mouse button goes down.</summary>
         public static ITrigger RightClick => Instance.rightClick;
 
-        // A trigger for the frames the given key goes down, created on first request.
+        /// <summary>Gets (and lazily creates) the trigger that fires when the given key goes down.</summary>
         public static ITrigger KeyDown(string key) {
             var keys = Instance.keyDowns;
             if (!keys.TryGetValue(key, out var trigger)) keys[key] = trigger = Trigger.Create();
