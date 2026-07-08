@@ -1,9 +1,9 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A delayed area explosion: after a short fuse, damages every building in its radius, then despawns.
     public class BombBlast : SpokeBehaviour {
 
         [Header("References")]
@@ -24,7 +24,7 @@ namespace Spoke.Examples.BaseDefence {
                     yield return new WaitForSeconds(duration);
                     foreach (var collider in GameState.GroundZone.Query(new Circle(transform.position, radius))) {
                         var health = collider.Owner.GetComponent<Health>();
-                        if (health == null) continue;   // resources have no Health → not damageable
+                        if (health == null) continue;
                         health.Damage(damage);
                     }
                     Pool.Despawn(gameObject);

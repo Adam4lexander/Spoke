@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A flying enemy that picks a heading across the base, homes in on a building along it, and bombs it.
     public class Enemy : SpokeBehaviour {
 
         [Header("Prefabs")]
@@ -20,19 +21,20 @@ namespace Spoke.Examples.BaseDefence {
         [Header("Attributes")]
         [SerializeField] float radius;
         [SerializeField] float moveSpeed = 2f;
-        [SerializeField] float stopDistance = 1.2f;   // gap kept from the target building's centre
-        [SerializeField] float fireRate = 1f;         // shots per second
-        [SerializeField] float proximityBias = 0.5f;  // 0 = follow the heading line, higher favours nearby buildings
+        [SerializeField] float stopDistance = 1.2f;       // gap kept from the target building's centre
+        [SerializeField] float fireRate = 1f;             // shots per second
+        [SerializeField] float proximityBias = 0.5f;      // 0 = follow the heading line, higher favours nearby buildings
         [SerializeField] float separationDistance = 1.5f; // enemies closer than this push apart
         [SerializeField] float separationStrength = 2f;   // how hard overlapping enemies repel
 
-        public Health Health => health;
-        public Vector3 CenterOfMass => flightRoot.transform.position;
-
         State<bool> tracked = new();
-        public ISignal<bool> IsTracked => tracked;
-
         Vector3 flightRootStartPos;
+
+        public Health Health => health;
+        /// <summary>World point turrets aim at: the flying body, not the ground-level root.</summary>
+        public Vector3 CenterOfMass => flightRoot.transform.position;
+        /// <summary>True while a radar reveals this enemy, letting turrets target it.</summary>
+        public ISignal<bool> IsTracked => tracked;
 
         protected override void Init(EffectBuilder s) {
             flightRootStartPos = flightRoot.transform.localPosition;
@@ -72,7 +74,7 @@ namespace Spoke.Examples.BaseDefence {
         }
 
         // Each life picks a random heading across the base, and targets the building that
-        // best blends "in my path" with "near me" — so enemies cut lines through the base
+        // best blends "in my path" with "near me", so enemies cut lines through the base
         // instead of all piling onto the nearest building. Once everything lies behind the
         // heading, the score reduces to plain nearest-building.
         EffectBlock<Building> ChooseTarget => s => {
