@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // Mesh visual effects for a unit: tint, a colour blink, and a shatter-into-pieces explosion.
     public class MeshFX : SpokeBehaviour {
 
         [Header("References")]
@@ -25,10 +26,15 @@ namespace Spoke.Examples.BaseDefence {
         Trigger shatterCommand = Trigger.Create();
         Trigger restoreCommand = Trigger.Create();
 
+        /// <summary>True once the shatter animation has finished and the pieces are hidden.</summary>
         public ISignal<bool> IsShattered => isShattered;
+        /// <summary>Sets a persistent colour tint on the mesh.</summary>
         public void SetTint(Color colour) => tint.Set(colour);
+        /// <summary>Flashes the mesh to a colour, then fades back.</summary>
         public void Blink(Color colour) => blinkCommand.Invoke(colour);
+        /// <summary>Blasts the mesh apart into pieces, then hides them.</summary>
         public void Shatter() => shatterCommand.Invoke();
+        /// <summary>Cancels any effects and returns the mesh to its original state.</summary>
         public void Restore() => restoreCommand.Invoke();
 
         readonly struct Piece {
