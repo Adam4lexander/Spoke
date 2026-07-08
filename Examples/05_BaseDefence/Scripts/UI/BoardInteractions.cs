@@ -17,12 +17,14 @@ namespace Spoke.Examples.BaseDefence {
         [SerializeField] UState<Color> invalidPlacementColour = new(Color.red);
         [SerializeField] Material lineMaterial;
 
+        State<IHoverable> hovering = new();
+        State<Circle> hoveringCircle = new();
+
+        /// <summary>The build item currently being placed, or null when not placing.</summary>
         public State<BuildItem> Placing { get; } = new();
 
-        // The unit under the mouse; null when nothing hoverable is there.
-        State<IHoverable> hovering = new();
+        /// <summary>The unit under the mouse, or null when nothing hoverable is there.</summary>
         public ISignal<IHoverable> Hovering => hovering;
-        State<Circle> hoveringCircle = new();
 
         protected override void Init(EffectBuilder s) {
             var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
@@ -35,7 +37,7 @@ namespace Spoke.Examples.BaseDefence {
                     return p != null && GameState.LevelBounds.Contains(p.Value);
                 });
 
-                // The grid's whole spanning tree — shown unless a single unit's chain is in
+                // The grid's whole spanning tree, shown unless a single unit's chain is in
                 // focus, or a placement is in progress.
                 s.Effect(s => {
                     if (s.D(hovering) != null || s.D(Placing) != null) return;
@@ -85,7 +87,7 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         // The placement experience: power coverage and the placed type's own coverage show while
-        // choosing a spot, and the building's footprint follows the mouse — recoloured by whether
+        // choosing a spot, and the building's footprint follows the mouse, recoloured by whether
         // it can go there (touching provider coverage, clear of other units). A click on a valid
         // spot buys and places the building.
         EffectBlock PlaceBuilding(BuildItem item) => s => {

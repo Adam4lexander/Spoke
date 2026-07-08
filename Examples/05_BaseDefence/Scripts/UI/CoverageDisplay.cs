@@ -24,18 +24,19 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(DrawCircles(circles, colour, material));
         };
 
+        // Draws the outline of a single fixed circle.
         public static EffectBlock Draw(Circle circle, ISignal<Color> colour, Material material) => s => {
             var circles = State.Create(new List<Circle> { circle });
             s.Effect(DrawCircles(circles, colour, material));
         };
 
+        // Draws the outline of a single circle that can move or resize.
         public static EffectBlock Draw(ISignal<Circle> circle, ISignal<Color> colour, Material material) => s => {
             var circles = s.Memo(s => new List<Circle> { s.D(circle) });
             s.Effect(DrawCircles(circles, colour, material));
         };
 
         static EffectBlock DrawCircles(ISignal<List<Circle>> circles, ISignal<Color> colour, Material material) => s => {
-
             var go = new GameObject("CoverageDisplay");
             go.transform.position = Vector3.up * 0.01f;
             s.Effect("WithSafeDestroy", WithSafeDestroy(go));

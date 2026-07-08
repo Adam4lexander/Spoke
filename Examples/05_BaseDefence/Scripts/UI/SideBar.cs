@@ -4,6 +4,7 @@ using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A buildable item in the sidebar: the prefab to place, plus its button and hotkey.
     [Serializable]
     public class BuildItem {
         public Building Prefab;
@@ -148,7 +149,7 @@ namespace Spoke.Examples.BaseDefence {
                 s.Phase(isPlacing, s => {
                     var isPlacingThis = s.Memo(s => s.D(interactions.Placing) == item);
 
-                    // Only the selected button stays live — it becomes the cancel affordance.
+                    // Only the selected button stays live, becoming the cancel affordance.
                     s.Effect(s => item.Button.interactable = s.D(isPlacingThis));
 
                     s.Phase(isPlacingThis, s => {

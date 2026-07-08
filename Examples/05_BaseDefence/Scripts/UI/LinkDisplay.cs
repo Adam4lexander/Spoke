@@ -7,7 +7,7 @@ namespace Spoke.Examples.BaseDefence {
     // GameObject + mesh + material, all torn down on cleanup, and rebuilds whenever the segments change.
     public static class LinkDisplay {
 
-        // Shows the node's parent chain up to the root — a line from each node to the provider
+        // Shows the node's parent chain up to the root: a line from each node to the provider
         // powering it. Re-walks whenever any parent along the chain changes.
         public static EffectBlock Draw(PowerNode start, ISignal<Color> colour, Material material) => s => {
             var segments = s.Memo(s => {
@@ -24,7 +24,7 @@ namespace Spoke.Examples.BaseDefence {
             s.Effect(DrawSegments(segments, colour, material));
         };
 
-        // Shows every node's link to the provider powering it — the grid's whole spanning tree.
+        // Shows every node's link to the provider powering it: the grid's whole spanning tree.
         public static EffectBlock DrawAll(ISignal<Color> colour, Material material) => s => {
             var segments = s.Memo(s => {
                 var list = new List<(Vector3 from, Vector3 to)>();
@@ -40,7 +40,6 @@ namespace Spoke.Examples.BaseDefence {
         };
 
         static EffectBlock DrawSegments(ISignal<List<(Vector3 from, Vector3 to)>> segments, ISignal<Color> colour, Material material) => s => {
-
             var go = new GameObject("LinkDisplay");
             go.transform.position = Vector3.up * 0.01f;
             s.Effect("WithSafeDestroy", WithSafeDestroy(go));

@@ -3,6 +3,9 @@ using UnityEngine.UI;
 
 namespace Spoke.Examples.BaseDefence {
 
+    // A fractional bar that shrinks and recolours (healthy/moderate/severe) with its Fraction, and
+    // billboards to the camera while playing. Runs in edit mode too ([ExecuteAlways]), so its
+    // colours and fill can be tuned live in the inspector.
     [ExecuteAlways]
     public class HealthBar : SpokeBehaviour {
 
@@ -17,6 +20,7 @@ namespace Spoke.Examples.BaseDefence {
         [Header("Inputs")]
         [SerializeField] UState<float> fraction = new(1f);
 
+        /// <summary>The fill amount, 0 to 1, driving the bar's size and colour.</summary>
         public IState<float> Fraction => fraction;
 
         protected override void Init(EffectBuilder s) {
