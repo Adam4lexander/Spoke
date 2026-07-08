@@ -3,9 +3,12 @@ using UnityEngine;
 
 namespace Spoke.Examples.BaseDefence {
 
+    /// <summary>A center-and-radius circle on the XZ (ground) plane.</summary>
     public readonly struct Circle : IEquatable<Circle> {
 
+        /// <summary>World-space anchor, usually a transform.position. Only X and Z define the circle; Y is ignored by Overlaps.</summary>
         public readonly Vector3 Center;
+        /// <summary>Radius, in world units.</summary>
         public readonly float Radius;
 
         public Circle(Vector3 center, float radius) {
@@ -13,11 +16,15 @@ namespace Spoke.Examples.BaseDefence {
             Radius = radius;
         }
 
+        /// <summary>True when the two circles intersect or one contains the other, measured on the XZ plane. Exactly touching doesn't count.</summary>
         public bool Overlaps(Circle other) {
             var reach = Radius + other.Radius;
-            return (Center - other.Center).sqrMagnitude < reach * reach;
+            var dx = Center.x - other.Center.x;
+            var dz = Center.z - other.Center.z;
+            return dx * dx + dz * dz < reach * reach;
         }
 
+        /// <summary>Draws the outline flat on the XZ plane, for use from OnDrawGizmos.</summary>
         public void DrawGizmo(Color colour) {
             const int segments = 48;
             var previousColour = Gizmos.color;
