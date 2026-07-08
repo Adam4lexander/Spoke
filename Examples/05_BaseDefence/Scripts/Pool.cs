@@ -23,7 +23,7 @@ namespace Spoke.Examples.BaseDefence {
         Dictionary<GameObject, Stack<GameObject>> idle = new();
         Dictionary<GameObject, GameObject> origin = new();
 
-        /// <summary>Returns an active instance of prefab — reused from its idle pool if one's free, otherwise freshly instantiated.</summary>
+        /// <summary>Returns an active instance of prefab, reused from its idle pool if one's free, otherwise freshly instantiated.</summary>
         public static GameObject Spawn(GameObject prefab, Vector3 pos, Quaternion rot = default) {
             var pool = Instance;
             if (pool.idle.TryGetValue(prefab, out var stack) && stack.Count > 0) {
@@ -53,7 +53,7 @@ namespace Spoke.Examples.BaseDefence {
             if (prewarm.Length == 0) return;
 
             // Instantiate under an inactive parent so prewarmed instances never run Awake/OnEnable
-            // until they're actually spawned — prewarm pre-allocates, it must not run game logic.
+            // until they're actually spawned. Prewarm pre-allocates; it must not run game logic.
             var nursery = new GameObject($"{name} (prewarm)");
             nursery.SetActive(false);
             foreach (var entry in prewarm) {

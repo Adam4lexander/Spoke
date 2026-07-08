@@ -13,10 +13,10 @@ namespace Spoke.Examples.BaseDefence {
     // ----------------------------------------------------------------------------------------
     //  var world = new CollisionWorld<Building>();          // owners are type T
     //
-    //  // Collider — a detectable circle, bound to an owner. Re-sampled each tick.
+    //  // Collider: a detectable circle, bound to an owner. Re-sampled each tick.
     //  var collider = world.AddCollider(building, () => new Circle(pos, radius));
     //
-    //  // Sensor — detects colliders, but is itself undetectable.
+    //  // Sensor: detects colliders, but is itself undetectable.
     //  var sensor = world.AddSensor(() => new Circle(pos, range));
     //
     //  // Overlaps: what it touches now, nearest-first.
@@ -54,7 +54,7 @@ namespace Spoke.Examples.BaseDefence {
         readonly float cellSize;
         readonly Action step;
 
-        /// <summary>cellSize is the grid bucket size — set it near your typical query radius.</summary>
+        /// <summary>cellSize is the grid bucket size; set it near your typical query radius.</summary>
         public CollisionWorld(float cellSize = 4f) {
             this.cellSize = cellSize;
             step = Step;
