@@ -47,7 +47,7 @@ namespace Spoke.Examples.BaseDefence {
                 Renderer = renderer;
                 HomePosition = renderer.transform.localPosition;
                 HomeRotation = renderer.transform.localRotation;
-                BaseColour = renderer.sharedMaterial.color;
+                BaseColour = renderer.sharedMaterial.GetColor("_BaseColor");
             }
         }
 
@@ -83,7 +83,7 @@ namespace Spoke.Examples.BaseDefence {
                     var c = Color.Lerp(piece.BaseColour * t, flashRGB, f.a);
                     c.a = piece.BaseColour.a;
                     piece.Renderer.GetPropertyBlock(block);
-                    block.SetColor("_Color", c);
+                    block.SetColor("_BaseColor", c);
                     piece.Renderer.SetPropertyBlock(block);
                 }
             });
