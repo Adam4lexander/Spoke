@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 - 2026-07-09
+
+This release brings a full test suite for `Spoke.Runtime` and `Spoke.Reactive`, and a complete game example demonstrating how Spoke is intended to be used in a real project. Along with several tweaks and bug fixes.
+
+ChangeList:
+
+- Max size limit for Tree Trace in https://github.com/Adam4lexander/Spoke/pull/11
+- Unit tests in https://github.com/Adam4lexander/Spoke/pull/12
+- Improve examples in https://github.com/Adam4lexander/Spoke/pull/13
+- `Effect<T>` returning null should default value in https://github.com/Adam4lexander/Spoke/pull/14
+- Fix SpokeSingleton timing issue on teardown in https://github.com/Adam4lexander/Spoke/pull/15
+- fix runtime tree oscillation guard in https://github.com/Adam4lexander/Spoke/pull/16
+- Fix IsPlaying signal in https://github.com/Adam4lexander/Spoke/pull/17
+- Replace UnitySpokeLogger with UnityContext in https://github.com/Adam4lexander/Spoke/pull/18
+- SpokeSingleton has OverrideAutoInstantiate configuration in https://github.com/Adam4lexander/Spoke/pull/19
+- Base Defence, full game example in https://github.com/Adam4lexander/Spoke/pull/20
+- Update examples to URP in https://github.com/Adam4lexander/Spoke/pull/21
+
 ## 1.2.2 - 2025-12-27
 
 ChangeList:
