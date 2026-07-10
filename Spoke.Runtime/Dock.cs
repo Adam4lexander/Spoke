@@ -7,16 +7,22 @@ namespace Spoke {
     /// An Epoch that has a dynamic collection of keyed attachments.
     /// They can attach and detach epochs at any time, outside the normal mutation windows: Init and Tick.
     /// </summary>
-    public sealed class Dock : Epoch, Dock.Introspect {
+    public sealed class Dock : Epoch, Dock.Friend, Dock.Introspect {
+
+        new internal interface Friend {
+            void Compact();
+        }
 
         new internal interface Introspect {
             List<Epoch> GetChildren(List<Epoch> storeIn = null);
         }
 
-        // Attached epochs are stored in this dictionary, instead of Epoch's normal attachment list.
-        Dictionary<object, Epoch> dynamicChildren = new();
+        // Attached epochs are stored in slots, in attach order, instead of Epoch's normal
+        // attachment list. A slot's index is the child's tree-coordinate within the dock.
+        // Dropped children leave a null slot behind, reclaimed by Compact.
+        List<KeyValuePair<object, Epoch>> childSlots = new();
+        Dictionary<object, int> slotByKey = new();
         bool isDetaching;
-        long childIndex;  // Monotonically increasing index for assigning tree-coords to attachments
 
         public Dock() {
             Name = "Dock";
@@ -41,10 +47,15 @@ namespace Spoke {
             // Push a stack frame to reflect the docking action
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
             Drop(key);  // Detach existing epoch at the key, if any
-            dynamicChildren.Add(key, epoch);
-            // Monotonically increasing index ensures children ticks ordered by attach-time
+            // Sweep once the slots outgrow the packed coordinate range and at least half are reclaimable
+            if (childSlots.Count > 255 && slotByKey.Count * 2 <= childSlots.Count) {
+                (this as Friend).Compact();
+            }
+            // Slot order matches attach order, so children tick ordered by attach-time
+            slotByKey.Add(key, childSlots.Count);
+            childSlots.Add(new(key, epoch));
             var childTicker = (this as Epoch.Friend).GetTicker();
-            (epoch as Epoch.Friend).Attach(this, childIndex++, childTicker, null);
+            (epoch as Epoch.Friend).Attach(this, childSlots.Count - 1, childTicker, null);
             (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             return epoch;
         }
@@ -54,32 +65,49 @@ namespace Spoke {
         /// If no epoch is bound to the key, this is a no-op.
         /// </summary>
         public void Drop(object key) {
-            if (!dynamicChildren.TryGetValue(key, out var child)) return;
+            if (!slotByKey.TryGetValue(key, out var slot)) return;
+            var child = childSlots[slot].Value;
             // If the child is mid-execution (dropping or re-keying itself), defer its detach until it
             // finishes so its full teardown still runs; an idle child detaches immediately.
             (child as Epoch.Friend).GetControlHandle().OnPopSelf((child as Epoch.Friend).Detach);
-            dynamicChildren.Remove(key);
+            childSlots[slot] = default;
+            slotByKey.Remove(key);
+            if (slotByKey.Count == 0) childSlots.Clear();
+        }
+
+        // Sweep out dropped slots, renumbering the survivors so new attachments pack again
+        void Friend.Compact() {
+            var write = 0;
+            for (var read = 0; read < childSlots.Count; read++) {
+                var slot = childSlots[read];
+                if (slot.Value == null) continue;
+                childSlots[write] = slot;
+                slotByKey[slot.Key] = write;
+                (slot.Value as Epoch.Friend).Reindex(write);
+                write++;
+            }
+            childSlots.RemoveRange(write, childSlots.Count - write);
         }
 
         protected override TickBlock Init(EpochBuilder s) {
             // When the dock is detaching, it will drop all its children, in reverse order of attachment.
             s.OnCleanup(() => {
                 isDetaching = true;
-                var children = (this as Introspect).GetChildren();
-                for (int i = children.Count - 1; i >= 0; i--) {
-                    (children[i] as Epoch.Friend).Detach();
+                for (var i = childSlots.Count - 1; i >= 0; i--) {
+                    if (childSlots[i].Value == null) continue;
+                    (childSlots[i].Value as Epoch.Friend).Detach();
                 }
-                dynamicChildren.Clear();
+                childSlots.Clear();
+                slotByKey.Clear();
             });
             return null;
         }
 
         List<Epoch> Introspect.GetChildren(List<Epoch> storeIn) {
             storeIn = storeIn ?? new List<Epoch>();
-            foreach (var child in dynamicChildren) {
-                storeIn.Add(child.Value);
+            foreach (var slot in childSlots) {
+                if (slot.Value != null) storeIn.Add(slot.Value);
             }
-            storeIn.Sort((a, b) => a.CompareTo(b));
             return storeIn;
         }
     }

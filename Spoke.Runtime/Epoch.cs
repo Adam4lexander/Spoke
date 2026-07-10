@@ -20,6 +20,7 @@ namespace Spoke {
         // Internal methods used by the runtime/ticker only.
         internal interface Friend {
             void Attach(Epoch parent, long index, Ticker ticker, IEnumerable<object> services);
+            void Reindex(long index);
             void Tick();
             void Detach();
             SpokeRuntime.Handle GetControlHandle();
@@ -128,6 +129,26 @@ namespace Spoke {
                 }
             };
             Init(services);
+        }
+
+        // Move to a new index within the parent. Used by Dock to compact its index space.
+        void Friend.Reindex(long index) {
+            coordIndex = index;
+            RefreshCoords();
+        }
+
+        // Recompute the packed coordinates from the parent chain, for this epoch and its
+        // descendants. Relative order among live epochs is unchanged.
+        void RefreshCoords() {
+            coords = parent != null ? parent.coords.Extend(coordIndex) : default;
+            tickCursor = tickIndex >= 0 ? coords.Extend(tickIndex) : coords;
+            foreach (var evt in attachEvents) {
+                if (evt.Type == AttachRecord.Kind.Call) {
+                    (evt.AsObj as Epoch).RefreshCoords();
+                }
+            }
+            // Dock children live outside the attachment list; the dock renumbers them as it refreshes
+            if (this is Dock dock) (dock as Dock.Friend).Compact();
         }
 
         // Attach-time initialization. Builds the initial attachment list and arms first tick.
@@ -391,5 +412,4 @@ namespace Spoke {
         public void RequestTick()
             => s.RequestTick();
     }
-
 }
