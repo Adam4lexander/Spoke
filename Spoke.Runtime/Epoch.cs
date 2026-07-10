@@ -42,14 +42,20 @@ namespace Spoke {
 
         // Ordered attachments declared during Init/Tick.
         List<AttachRecord> attachEvents = new();
-        // Coordinate in the epoch tree
-        TreeCoords coords;
-        // Coordinate from where Tick attachments start. Used to order epochs requesting a tick
-        TreeCoords tickCursor;
+
+        // Execution-order coordinates. coords/tickCursor are the packed fast path; coordIndex,
+        // depth and tickIndex describe the same coordinates via the parent chain, for when
+        // packing overflows (see CompareCursors).
+        PackedTreeCoords128 coords;     // coordinate in the epoch tree
+        PackedTreeCoords128 tickCursor; // coordinate from where Tick attachments start; orders epochs requesting a tick
+        long coordIndex;                // this epoch's coordinate component: its index within its parent
+        int depth;                      // number of coordinate components (root = 0)
+        int tickIndex = -1;             // where Tick attachments start: attachEvents.Count at end of Init (-1 until then)
+
         Epoch parent;
-        int attachIndex; // parent attachment index where this was added
-        Ticker ticker;   // nearest ancestor ticker (or null at root)
-        SpokeTree tree;  // root of the tree this epoch belongs to
+        int importIndex;     // last attachment in the parent visible to imports (lexical scoping)
+        Ticker ticker;       // nearest ancestor ticker (or null at root)
+        SpokeTree tree;      // root of the tree this epoch belongs to
         TickBlock tickBlock; // delegate returned by Init, called on each tick
         SpokeRuntime.Handle controlHandle;
         Action _requestTick; // bound to nearest ticker/runtime
@@ -68,7 +74,26 @@ namespace Spoke {
             if (tree != other.tree) {
                 return tree.CompareTo(other.tree);
             }
-            return tickCursor.CompareTo(other.tickCursor);
+            if (tickCursor.IsValid && other.tickCursor.IsValid) {
+                return tickCursor.CompareTo(other.tickCursor);
+            }
+            return CompareCursors(this, other);
+        }
+
+        // Fallback for coordinates too deep/wide to pack. Walks the parent chains to find
+        // the level where the two cursors diverge, and compares their components there.
+        static int CompareCursors(Epoch a, Epoch b) {
+            if (a == b) return 0;
+            var lenA = a.depth;
+            var lenB = b.depth;
+            long componentA = a.tickIndex;
+            long componentB = b.tickIndex;
+            for (var d = lenA; d > lenB; d--) { componentA = a.coordIndex; a = a.parent; }
+            for (var d = lenB; d > lenA; d--) { componentB = b.coordIndex; b = b.parent; }
+            while (a != b) { componentA = a.coordIndex; componentB = b.coordIndex; a = a.parent; b = b.parent; }
+            var cmp = componentA.CompareTo(componentB);
+            // Sibling components never tie, so a tie means one cursor is a prefix of the other; prefixes order first
+            return cmp != 0 ? cmp : lenA.CompareTo(lenB);
         }
 
         // Roll back attachments to index i (inclusive). Used by Tick and Detach.
@@ -86,7 +111,9 @@ namespace Spoke {
 
         void Friend.Attach(Epoch parent, long index, Ticker ticker, IEnumerable<object> services) {
             this.parent = parent;
-            attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
+            coordIndex = index;
+            importIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
+            depth = parent != null ? parent.depth + 1 : 0;
             coords = tickCursor = parent != null ? parent.coords.Extend(index) : default;
             this.ticker = ticker;
             tree = parent != null ? parent.tree : this as SpokeTree;
@@ -116,7 +143,8 @@ namespace Spoke {
                 // User-defined Init yields a TickBlock.
                 tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
                 // Tick attachments start after everything added during Init.
-                tickCursor = coords.Extend(attachEvents.Count);
+                tickIndex = attachEvents.Count;
+                tickCursor = coords.Extend(tickIndex);
             } catch (Exception e) {
                 if (e is SpokeException se) {
                     if (!se.SkipMarkFaulted) Fault = se;
@@ -141,7 +169,7 @@ namespace Spoke {
             if (IsDetached) return;
             isPending = false;
             controlHandle = (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Tick, this));
-            DetachFrom((int)tickCursor.Tail);
+            DetachFrom(tickIndex);
             try {
                 tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this)));
             } catch (Exception e) {
@@ -275,7 +303,7 @@ namespace Spoke {
             public bool TryImport<T>(out T obj) {
                 obj = default(T);
                 var startIndex = owner.attachEvents.Count - 1;
-                for (var anc = owner; anc != null; startIndex = anc.attachIndex, anc = anc.parent) {
+                for (var anc = owner; anc != null; startIndex = anc.importIndex, anc = anc.parent) {
                     for (var i = startIndex; i >= 0; i--) {
                         var evt = anc.attachEvents[i];
                         if (evt.Type == AttachRecord.Kind.Export && evt.AsObj is T o) {
