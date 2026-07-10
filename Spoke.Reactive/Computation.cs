@@ -46,6 +46,7 @@ namespace Spoke {
         HashSet<ITrigger> seen = new HashSet<ITrigger>();
         List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
+        List<Action> slotCallbacks = new List<Action>();
         public int depIndex;
 
         public DependencyTracker(Action schedule) {
@@ -54,7 +55,8 @@ namespace Spoke {
 
         public void AddStatic(ITrigger trigger) {
             if (!seen.Add(trigger)) return;
-            staticHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(-1))));
+            // Static dependencies are never stale; schedule directly
+            staticHandles.Add((trigger, trigger.Subscribe(schedule)));
         }
 
         public void BeginDynamic() {
@@ -91,9 +93,15 @@ namespace Spoke {
         }
 
         // Dependencies may fire while we're in the middle of refreshing them
-        // Constructs a closure to capture the index at the time of subscription
+        // The callback captures the slot index at the time of subscription
         // The index tells us if the dependency is valid or stale when it fires
-        Action ScheduleFromIndex(int index) 
-            => () => { if (index < depIndex) schedule(); }; 
+        // Callbacks are cached per slot, so rebinding a slot doesn't allocate
+        Action ScheduleFromIndex(int index) {
+            while (slotCallbacks.Count <= index) {
+                var i = slotCallbacks.Count;
+                slotCallbacks.Add(() => { if (i < depIndex) schedule(); });
+            }
+            return slotCallbacks[index];
+        }
     }
 }
