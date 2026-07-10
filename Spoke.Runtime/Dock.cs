@@ -9,21 +9,21 @@ namespace Spoke {
     /// </summary>
     public sealed class Dock : Epoch, Dock.Introspect {
 
-        new internal interface Introspect { 
-            List<Epoch> GetChildren(List<Epoch> storeIn = null); 
+        new internal interface Introspect {
+            List<Epoch> GetChildren(List<Epoch> storeIn = null);
         }
-        
+
         // Attached epochs are stored in this dictionary, instead of Epoch's normal attachment list.
         Dictionary<object, Epoch> dynamicChildren = new();
         bool isDetaching;
         long childIndex;  // Monotonically increasing index for assigning tree-coords to attachments
 
-        public Dock() { 
-            Name = "Dock"; 
+        public Dock() {
+            Name = "Dock";
         }
 
-        public Dock(string name) { 
-            Name = name; 
+        public Dock(string name) {
+            Name = name;
         }
 
         /// <summary>
@@ -43,9 +43,8 @@ namespace Spoke {
             Drop(key);  // Detach existing epoch at the key, if any
             dynamicChildren.Add(key, epoch);
             // Monotonically increasing index ensures children ticks ordered by attach-time
-            var childCoords = Coords.Extend(childIndex++);
             var childTicker = (this as Epoch.Friend).GetTicker();
-            (epoch as Epoch.Friend).Attach(this, childCoords, childTicker, null);
+            (epoch as Epoch.Friend).Attach(this, childIndex++, childTicker, null);
             (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             return epoch;
         }
@@ -80,7 +79,7 @@ namespace Spoke {
             foreach (var child in dynamicChildren) {
                 storeIn.Add(child.Value);
             }
-            storeIn.Sort((a, b) => a.Coords.CompareTo(b.Coords));
+            storeIn.Sort((a, b) => a.CompareTo(b));
             return storeIn;
         }
     }
