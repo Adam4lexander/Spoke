@@ -46,17 +46,22 @@ namespace Spoke {
             }
             // Push a stack frame to reflect the docking action
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
-            Drop(key);  // Detach existing epoch at the key, if any
-            // Sweep once the slots outgrow the packed coordinate range and at least half are reclaimable
-            if (childSlots.Count > 255 && slotByKey.Count * 2 <= childSlots.Count) {
-                (this as Friend).Compact();
+            try {
+                Drop(key);  // Detach existing epoch at the key, if any
+                // Sweep once the slots outgrow the packed coordinate range and at least half are reclaimable
+                if (childSlots.Count > 255 && slotByKey.Count * 2 <= childSlots.Count) {
+                    (this as Friend).Compact();
+                }
+                // Slot order matches attach order, so children tick ordered by attach-time
+                slotByKey.Add(key, childSlots.Count);
+                childSlots.Add(new(key, epoch));
+                var childTicker = (this as Epoch.Friend).GetTicker();
+                // The child is slotted before Attach, so if its Init throws it stays docked
+                // (faulted), and its partial cleanup still runs on Drop or dock detach.
+                (epoch as Epoch.Friend).Attach(this, childSlots.Count - 1, childTicker, null);
+            } finally {
+                (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             }
-            // Slot order matches attach order, so children tick ordered by attach-time
-            slotByKey.Add(key, childSlots.Count);
-            childSlots.Add(new(key, epoch));
-            var childTicker = (this as Epoch.Friend).GetTicker();
-            (epoch as Epoch.Friend).Attach(this, childSlots.Count - 1, childTicker, null);
-            (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
             return epoch;
         }
 
