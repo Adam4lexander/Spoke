@@ -86,6 +86,27 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void CompareTo_OrdersBySpawnOrder_WhileSpawnedTreeIsBoosted() {
+            // The scheduling boost a nested-spawned tree gets must not affect CompareTo
+            SpokeTree<LambdaEpoch> inner = null;
+            var cmpDuringBoost = 0;
+            LambdaEpoch main = null;
+
+            main = new LambdaEpoch(s => s => {
+                if (inner != null) return;
+                inner = SpokeTree.Spawn("Inner", new LambdaEpoch(s => null));
+                cmpDuringBoost = (inner as Epoch).CompareTo(main);
+            });
+
+            using var outer = SpokeTree.Spawn("Outer", main);
+            try {
+                Assert.Greater(cmpDuringBoost, 0, "Inner spawned later, so it must order after Outer");
+            } finally {
+                inner?.Dispose();
+            }
+        }
+
+        [Test]
         public void NestedTreeSpawn_DuringFlush_FlushesNestedInScope() {
             var log = new List<string>();
             SpokeTree<LambdaEpoch> inner = null;

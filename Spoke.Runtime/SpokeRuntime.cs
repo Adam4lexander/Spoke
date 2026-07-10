@@ -19,7 +19,7 @@ namespace Spoke {
             void Release();
             void Schedule(SpokeTree tree);
             void TickTree(SpokeTree tree);
-            void TryScopedLayerBoost(SpokeTree tree, Action onPopped);
+            void TryScopedLayerBoost(SpokeTree tree);
         }
 
         // Intended for this to become a ThreadStatic in the future. So trees can be driven on multiple threads.
@@ -44,8 +44,33 @@ namespace Spoke {
         /// <summary>Monotonically increasing timestamp, incremented on each stack frame pushed.</summary>
         public long TimeStamp { get; private set; }
 
+        // Flush-scheduling priority: same as SpokeTree.CompareTo, except boosted trees outrank
+        // unboosted trees of the same layer, so TryFlush's PeekMin sees a newly spawned tree ahead
+        // of older pending trees and can grant it a nested flush.
+        int SchedulingOrder(SpokeTree a, SpokeTree b) {
+            if (a.FlushLayer != b.FlushLayer) {
+                return a.FlushLayer.CompareTo(b.FlushLayer);
+            }
+            var aBoosted = IsBoosted(a);
+            var bBoosted = IsBoosted(b);
+            if (aBoosted != bBoosted) {
+                return aBoosted ? -1 : 1;
+            }
+            return a.CompareTo(b);
+        }
+
         // Priority queue of trees pending flush
-        Heap<SpokeTree> scheduledTrees = new((a, b) => a.CompareTo(b));
+        Heap<SpokeTree> scheduledTrees;
+
+        // Trees spawned in the current flush window, which may flush nested in equal flush layers
+        HashSet<SpokeTree> boostedTrees = new HashSet<SpokeTree>();
+
+        SpokeRuntime() {
+            scheduledTrees = new Heap<SpokeTree>(SchedulingOrder);
+        }
+
+        bool IsBoosted(SpokeTree tree)
+            => boostedTrees.Count > 0 && boostedTrees.Contains(tree);
 
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
@@ -109,13 +134,13 @@ namespace Spoke {
                     break;
                 }
                 var top = scheduledTrees.PeekMin();
-                var isLayerBoosted = (top as SpokeTree.Friend).IsLayerBoosted();
+                var isLayerBoosted = IsBoosted(top);
                 // Newly spawned trees may flush nested inside trees of equal flush layer
                 if (isLayerBoosted && top.FlushLayer > layer) return;
                 // Or else it must have a higher priority flush layer for nested flush
                 else if (!isLayerBoosted && top.FlushLayer >= layer) return;
 
-                if (prev != null && prev.CompareTo(top) > 0) {
+                if (prev != null && SchedulingOrder(prev, top) > 0) {
                     // The next tree would have been ordered before the prev, an oscillation has happened
                     passCount++;
                 }
@@ -147,19 +172,16 @@ namespace Spoke {
             }
         }
 
-        void Friend.TryScopedLayerBoost(SpokeTree tree, Action onPopped) {
-            // Boosted trees only possible when we're already flushing and the incoming tree's
+        void Friend.TryScopedLayerBoost(SpokeTree tree) {
+            // Boosts are only possible when we're already flushing and the incoming tree's
             // FlushLayer has equal or greater priority than the currently flushing tree.
             // Smaller numbers are higher priority
-            var isPossible = Frames.Count > 0 && tree.FlushLayer <= layer;
-            if (!isPossible) {
-                onPopped();
-                return;
-            }
+            if (Frames.Count == 0 || tree.FlushLayer > layer) return;
             // Incoming tree may eager tick as many times as it wants, up until the frame it was
             // created in is popped from the stack.
+            boostedTrees.Add(tree);
             var topHandle = new Handle(this, frames.Count - 1, versions[versions.Count - 1]);
-            topHandle.OnPopSelf(onPopped);
+            topHandle.OnPopSelf(() => boostedTrees.Remove(tree));
         }
 
         bool HasPending() {
