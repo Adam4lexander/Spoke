@@ -255,7 +255,7 @@ Both patterns are really the same thing, they're lifecycle windows. With Spoke, 
 
 ## 🧰 Requirements
 
-- Unity 2021.3 or later (For Examples)
+- Unity 2022.3 or later (For Examples)
 - No packages, no dependencies
 
 ---
