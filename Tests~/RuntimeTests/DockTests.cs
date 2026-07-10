@@ -265,5 +265,36 @@ namespace Spoke.Tests {
 
             Assert.IsNotNull(caught, "Dock.Call during detaching should throw");
         }
+
+        [Test]
+        public void Call_ChildInitThrows_LeavesRuntimeStackBalanced() {
+            var log = new List<string>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            Assert.Throws<SpokeException>(() => dock.Call("k", new LambdaEpoch(s => {
+                s.OnCleanup(() => log.Add("partial-cleanup"));
+                throw new Exception("boom");
+            })));
+
+            Assert.AreEqual(0, SpokeRuntime.Frames.Count,
+                "the Dock frame must be popped even when the child's Init throws");
+
+            // The faulted child stays docked; replacing its key runs the cleanup it
+            // registered before throwing, and the dock keeps working
+            dock.Call("k", new LambdaEpoch(s => {
+                log.Add("replacement-attached");
+                return s => log.Add("replacement-tick");
+            }));
+            tree.Flush();
+
+            CollectionAssert.AreEqual(
+                new[] { "partial-cleanup", "replacement-attached", "replacement-tick" }, log);
+            Assert.IsNull(tree.Fault);
+        }
     }
 }
