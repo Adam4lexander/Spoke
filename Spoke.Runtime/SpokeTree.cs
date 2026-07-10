@@ -39,8 +39,7 @@ namespace Spoke {
                 (this as Ticker.Friend).SetToManual();  // Stops me requesting ticks from Spoke runtime
             } else {
                 command = CommandKind.Flush;            // Auto trees always have command=Flush
-                isLayerBoosted = true;                  // Boosts flush layer priority inside creator's scope
-                (SpokeRuntime.Local as SpokeRuntime.Friend).TryScopedLayerBoost(this, () => isLayerBoosted = false);
+                (SpokeRuntime.Local as SpokeRuntime.Friend).TryScopedLayerBoost(this); // May flush nested in creator's scope
             }
 
             // Reflect the spawn on the virtual stack
@@ -139,11 +138,7 @@ namespace Spoke {
     /// <summary>
     /// Abstract base for the root ticker. 
     /// </summary>
-    public abstract class SpokeTree : Ticker, IDisposable, SpokeTree.Friend {
-
-        new internal interface Friend {
-            bool IsLayerBoosted();
-        }
+    public abstract class SpokeTree : Ticker, IDisposable {
 
         // Convenience spawners. See docs: Spawn (default), SpawnEager (higher priority), SpawnManual (user-driven).
         public static SpokeTree<T> Spawn<T>(T root, params object[] services) where T : Epoch
@@ -170,26 +165,18 @@ namespace Spoke {
         public int FlushLayer { get; protected set; }
 
         protected long TimeStamp = -1;      // capture of SpokeRuntime.Local.TimeStamp at spawn
-        protected bool isLayerBoosted;      // when true, may flush nested in equal flush layers
-
-        bool Friend.IsLayerBoosted()
-            => isLayerBoosted;
 
         /// <summary>
-        /// Defines ordering among trees when the runtime chooses who flushes next.
+        /// Defines the canonical order among trees (see Epoch.CompareTo).
         /// Rules:
         /// 1) FlushLayer: lower first (e.g., eager trees at -1 outrank default 0)
-        /// 2) Boosted bit: boosted trees are serviced before unboosted trees of the same layer
-        /// 3) TimeStamp: FIFO among equals
+        /// 2) TimeStamp: FIFO among equals
         /// </summary>
         public int CompareTo(SpokeTree other) {
             if (FlushLayer != other.FlushLayer) {
                 return FlushLayer.CompareTo(other.FlushLayer);
             }
-            if (isLayerBoosted == other.isLayerBoosted) {
-                return TimeStamp.CompareTo(other.TimeStamp);
-            }
-            return isLayerBoosted ? -1 : 1;
+            return TimeStamp.CompareTo(other.TimeStamp);
         }
 
         /// <summary>
