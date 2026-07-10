@@ -19,7 +19,7 @@ namespace Spoke {
 
         // Internal methods used by the runtime/ticker only.
         internal interface Friend {
-            void Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services);
+            void Attach(Epoch parent, long index, Ticker ticker, IEnumerable<object> services);
             void Tick();
             void Detach();
             SpokeRuntime.Handle GetControlHandle();
@@ -32,8 +32,6 @@ namespace Spoke {
             Epoch GetParent();
         }
 
-        /// <summary>Coordinate in the epoch tree</summary>
-        public TreeCoords Coords { get; private set; }
         public bool IsDetached { get; private set; }
         /// <summary>Non-null if Init/Tick faulted. Faults stop this epoch from requesting ticks.</summary>
         public SpokeException Fault { get; private set; }
@@ -44,11 +42,14 @@ namespace Spoke {
 
         // Ordered attachments declared during Init/Tick.
         List<AttachRecord> attachEvents = new();
-        // Tree coordinate from where Tick attachments start. Used to order epochs requesting a tick
+        // Coordinate in the epoch tree
+        TreeCoords coords;
+        // Coordinate from where Tick attachments start. Used to order epochs requesting a tick
         TreeCoords tickCursor;
         Epoch parent;
         int attachIndex; // parent attachment index where this was added
         Ticker ticker;   // nearest ancestor ticker (or null at root)
+        SpokeTree tree;  // root of the tree this epoch belongs to
         TickBlock tickBlock; // delegate returned by Init, called on each tick
         SpokeRuntime.Handle controlHandle;
         Action _requestTick; // bound to nearest ticker/runtime
@@ -58,7 +59,15 @@ namespace Spoke {
             return Name ?? GetType().Name;
         }
 
+        /// <summary>
+        /// Defines the canonical execution order between any two epochs.
+        /// Epochs in different trees are ordered by their trees (see SpokeTree.CompareTo),
+        /// and epochs in the same tree are ordered by imperative tick order.
+        /// </summary>
         public int CompareTo(Epoch other) {
+            if (tree != other.tree) {
+                return tree.CompareTo(other.tree);
+            }
             return tickCursor.CompareTo(other.tickCursor);
         }
 
@@ -75,11 +84,12 @@ namespace Spoke {
             IsDetached = true;
         }
 
-        void Friend.Attach(Epoch parent, TreeCoords coords, Ticker ticker, IEnumerable<object> services) {
+        void Friend.Attach(Epoch parent, long index, Ticker ticker, IEnumerable<object> services) {
             this.parent = parent;
             attachIndex = parent != null ? parent.attachEvents.Count - 1 : -1;
-            Coords = tickCursor = coords;
+            coords = tickCursor = parent != null ? parent.coords.Extend(index) : default;
             this.ticker = ticker;
+            tree = parent != null ? parent.tree : this as SpokeTree;
             // Route tick requests to nearest ticker; ignore if faulted.
             _requestTick = () => {
                 if (Fault != null || IsDetached || isPending) return;
@@ -106,7 +116,7 @@ namespace Spoke {
                 // User-defined Init yields a TickBlock.
                 tickBlock = Init(new EpochBuilder(new EpochMutations(this)));
                 // Tick attachments start after everything added during Init.
-                tickCursor = Coords.Extend(attachEvents.Count);
+                tickCursor = coords.Extend(attachEvents.Count);
             } catch (Exception e) {
                 if (e is SpokeException se) {
                     if (!se.SkipMarkFaulted) Fault = se;
@@ -250,9 +260,8 @@ namespace Spoke {
                     throw new InvalidOperationException("Tried to attach an epoch which was already attached");
                 }
                 owner.attachEvents.Add(new(AttachRecord.Kind.Call, epoch));
-                var childCoords = owner.Coords.Extend(owner.attachEvents.Count - 1);
                 var childTicker = (owner as Ticker) ?? owner.ticker;
-                (epoch as Friend).Attach(owner, childCoords, childTicker, null);
+                (epoch as Friend).Attach(owner, owner.attachEvents.Count - 1, childTicker, null);
                 return epoch;
             }
 
