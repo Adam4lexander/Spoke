@@ -51,6 +51,56 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Ticker_TicksPending_InTreeCoordOrder_BeyondPackedDepth() {
+            const int Depth = 24; // deeper than packed coords can encode
+            var ticked = new List<int>();
+            var ports = new EpochPorts[Depth];
+
+            LambdaEpoch Chain(int level) => new(s => {
+                ports[level] = s.Ports;
+                if (level + 1 < Depth) s.Call(Chain(level + 1));
+                return s => ticked.Add(level);
+            });
+
+            using var tree = SpokeTree.SpawnManual(new LambdaTicker(s => {
+                var tp = s.Ports;
+                s.OnTick(s => { while (tp.HasPending) s.TickNext(); });
+                return Chain(0);
+            }));
+            tree.Flush();
+            // Init-attached children tick before their parents: deepest level first
+            CollectionAssert.AreEqual(Enumerable.Range(0, Depth).Reverse(), ticked);
+
+            // Re-arm in scrambled order; the drain must still follow tree-coord order
+            ticked.Clear();
+            var rng = new Random(4242);
+            foreach (var i in Enumerable.Range(0, Depth).OrderBy(_ => rng.Next())) ports[i].RequestTick();
+            tree.Flush();
+            CollectionAssert.AreEqual(Enumerable.Range(0, Depth).Reverse(), ticked);
+        }
+
+        [Test]
+        public void Ticker_TicksPending_InTreeCoordOrder_BeyondPackedWidth() {
+            const int N = 300; // attachment indexes past 255 don't fit packed coords
+            var ticked = new List<int>();
+
+            using var tree = SpokeTree.SpawnManual(new LambdaTicker(s => {
+                var ports = s.Ports;
+                s.OnTick(s => { while (ports.HasPending) s.TickNext(); });
+                return new LambdaEpoch(s => {
+                    for (int i = 0; i < N; i++) {
+                        int idx = i;
+                        s.Call(new LambdaEpoch(s => s => ticked.Add(idx)));
+                    }
+                    return null;
+                });
+            }));
+            tree.Flush();
+
+            CollectionAssert.AreEqual(Enumerable.Range(0, N), ticked);
+        }
+
+        [Test]
         public void Ticker_AlwaysTicksLowestPendingCoordFirst_UnderChaoticScheduling() {
             // The strong form of "ticks in tree-coord order": regardless of WHEN or in what ORDER epochs
             // become pending — including epochs re-arming arbitrary others mid-flush — the ticker must

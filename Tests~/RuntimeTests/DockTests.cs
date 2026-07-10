@@ -157,6 +157,72 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Call_UnderHeavyChurn_ChildrenStillTickInAttachOrder() {
+            // Cumulative attach count grows far past the packed coordinate range while only
+            // a few children stay live; ticks must follow attach order the whole way
+            var ticked = new List<int>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            for (int round = 0; round < 200; round++) {
+                for (int k = 0; k < 4; k++) {
+                    int stamp = round * 4 + k;
+                    dock.Call(k, new LambdaEpoch(s => s => ticked.Add(stamp)));
+                }
+                ticked.Clear();
+                tree.Flush();
+                var expected = new[] { round * 4 + 0, round * 4 + 1, round * 4 + 2, round * 4 + 3 };
+                CollectionAssert.AreEqual(expected, ticked, $"attach order broke on round {round}");
+            }
+        }
+
+        [Test]
+        public void Call_UnderHeavyChurn_DescendantsStillTickInTreeCoordOrder() {
+            var ticked = new List<string>();
+            var ports = new Dictionary<string, EpochPorts>();
+            Dock dock = null;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                dock = s.Call(new Dock());
+                return null;
+            }));
+
+            // Three live children, each with a nested child attached in its Init
+            for (int c = 0; c < 3; c++) {
+                var name = $"c{c}";
+                dock.Call(name, new LambdaEpoch(s => {
+                    s.Call(new LambdaEpoch(s => {
+                        ports[name + "-inner"] = s.Ports;
+                        return s => ticked.Add(name + "-inner");
+                    }));
+                    ports[name] = s.Ports;
+                    return s => ticked.Add(name);
+                }));
+            }
+            tree.Flush();
+
+            // Churn a single key far past the packed coordinate range, renumbering the live children
+            for (int i = 0; i < 600; i++) dock.Call("churn", new LambdaEpoch(s => null));
+            dock.Drop("churn");
+            tree.Flush();
+
+            // Rearm everything in scrambled order; ticks must follow tree-coord order
+            ticked.Clear();
+            foreach (var key in new[] { "c1", "c2-inner", "c0", "c1-inner", "c2", "c0-inner" }) {
+                ports[key].RequestTick();
+            }
+            tree.Flush();
+
+            CollectionAssert.AreEqual(
+                new[] { "c0-inner", "c0", "c1-inner", "c1", "c2-inner", "c2" }, ticked,
+                "inner children tick before their parents, parents tick in attach order");
+        }
+
+        [Test]
         public void DockCleanup_DetachesChildren_InReverseAttachOrder() {
             var log = new List<string>();
             Dock dock = null;
