@@ -9,7 +9,6 @@ This page shows how Spoke performs, in terms of CPU usage and GC allocations.
 - [Philosophy](#philosophy)
 - [Scenario 1: Flush Loop Stress Test](#scenario-1-flush-loop-stress-test)
 - [Scenario 2: Forcing GC](#scenario-2-forcing-gc)
-- [Scenario 3: Unstable Dynamic Dependencies](#scenario-3-unstable-dynamic-dependencies)
 - [Allocation Cheat Sheet](#allocation-cheat-sheet)
 
 ---
@@ -134,35 +133,11 @@ GC is allocated when tree branches are rebuilt. The allocation sources are:
 
 ---
 
-## Scenario 3: Unstable Dynamic Dependencies
-
-This is a subtle source of GC worth mentioning.
-
-```csharp
-s.Effect(s => {
-    if (s.D(cond1)) return;
-    if (s.D(cond2)) return;
-    DoSomething();
-});
-```
-
-Imagine this sequence:
-
-- On the first run, `cond1` is `false`, so only `cond1` is bound as a dependency.
-- On the second run, `cond1` is `true`, so `cond2` is bound for the first time.
-
-Between runs, the list of dynamic dependencies changes. For newly bound dependencies, Spoke allocates a small closure to track them, causing a small GC allocation.
-
-If the same dependencies are accessed in the same order across runs, Spoke reuses its previous setup and avoids any new allocations.
-
----
-
 ## Allocation Cheat Sheet
 
 Spoke allocates when you:
 
 - Call `State.Create`, `s.Memo`, `s.Effect`, or similar functions.
-- Change dynamic dependencies on rerun.
 
 It does **not** allocate when you:
 
