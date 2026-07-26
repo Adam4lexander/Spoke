@@ -20,8 +20,7 @@ namespace Spoke {
         }
 
         protected override TickBlock Init(EpochBuilder s) {
-            tracker = new DependencyTracker(s.Ports.RequestTick);
-            s.OnCleanup(() => tracker.Dispose());
+            tracker = s.Use(new DependencyTracker(s.Ports.RequestTick));
             foreach (var trigger in triggers) {
                 tracker.AddStatic(trigger);
             }
