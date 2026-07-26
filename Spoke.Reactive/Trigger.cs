@@ -30,11 +30,11 @@ namespace Spoke {
         public struct Unit { }
 
         /// <summary>Creates a trigger without any event payload</summary>
-        public static Trigger Create() 
+        public static Trigger Create()
             => Create<Unit>();
 
         /// <summary>Creates a trigger with event payload of type T</summary>
-        public static Trigger<T> Create<T>() 
+        public static Trigger<T> Create<T>()
             => new Trigger<T>();
 
         /// <summary>Subscribes the trigger, ignoring payload, returns unsubscribe handle</summary>
@@ -60,30 +60,35 @@ namespace Spoke {
     /// Concrete implementation of Trigger with event payload of type T
     /// </summary>
     public sealed class Trigger<T> : Trigger, ITrigger<T> {
-        SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
-        SpokePool<List<Subscription>> subListPool = SpokePool<List<Subscription>>.Create(l => l.Clear());
-        
+        static SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
+
+        // Subscriptions in subscribe order. Unsubscribing tombstones a slot (nulling its action)
+        // rather than removing it; Compact() sweeps the tombstones out. Dispatches walk their own
+        // copy, so the slots are free to move at any time.
         List<Subscription> subs = new List<Subscription>();
-        Queue<T> events = new Queue<T>(); // Event queue in case of re-entrant invokes
+        List<Subscription> dispatchList;
+        int deadCount;
+
+        Queue<T> events = new Queue<T>();   // Event queue in case of re-entrant invokes
         Action<long> _unsub;
         Action _flush;
-        long idCount = 0; // Monotonically increasing id for subscriptions
+        long idCount = 0;   // Monotonically increasing id for subscriptions
         bool isFlushing;
 
         public Trigger() {
             // Capture Actions once to avoid allocations
             _unsub = Unsub;
-            _flush = Flush; 
+            _flush = Flush;
         }
 
         /// <summary>Subscribes the trigger, without taking payload, returns unsubscribe handle</summary>
         public override SpokeHandle Subscribe(Action action) {
-            return Subscribe(Subscription.Create(idCount++, action));
+            return Subscribe(new Subscription { Id = idCount++, Fn = action });
         }
 
         /// <summary>Subscribes the trigger, taking payload of type T, returns unsubscribe handle</summary>
         public SpokeHandle Subscribe(Action<T> action) {
-            return Subscribe(Subscription.Create(idCount++, action));
+            return Subscribe(new Subscription { Id = idCount++, Fn = action });
         }
 
         /// <summary>
@@ -95,9 +100,9 @@ namespace Spoke {
         }
 
         /// <summary>Invokes the trigger with event payload</summary>
-        public void Invoke(T param) { 
-            events.Enqueue(param); 
-            SpokeRuntime.Batch(_flush); 
+        public void Invoke(T param) {
+            events.Enqueue(param);
+            SpokeRuntime.Batch(_flush);
         }
 
         /// <summary>SpokeHandle.Dispose() is preferred, as it is more efficient</summary>
@@ -110,33 +115,42 @@ namespace Spoke {
             Unsub(action);
         }
 
-        // Flush the event queue, invoking all subscribers for each event
+        // Flush the event queue, dispatching each event to the subscribers
         void Flush() {
             if (isFlushing) return;
             isFlushing = true;
-            while (events.Count > 0) {
-                var evt = events.Dequeue();
-                // Copy subscribers, in case of modifications during invoke
-                var subList = subListPool.Get();
-                foreach (var sub in subs) {
-                    subList.Add(sub);
+            try {
+                while (events.Count > 0) {
+                    Dispatch(events.Dequeue());
                 }
-                foreach (var sub in subList) {
-                    try { 
-                        sub.Invoke(evt); 
-                    } catch (Exception ex) { 
-                        SpokeError.Log("Trigger subscriber error", ex); 
-                    }
-                }
-                subListPool.Return(subList);
+            } finally {
+                isFlushing = false;
+                Compact();
             }
-            isFlushing = false;
+        }
+
+        // Notify the subscribers the trigger had when the dispatch began. The copy fixes that set:
+        // anyone subscribing during the dispatch isn't notified this round, and anyone
+        // unsubscribing during it was still in the set, so is notified anyway.
+        void Dispatch(T evt) {
+            var subList = dispatchList ?? (dispatchList = new List<Subscription>());
+            subList.Clear();        // No-op unless the previous dispatch was cut short
+            subList.AddRange(subs); // Tombstones come along; their null action no-ops in Invoke
+            for (var i = 0; i < subList.Count; i++) {
+                try {
+                    subList[i].Invoke(evt);
+                } catch (Exception ex) {
+                    SpokeError.Log("Trigger subscriber error", ex);
+                }
+            }
+            subList.Clear(); // Also drops the copied action refs, so the copy retains nothing
         }
 
         void Unsub(Delegate action) {
             var idList = longListPool.Get();
-            foreach (var sub in subs) {
-                if (sub.Key == action) {
+            for (var i = 0; i < subs.Count; i++) {
+                var sub = subs[i];
+                if (sub.Fn == action) {
                     idList.Add(sub.Id);
                 }
             }
@@ -146,41 +160,53 @@ namespace Spoke {
             longListPool.Return(idList);
         }
 
+        // Ids ascend with slot order, so the slot can be found by binary search
         protected override void Unsub(long id) {
-            for (int i = 0; i < subs.Count; i++) {
-                if (subs[i].Id == id) { 
-                    subs.RemoveAt(i); 
-                    return; 
-                }
+            var lo = 0;
+            var hi = subs.Count - 1;
+            while (lo <= hi) {
+                var mid = (int)(((uint)lo + (uint)hi) >> 1);
+                var sub = subs[mid];
+                if (sub.Id < id) { lo = mid + 1; continue; }
+                if (sub.Id > id) { hi = mid - 1; continue; }
+                if (sub.Fn == null) return;   // Already unsubscribed
+                sub.Fn = null;  // An in-flight dispatch still holds its own copy
+                subs[mid] = sub;
+                deadCount++;
+                return;
             }
         }
 
+        // Sweep out the tombstoned slots, packing the survivors down
+        void Compact() {
+            // Not worth the walk until the tombstones outnumber the live slots
+            if (deadCount * 2 <= subs.Count) return;
+            var write = 0;
+            for (var read = 0; read < subs.Count; read++) {
+                if (subs[read].Fn == null) continue;
+                subs[write++] = subs[read];
+            }
+            subs.RemoveRange(write, subs.Count - write);
+            deadCount = 0;
+        }
+
         SpokeHandle Subscribe(Subscription sub) {
+            // Nothing else sweeps a trigger that gets subscribed and unsubscribed but never invoked
+            Compact();
             subs.Add(sub);
             return SpokeHandle.Of(sub.Id, _unsub);
         }
 
         // Internal representation of a subscription, either with or without payload
         struct Subscription {
-            public long Id; 
-            Action<T> ActionT; 
-            Action Action;
+            public long Id;
+            public Delegate Fn;     // Action<T> or Action. Null marks an unsubscribed slot
 
-            public static Subscription Create(long id, Action<T> action) {
-                return new Subscription { Id = id, ActionT = action };
-            }
-
-            public static Subscription Create(long id, Action action) {
-                return new Subscription { Id = id, Action = action };
-            }
-            
-            public Delegate Key => ActionT != null ? (Delegate)ActionT : Action;
-            
             public void Invoke(T arg) {
-                if (ActionT != null) {
-                    ActionT(arg);
-                } else {
-                    Action?.Invoke();
+                if (Fn is Action<T> withPayload) {
+                    withPayload(arg);
+                } else if (Fn is Action plain) {
+                    plain();
                 }
             }
         }
