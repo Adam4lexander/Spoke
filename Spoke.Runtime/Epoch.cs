@@ -167,11 +167,7 @@ namespace Spoke {
                 tickIndex = attachEvents.Count;
                 tickCursor = coords.Extend(tickIndex);
             } catch (Exception e) {
-                if (e is SpokeException se) {
-                    if (!se.SkipMarkFaulted) Fault = se;
-                    se.SkipMarkFaulted = false;
-                    throw;
-                }
+                if (e is SpokeException se) throw Fault = se;
                 throw Fault = new SpokeException("Uncaught Exception in Init", e);
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
@@ -194,11 +190,7 @@ namespace Spoke {
             try {
                 tickBlock?.Invoke(new EpochBuilder(new EpochMutations(this)));
             } catch (Exception e) {
-                if (e is SpokeException se) {
-                    if (!se.SkipMarkFaulted) Fault = se;
-                    se.SkipMarkFaulted = false;
-                    throw;
-                }
+                if (e is SpokeException se) throw Fault = se;
                 throw Fault = new SpokeException("Uncaught Exception in Tick", e);
             } finally {
                 (SpokeRuntime.Local as SpokeRuntime.Friend).Pop();
