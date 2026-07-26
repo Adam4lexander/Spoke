@@ -10,6 +10,15 @@ namespace Spoke {
     /// </summary>
     public readonly struct PackedTreeCoords128 : IComparable<PackedTreeCoords128> {
 
+        const int BitsPerIndex = 8;             // one byte per layer
+        const int LayersPerWord = 64 / BitsPerIndex;
+
+        /// <summary>Largest index a layer can encode. Extending past it yields Invalid.</summary>
+        public const int MaxIndex = (1 << BitsPerIndex) - 1;
+
+        /// <summary>Layers the coordinate can hold. Extending a full one yields Invalid.</summary>
+        public const int MaxDepth = LayersPerWord * 2;  // hi and lo
+
         public static PackedTreeCoords128 Invalid => new(0, 0, byte.MaxValue);
 
         readonly ulong hi; // top 8 levels
@@ -26,13 +35,15 @@ namespace Spoke {
 
         /// <summary>The coordinate one layer deeper, at index idx. Invalid if it doesn't fit.</summary>
         public PackedTreeCoords128 Extend(long idx) {
-            if (!IsValid || depth == 16 || idx < 0 || idx > 255) {
+            if (!IsValid || depth == MaxDepth || idx < 0 || idx > MaxIndex) {
                 return Invalid;
             }
-            if (depth < 8) {
-                return new(hi | ((ulong)idx << ((7 - depth) * 8)), lo, (byte)(depth + 1));
+            // Layers fill each word from its most significant byte down, so that comparing the
+            // words as integers compares the layers in order.
+            if (depth < LayersPerWord) {
+                return new(hi | ((ulong)idx << ((LayersPerWord - 1 - depth) * BitsPerIndex)), lo, (byte)(depth + 1));
             }
-            return new(hi, lo | ((ulong)idx << ((15 - depth) * 8)), (byte)(depth + 1));
+            return new(hi, lo | ((ulong)idx << ((MaxDepth - 1 - depth) * BitsPerIndex)), (byte)(depth + 1));
         }
 
         public int CompareTo(PackedTreeCoords128 other) {

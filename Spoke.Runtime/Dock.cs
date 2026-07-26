@@ -10,7 +10,7 @@ namespace Spoke {
     public sealed class Dock : Epoch, Dock.Friend, Dock.Introspect {
 
         new internal interface Friend {
-            void Compact();
+            void Compact(bool reindexAll);
         }
 
         new internal interface Introspect {
@@ -48,9 +48,11 @@ namespace Spoke {
             (SpokeRuntime.Local as SpokeRuntime.Friend).Push(new(SpokeRuntime.FrameKind.Dock, this));
             try {
                 Drop(key);  // Detach existing epoch at the key, if any
-                // Sweep once the slots outgrow the packed coordinate range and at least half are reclaimable
-                if (childSlots.Count > 255 && slotByKey.Count * 2 <= childSlots.Count) {
-                    (this as Friend).Compact();
+                // Sweep once the slots outgrow the packed coordinate range and at least half are
+                // reclaimable. The incoming child takes index childSlots.Count, so this is the
+                // point where the next one stops being packable.
+                if (childSlots.Count > PackedTreeCoords128.MaxIndex && slotByKey.Count * 2 <= childSlots.Count) {
+                    (this as Friend).Compact(reindexAll: false);
                 }
                 // Slot order matches attach order, so children tick ordered by attach-time
                 slotByKey.Add(key, childSlots.Count);
@@ -80,15 +82,21 @@ namespace Spoke {
             if (slotByKey.Count == 0) childSlots.Clear();
         }
 
-        // Sweep out dropped slots, renumbering the survivors so new attachments pack again
-        void Friend.Compact() {
+        // Sweep out dropped slots, renumbering the survivors so new attachments pack again.
+        // Two callers, two jobs:
+        // - Attaching a child only shifts the survivors after a gap, so only they need reindexing.
+        //   Reindexing one is a walk of its whole subtree, so skipping the rest is worth it.
+        // - The dock's own coords moving invalidates every child's, moved or not: reindexAll.
+        void Friend.Compact(bool reindexAll) {
             var write = 0;
             for (var read = 0; read < childSlots.Count; read++) {
                 var slot = childSlots[read];
                 if (slot.Value == null) continue;
-                childSlots[write] = slot;
-                slotByKey[slot.Key] = write;
-                (slot.Value as Epoch.Friend).Reindex(write);
+                if (reindexAll || write != read) {
+                    childSlots[write] = slot;
+                    slotByKey[slot.Key] = write;
+                    (slot.Value as Epoch.Friend).Reindex(write);
+                }
                 write++;
             }
             childSlots.RemoveRange(write, childSlots.Count - write);

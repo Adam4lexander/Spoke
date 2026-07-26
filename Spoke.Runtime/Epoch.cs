@@ -148,7 +148,7 @@ namespace Spoke {
                 }
             }
             // Dock children live outside the attachment list; the dock renumbers them as it refreshes
-            if (this is Dock dock) (dock as Dock.Friend).Compact();
+            if (this is Dock dock) (dock as Dock.Friend).Compact(reindexAll: true);
         }
 
         // Attach-time initialization. Builds the initial attachment list and arms first tick.

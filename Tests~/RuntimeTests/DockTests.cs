@@ -222,6 +222,42 @@ namespace Spoke.Tests {
                 "inner children tick before their parents, parents tick in attach order");
         }
 
+        // A dock's children extend from the dock's own tree-coords. When an outer dock sweeps and
+        // moves an inner dock to a new slot, the inner dock's children have to pick up the new
+        // coords. Everything here stays inside the 256-per-layer packed range, where a stale
+        // coordinate still reads as valid instead of falling back to the parent-chain walk.
+        [Test]
+        public void NestedDock_ChildrenKeepCorrectOrder_AfterOuterDockSweeps() {
+            Dock outer = null;
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                outer = s.Call(new Dock());
+                return null;
+            }));
+
+            for (var i = 0; i < 250; i++) outer.Call($"filler{i}", new LambdaEpoch(s => null));
+
+            Dock inner = null;
+            outer.Call("innerHost", new LambdaEpoch(s => {
+                inner = s.Call(new Dock());
+                return null;
+            }));
+            var innerChild = inner.Call("c", new LambdaEpoch(s => null));
+            var neighbour = outer.Call("neighbour", new LambdaEpoch(s => null));
+
+            Assert.Less(innerChild.CompareTo(neighbour), 0, "starts ordered before the neighbour");
+
+            // Take the slot count past 255 so the dock is willing to sweep, then empty it out
+            for (var i = 0; i < 6; i++) outer.Call($"extra{i}", new LambdaEpoch(s => null));
+            for (var i = 0; i < 250; i++) outer.Drop($"filler{i}");
+            for (var i = 0; i < 6; i++) outer.Drop($"extra{i}");
+
+            // Triggers the sweep, moving innerHost and neighbour down to low slots
+            outer.Call("trigger", new LambdaEpoch(s => null));
+
+            Assert.Less(innerChild.CompareTo(neighbour), 0,
+                "the inner dock's child must still sort before the neighbour");
+        }
+
         [Test]
         public void DockCleanup_DetachesChildren_InReverseAttachOrder() {
             var log = new List<string>();

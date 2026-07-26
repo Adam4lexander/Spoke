@@ -52,6 +52,41 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Trigger_FiresInSubscriptionOrder_WithGapsFromUnsubscribes() {
+            var t = Trigger.Create();
+            var order = new List<int>();
+            var handles = new List<SpokeHandle>();
+            for (var i = 0; i < 200; i++) {
+                var n = i;
+                handles.Add(t.Subscribe(() => order.Add(n)));
+            }
+            for (var i = 0; i < 200; i += 2) handles[i].Dispose();
+
+            t.Invoke();
+
+            var expected = new List<int>();
+            for (var i = 1; i < 200; i += 2) expected.Add(i);
+            CollectionAssert.AreEqual(expected, order);
+            foreach (var h in handles) h.Dispose();
+        }
+
+        // Thousands of subscribe/unsubscribe pairs without an invoke between them
+        [Test]
+        public void Trigger_ChurnedWithoutInvoking_StillDeliversToLiveSubscribers() {
+            var t = Trigger.Create();
+            var hits = 0;
+            using var resident = t.Subscribe(() => hits++);
+            for (var i = 0; i < 5000; i++) {
+                var h = t.Subscribe(() => hits += 100);
+                h.Dispose();
+            }
+
+            t.Invoke();
+
+            Assert.AreEqual(1, hits);
+        }
+
+        [Test]
         public void TriggerT_SubscribeWithPayload_ReceivesPayload() {
             var t = Trigger.Create<int>();
             var seen = -1;
@@ -120,6 +155,74 @@ namespace Spoke.Tests {
             t.Invoke();  // Now both fire
             Assert.AreEqual(3, calls);
             lateSub.Dispose();
+        }
+
+        // The subscriber set is fixed when the dispatch begins. One that an earlier subscriber
+        // unsubscribes mid-dispatch was still in that set, so it fires.
+        [Test]
+        public void Trigger_UnsubscribeDuringInvoke_StillFiresThisRound() {
+            var t = Trigger.Create();
+            var lateFired = 0;
+            SpokeHandle second = default;
+            using var first = t.Subscribe(() => second.Dispose());
+            second = t.Subscribe(() => lateFired++);
+
+            t.Invoke();
+            Assert.AreEqual(1, lateFired);
+
+            t.Invoke();
+            Assert.AreEqual(1, lateFired, "must not fire again on later events");
+        }
+
+        // Unsubscribing during one event still removes the subscriber from the events after it,
+        // including ones already queued by a re-entrant invoke.
+        [Test]
+        public void Trigger_UnsubscribedDuringEarlierEvent_DoesNotFireOnQueuedEvent() {
+            var t = Trigger.Create<int>();
+            var seen = new List<int>();
+            SpokeHandle victim = default;
+            var calls = 0;
+            using var driver = t.Subscribe((int v) => {
+                calls++;
+                if (calls == 1) {
+                    t.Invoke(99);      // queued, dispatched once this one completes
+                    victim.Dispose();
+                }
+            });
+            victim = t.Subscribe((int v) => seen.Add(v));
+
+            t.Invoke(1);
+
+            CollectionAssert.AreEqual(new[] { 1 }, seen);
+        }
+
+        // A subscriber is allowed to unsubscribe others and to subscribe, both while the trigger
+        // is dispatching. The set fixed at dispatch start still gets exactly one call each: the
+        // mass-unsubscribed still fire this round, the mid-dispatch addition doesn't.
+        [Test]
+        public void Trigger_MassUnsubscribeThenSubscribe_DuringDispatch_DeliversToDispatchStartSet() {
+            var t = Trigger.Create();
+            var handles = new List<SpokeHandle>();
+            var survivorsFired = 0;
+            var addedFired = 0;
+
+            // The first subscriber tears down most of the list, then subscribes, all mid-dispatch
+            var first = t.Subscribe(() => {
+                for (var i = 100; i < handles.Count; i++) handles[i].Dispose();
+                handles.Add(t.Subscribe(() => addedFired++));
+            });
+
+            for (var i = 0; i < 1000; i++) {
+                handles.Add(t.Subscribe(() => survivorsFired++));
+            }
+
+            t.Invoke();
+
+            Assert.AreEqual(1000, survivorsFired, "everyone in the dispatch-start set fires, unsubscribed or not");
+            Assert.AreEqual(0, addedFired, "subscribed mid-dispatch, so not in the set");
+
+            first.Dispose();
+            foreach (var h in handles) h.Dispose();
         }
 
         [Test]

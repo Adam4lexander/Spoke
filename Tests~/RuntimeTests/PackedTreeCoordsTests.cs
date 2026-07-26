@@ -46,6 +46,26 @@ namespace Spoke.Tests {
             }
         }
 
+        // The first layers pack into one word and the rest into a second, so ordering has to hold
+        // within each word and across the seam between them.
+        [Test]
+        public void Compare_OrdersCorrectly_AcrossBothPackedWords() {
+            // Diverging at a deep layer, well past the seam
+            var a = Path(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0);
+            var b = Path(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1);
+            Assert.Less(a.CompareTo(b), 0);
+
+            // A divergence in an early layer outranks anything deeper
+            var early = Path(0, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9);
+            var late = Path(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            Assert.Less(early.CompareTo(late), 0);
+
+            // A coord sorts before one that extends it, including right at the seam
+            var atSeam = Path(1, 1, 1, 1, 1, 1, 1, 1);
+            Assert.Less(atSeam.CompareTo(atSeam.Extend(0)), 0);
+            Assert.Less(atSeam.Extend(0).CompareTo(atSeam.Extend(1)), 0);
+        }
+
         [Test]
         public void Extend_UsesFullCapacity_ThenYieldsInvalid() {
             var deep = default(PackedTreeCoords128);
@@ -63,6 +83,12 @@ namespace Spoke.Tests {
         [Test]
         public void Extend_OfInvalid_StaysInvalid() {
             Assert.IsFalse(PackedTreeCoords128.Invalid.Extend(0).IsValid);
+        }
+
+        static PackedTreeCoords128 Path(params long[] indices) {
+            var coord = default(PackedTreeCoords128);
+            foreach (var i in indices) coord = coord.Extend(i);
+            return coord;
         }
     }
 }
