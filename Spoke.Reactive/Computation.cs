@@ -40,34 +40,28 @@ namespace Spoke {
     }
 
     // Manages dynamic trigger subscriptions for a Computation
+    // Dependencies are matched to slots by position, so a run that reads the same dependencies in
+    // the same order rebinds nothing. Reading one twice simply takes two slots
     internal class DependencyTracker : IDisposable {
         Action schedule;
-        HashSet<ITrigger> seen = new HashSet<ITrigger>();
-        List<(ITrigger t, SpokeHandle h)> staticHandles = new List<(ITrigger t, SpokeHandle h)>();
+        List<SpokeHandle> staticHandles = new List<SpokeHandle>();
         List<(ITrigger t, SpokeHandle h)> dynamicHandles = new List<(ITrigger t, SpokeHandle h)>();
         List<Action> slotCallbacks = new List<Action>();
-        public int depIndex;
+        int depIndex;
 
         public DependencyTracker(Action schedule) {
             this.schedule = schedule;
         }
 
         public void AddStatic(ITrigger trigger) {
-            if (!seen.Add(trigger)) return;
-            // Static dependencies are never stale; schedule directly
-            staticHandles.Add((trigger, trigger.Subscribe(schedule)));
+            staticHandles.Add(trigger.Subscribe(schedule));
         }
 
         public void BeginDynamic() {
             depIndex = 0;
-            seen.Clear();
-            foreach (var dep in staticHandles) {
-                seen.Add(dep.t);
-            } 
         }
 
         public void AddDynamic(ITrigger trigger) {
-            if (!seen.Add(trigger)) return;
             if (depIndex >= dynamicHandles.Count) {
                 dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(depIndex))));
             } else if (dynamicHandles[depIndex].t != trigger) {
@@ -85,8 +79,7 @@ namespace Spoke {
         }
 
         public void Dispose() {
-            seen.Clear();
-            foreach (var handle in staticHandles) handle.h.Dispose();
+            foreach (var handle in staticHandles) handle.Dispose();
             foreach (var handle in dynamicHandles) handle.h.Dispose();
             staticHandles.Clear(); dynamicHandles.Clear();
         }
