@@ -75,26 +75,5 @@ namespace Spoke.Tests {
             Assert.Greater(faulty.Fault.StackSnapshot.Count, 0,
                 "Stack snapshot should contain frames captured at fault time");
         }
-
-        [Test]
-        public void SkipMarkFaulted_PreventsMarkingThatLayer_ButLetsPropagationContinue() {
-            Errors.ExpectErrors();
-            var childFaulty = new LambdaEpoch(s => throw new Exception("child-boom"));
-            var middle = new LambdaEpoch(s => {
-                try {
-                    s.Call(childFaulty);
-                } catch (SpokeException se) {
-                    se.SkipMarkFaulted = true;
-                    throw;
-                }
-                return null;
-            });
-
-            using var tree = SpokeTree.SpawnManual(middle);
-
-            Assert.IsNotNull(childFaulty.Fault, "Inner epoch should be faulted");
-            Assert.IsNull(middle.Fault, "Middle with SkipMarkFaulted=true should NOT be marked faulted");
-            Assert.IsNotNull(tree.Fault, "Tree should still be marked (SkipMarkFaulted resets after one layer)");
-        }
     }
 }

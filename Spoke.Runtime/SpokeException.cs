@@ -13,7 +13,6 @@ namespace Spoke {
         // stack trace, and a weakref to the epoch.
         List<SpokeRuntime.Frame> stackSnapshot = new List<SpokeRuntime.Frame>();
         string innerTrace;
-        public bool SkipMarkFaulted; // Epochs may toggle this and rethrow, to avoid marking themselves as faulted.
 
         public ReadOnlyList<SpokeRuntime.Frame> StackSnapshot => new(stackSnapshot);
 
