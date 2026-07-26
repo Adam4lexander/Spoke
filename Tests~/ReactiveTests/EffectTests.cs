@@ -270,6 +270,56 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Effect_ReadsSameSignalTwice_ReRunsOnce() {
+            // Repeat reads of a signal aren't deduped, but the effect still re-runs exactly once per
+            // change: a re-run is scheduled, not counted.
+            var a = State.Create(0);
+            var runs = 0;
+
+            using var tree = SpokeTree.Spawn(new Effect("twice", s => {
+                _ = s.D(a);
+                _ = s.D(a);
+                runs++;
+            }));
+            Assert.AreEqual(1, runs, "sanity: exactly one run on mount");
+
+            a.Set(1);
+            Assert.AreEqual(2, runs, "Two reads of the same signal must still produce ONE re-run");
+
+            a.Set(2);
+            Assert.AreEqual(3, runs);
+        }
+
+        [Test]
+        public void Effect_DependencyReadOrderFlips_BothStayLive() {
+            // Dependencies are re-established in read order on each run, so flipping the order
+            // re-subscribes them. Both signals must still re-run the effect afterwards.
+            var flip = State.Create(false);
+            var a = State.Create(0);
+            var b = State.Create(0);
+            var runs = 0;
+
+            using var tree = SpokeTree.Spawn(new Effect("order", s => {
+                runs++;
+                if (s.D(flip)) {
+                    _ = s.D(a); _ = s.D(b);
+                } else {
+                    _ = s.D(b); _ = s.D(a);
+                }
+            }));
+            Assert.AreEqual(1, runs, "sanity: exactly one run on mount");
+
+            flip.Set(true);
+            Assert.AreEqual(2, runs);
+
+            a.Set(1);
+            Assert.AreEqual(3, runs, "'a' must still be live after the read order flipped");
+
+            b.Set(1);
+            Assert.AreEqual(4, runs, "'b' must still be live after the read order flipped");
+        }
+
+        [Test]
         public void EffectT_BlockReturnsNull_ExposesDefault() {
             var observed = -1;
 
