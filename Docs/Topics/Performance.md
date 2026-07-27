@@ -123,7 +123,7 @@ Measured results:
 
 ```
 - 0.43ms flush time
-- 13.2KB GC alloc
+- 12.0KB GC alloc
 ```
 
 GC is allocated when tree branches are rebuilt. The allocation sources are:
