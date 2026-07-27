@@ -12,22 +12,18 @@ namespace Spoke {
     public class Memo<T> : Computation, ISignal<T> {
         State<T> state = State.Create<T>();
         Action<ITrigger> _addDynamicTrigger;
-        Action<MemoBuilder> block;
+        MemoBlock<T> selector;
 
         public T Now => state.Now;
 
         public Memo(string name, MemoBlock<T> selector, params ITrigger[] triggers) : base(name, triggers) {
-            block = s => {
-                if (selector != null) {
-                    state.Set(selector(s));
-                }
-            };
+            this.selector = selector;
             _addDynamicTrigger = AddDynamicTrigger;
         }
 
         protected override void OnRun(EpochBuilder s) {
-            var builder = new MemoBuilder(_addDynamicTrigger, s);
-            block(builder);
+            if (selector == null) return;
+            state.Set(selector(new MemoBuilder(_addDynamicTrigger, s)));
         }
 
         public SpokeHandle Subscribe(Action action) 
