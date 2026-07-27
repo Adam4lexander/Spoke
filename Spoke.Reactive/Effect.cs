@@ -5,10 +5,17 @@ namespace Spoke {
     /// <summary>
     /// An Effect runs an EffectBlock, and then re-runs whenever any of its triggers fire
     /// </summary>
-    public sealed class Effect : BaseEffect {
+    public sealed class Effect : Computation {
+        readonly EffectBlock block;
+        Action<ITrigger> _addDynamicTrigger;
 
         public Effect(string name, EffectBlock block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = block;
+            _addDynamicTrigger = AddDynamicTrigger;
+        }
+
+        protected override void OnRun(EpochBuilder s) {
+            block?.Invoke(new EffectBuilder(_addDynamicTrigger, s));
         }
     }
 
@@ -17,14 +24,21 @@ namespace Spoke {
     /// However, its EffectBlock<T> returns an ISignal<T>, and not a raw T value like memos do
     /// It's also capable of attaching its own sub-effects, memos or cleanup logic
     /// This makes Effect<T> nestable and composable
-    /// </summary> 
-    public sealed class Effect<T> : BaseEffect, ISignal<T> {
-        State<T> state = State.Create<T>();
+    /// </summary>
+    public sealed class Effect<T> : Computation, ISignal<T> {
+        readonly State<T> state = State.Create<T>();
+        readonly EffectBlock block;
+        Action<ITrigger> _addDynamicTrigger;
 
         public T Now => state.Now;
 
         public Effect(string name, EffectBlock<T> block, params ITrigger[] triggers) : base(name, triggers) {
             this.block = Mount(block);
+            _addDynamicTrigger = AddDynamicTrigger;
+        }
+
+        protected override void OnRun(EpochBuilder s) {
+            block?.Invoke(new EffectBuilder(_addDynamicTrigger, s));
         }
 
         EffectBlock Mount(EffectBlock<T> block) => s => {
@@ -36,16 +50,16 @@ namespace Spoke {
             s.Call(new LambdaEpoch("Deferred Initializer", s => s => state.Set(result != null ? result.Now : default)));
         };
 
-        public SpokeHandle Subscribe(Action action) 
+        public SpokeHandle Subscribe(Action action)
             => state.Subscribe(action);
 
-        public SpokeHandle Subscribe(Action<T> action) 
+        public SpokeHandle Subscribe(Action<T> action)
             => state.Subscribe(action);
 
-        public void Unsubscribe(Action action) 
+        public void Unsubscribe(Action action)
             => state.Unsubscribe(action);
 
-        public void Unsubscribe(Action<T> action) 
+        public void Unsubscribe(Action<T> action)
             => state.Unsubscribe(action);
     }
 }
