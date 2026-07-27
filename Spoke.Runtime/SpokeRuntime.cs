@@ -74,31 +74,38 @@ namespace Spoke {
 
         SpokePool<List<Action>> fnlPool = SpokePool<List<Action>>.Create(l => l.Clear());
         List<Frame> frames = new List<Frame>();
-        List<long> versions = new List<long>(); // Determines validity of stack handles
 
-        // onPopSelfFrames[i] holds a list of actions to invoke when frames[i] is popped
-        List<List<Action>> onPopSelfFrames = new List<List<Action>>();
+        // Per-frame bookkeeping, parallel to frames. Slots above frames.Count are stale.
+        struct FrameAux {
+            public long Version;            // Determines validity of stack handles
+            public List<Action> OnPopSelf;  // Actions to invoke when the frame is popped; null if none registered
+        }
+        FrameAux[] frameAux = new FrameAux[64];
         int layer = int.MaxValue; // Flush layer of currently flushing tree, lower values are higher priority
         int holdCount;
 
         // Pushes a Spoke stack frame, returning a control handle to it.
         Handle Friend.Push(Frame frame) {
             frames.Add(frame);
-            versions.Add(TimeStamp++);
-            onPopSelfFrames.Add(fnlPool.Get());
-            return new Handle(this, frames.Count - 1, versions[versions.Count - 1]);
+            var top = frames.Count - 1;
+            if (top == frameAux.Length) Array.Resize(ref frameAux, frameAux.Length * 2);
+            var version = TimeStamp++;
+            frameAux[top] = new FrameAux { Version = version };
+            return new Handle(this, top, version);
         }
 
         // Pops the top Spoke stack frame.
         void Friend.Pop() {
-            frames.RemoveAt(frames.Count - 1);
-            versions.RemoveAt(versions.Count - 1);
-            var onPopSelf = onPopSelfFrames[onPopSelfFrames.Count - 1];
-            onPopSelfFrames.RemoveAt(onPopSelfFrames.Count - 1);
-            foreach (var fn in onPopSelf) {
-                fn?.Invoke();
+            var top = frames.Count - 1;
+            frames.RemoveAt(top);
+            var onPopSelf = frameAux[top].OnPopSelf;
+            if (onPopSelf != null) {
+                frameAux[top].OnPopSelf = null; // Callbacks may push frames that reuse this slot
+                foreach (var fn in onPopSelf) {
+                    fn?.Invoke();
+                }
+                fnlPool.Return(onPopSelf);
             }
-            fnlPool.Return(onPopSelf);
         }
 
         // Increments the hold count, preventing any tree flushes until Release is called.
@@ -180,7 +187,7 @@ namespace Spoke {
             // Incoming tree may eager tick as many times as it wants, up until the frame it was
             // created in is popped from the stack.
             boostedTrees.Add(tree);
-            var topHandle = new Handle(this, frames.Count - 1, versions[versions.Count - 1]);
+            var topHandle = new Handle(this, frames.Count - 1, frameAux[frames.Count - 1].Version);
             topHandle.OnPopSelf(() => boostedTrees.Remove(tree));
         }
 
@@ -221,7 +228,7 @@ namespace Spoke {
             readonly long version;  // Must match versions[Index] to be valid
 
             public Frame Frame => IsAlive ? Stack.frames[Index] : default;
-            public bool IsAlive => Stack != null && Index < Stack.frames.Count && version == Stack.versions[Index];
+            public bool IsAlive => Stack != null && Index < Stack.frames.Count && version == Stack.frameAux[Index].Version;
             public bool IsTop => IsAlive && Index == Stack.frames.Count - 1;
 
             public Handle(SpokeRuntime stack, int index, long version) {
@@ -235,7 +242,9 @@ namespace Spoke {
                 if (!IsAlive) {
                     fn?.Invoke();
                 } else {
-                    Stack.onPopSelfFrames[Index].Add(fn);
+                    var list = Stack.frameAux[Index].OnPopSelf
+                            ?? (Stack.frameAux[Index].OnPopSelf = Stack.fnlPool.Get());
+                    list.Add(fn);
                 }
             }
         }
