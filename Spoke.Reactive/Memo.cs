@@ -9,7 +9,7 @@ namespace Spoke {
     /// It takes a selector function (type MemoBlock<T>) which returns the new value
     /// It's best used for pure functions of other signals, ie: s.Memo(s => s.D(A) + s.D(B))
     /// </summary>
-    public class Memo<T> : Computation, ISignal<T> {
+    public sealed class Memo<T> : Computation, ISignal<T> {
         State<T> state = State.Create<T>();
         Action<ITrigger> _addDynamicTrigger;
         MemoBlock<T> selector;
