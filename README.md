@@ -1,8 +1,8 @@
 # 🔘 Spoke - _A reactive framework for Unity_
 
-**Spoke** is a reactive framework for Unity that makes it simple to write event-driven code, and sidestep the chaos that comes with it.
+**Spoke** is a reactive framework for Unity that lets you express chaotic, indirect and entangled event-driven logic in a clear, composable, top-to-bottom structure.
 
-The core idea is that games are full of long-lived behaviours managed by symmetric Setup/Teardown functions:
+Games are full of long-lived behaviours managed by symmetric Setup/Teardown functions:
 
 - `OnEnable`/`OnDisable`
 - `Awake`/`OnDestroy`
@@ -11,7 +11,7 @@ The core idea is that games are full of long-lived behaviours managed by symmetr
 
 Even `OnValueChanged` handlers fit the pattern: teardown for the old value, setup for the new.
 
-Sometimes they're managed by events, sometimes by polling and diff-checking in `Update()`. Often with bugs from manual lifecycle management. For example, an enemy is destroyed while shooting its laser beam, and the laser asset is left behind because nothing cleaned it up.
+Sometimes they're wired up with events, sometimes with polling and diff-checking in `Update()`. Either way, the symmetry is maintained by hand, and bugs slip through. For example, an enemy is destroyed while shooting its laser beam, and the laser asset is left behind because nothing cleaned it up.
 
 In Spoke, these long-lived behaviours are modelled as localised blocks in a tree, where setup, reaction and cleanup are co-located in one function body. Lifecycle bugs are easy to avoid, the code becomes simpler to reason about and extend, and event-driven behaviour ends up feeling as straightforward as imperative code.
 
