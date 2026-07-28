@@ -155,7 +155,7 @@ public class MyCalculator : SpokeBehaviour {
 }
 ```
 
-> `s.D(...)` means: read this signal, **and** make it a dependency. If the signal changes, the block reruns automatically. The concise syntax was chosen because `s.D()` is used alot. Think of it like a hieroglyph instead of a method name.
+> `s.D(...)` means: read this signal, **and** make it a dependency. If the signal changes, the block reruns automatically. The concise syntax was chosen because `s.D()` is used a lot. Think of it like a hieroglyph instead of a method name.
 
 ---
 
@@ -225,7 +225,7 @@ public class SpellBreakerController : SpokeBehaviour {
     [SerializeField] GameObject spellBreakerUI;
 
     // Spoke.Trigger is an event
-    Trigger interruptSpellCommand = new();
+    Trigger interruptSpellCommand = Trigger.Create();
     // Spoke.State is like UState, but not serializable
     State<int> numberOfSpellCasts = new(0);
 
@@ -260,7 +260,7 @@ public class SpellBreakerController : SpokeBehaviour {
 }
 ```
 
-I've introduced a lot of new concepts here and not expecting it to be quickly understandable. The goal is to show a complex use case that Spoke is well‑suited for.
+The example introduces a lot of new concepts, and not all of it may make sense yet. The goal is to show a complex use case that Spoke is well‑suited for.
 
 Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions.
 
