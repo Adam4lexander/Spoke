@@ -211,6 +211,7 @@ For example, imagine you're making a 3rd person action-fantasy game. You want to
 - The player presses a button to activate it
 - If a hostile wizard nearby is casting a spell, the cast is interrupted
 - Show a "Activate SpellBreaker!" UI prompt when any valid wizard is casting
+- Show a targeting reticule over each wizard whose cast can be interrupted
 - Respond to dynamic faction changes, in case a friendly wizard becomes hostile
 - Respond to wizards entering range who were already mid-cast
 - If a wizard becomes _Frozen_ mid-cast, their cast pauses and becomes immune to interruption until thawed
@@ -223,6 +224,7 @@ public class SpellBreakerController : SpokeBehaviour {
     [Header("References")]
     [SerializeField] ActorSensor actorSensor;
     [SerializeField] GameObject spellBreakerUI;
+    [SerializeField] GameObject reticulePrefab;
 
     // Spoke.Trigger is an event
     Trigger interruptSpellCommand = Trigger.Create();
@@ -248,6 +250,8 @@ public class SpellBreakerController : SpokeBehaviour {
         if (s.D(wizard.IsFriendly)) return;
         if (s.D(wizard.IsFrozen)) return;
         s.Phase(wizard.IsCastingSpell, s => {
+            var reticule = Instantiate(reticulePrefab, wizard.transform);
+            s.OnCleanup(() => Destroy(reticule));
             s.Subscribe(interruptSpellCommand, () => wizard.InterruptSpell());
             numberOfSpellCasts.Update(x => x + 1);
             s.OnCleanup(() => numberOfSpellCasts.Update(x => x - 1));
@@ -262,7 +266,7 @@ public class SpellBreakerController : SpokeBehaviour {
 
 The example introduces a lot of new concepts, and not all of it may make sense yet. The goal is to show a complex use case that Spoke is well‑suited for.
 
-Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions.
+Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions. And no matter how the cast ends — completed, interrupted, frozen, out of range, faction change — the reticule is destroyed by the same cleanup path. It can never be left hanging in the scene.
 
 The patterns above give immediate value and serve as an onboarding ramp for diving deeper.
 
