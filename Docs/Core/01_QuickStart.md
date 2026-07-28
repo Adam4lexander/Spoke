@@ -226,8 +226,9 @@ public class SpellBreakerController : SpokeBehaviour {
     [SerializeField] GameObject spellBreakerUI;
     [SerializeField] GameObject reticulePrefab;
 
-    // Spoke.Trigger is an event
-    Trigger interruptSpellCommand = Trigger.Create();
+    // Wire this up to your input system, e.g. a PlayerInput component
+    [SerializeField] UnityEvent SpellBreakerPressed;
+
     // Spoke.State is like UState, but not serializable
     State<int> numberOfSpellCasts = new(0);
 
@@ -252,21 +253,19 @@ public class SpellBreakerController : SpokeBehaviour {
         s.Phase(wizard.IsCastingSpell, s => {
             var reticule = Instantiate(reticulePrefab, wizard.transform);
             s.OnCleanup(() => Destroy(reticule));
-            s.Subscribe(interruptSpellCommand, () => wizard.InterruptSpell());
+            s.Subscribe(SpellBreakerPressed, () => wizard.InterruptSpell());
             numberOfSpellCasts.Update(x => x + 1);
             s.OnCleanup(() => numberOfSpellCasts.Update(x => x - 1));
         });
     };
-
-    void Update() {
-        if (Input.GetKeyDown(KeyCode.Space)) interruptSpellCommand.Invoke();
-    }
 }
 ```
 
 The example introduces a lot of new concepts, and not all of it may make sense yet. The goal is to show a complex use case that Spoke is well‑suited for.
 
 Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions. And no matter how the cast ends — completed, interrupted, frozen, out of range, faction change — the reticule is destroyed by the same cleanup path. It can never be left hanging in the scene.
+
+Also notice there's no `Update()` method. Nothing is polled or diff-checked per frame. The whole behaviour is driven by events and state changes.
 
 The patterns above give immediate value and serve as an onboarding ramp for diving deeper.
 
