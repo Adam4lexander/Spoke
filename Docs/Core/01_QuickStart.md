@@ -212,8 +212,8 @@ For example, imagine you're making an action-fantasy RTS. You want to add a new 
 - Magic-immune units are unaffected
 - Respond to units entering the radius in any state, or changing state while inside it
 - Respond to dynamic faction changes on either side — including the carrier being mind-controlled
-- Auras from multiple carriers stack independently
-- When the carrier dies, every buff it granted unwinds instantly
+- Auras do **not** stack: a unit covered by several carriers is buffed by exactly one of them
+- When a carrier dies, every buff it granted unwinds instantly — and any unit still covered by another carrier is re-buffed by that carrier automatically
 
 Here's the whole thing using Spoke:
 
@@ -240,14 +240,20 @@ public class HealingAura : SpokeBehaviour {
         if (s.D(unit.IsMagicImmune)) return;
         if (s.D(unit.Faction) != s.D(carrier.Faction)) return;
 
-        var speedBoost = unit.Stats.AddModifier(Stat.Speed, x => x * 1.5f);
-        s.OnCleanup(() => unit.Stats.RemoveModifier(speedBoost));
+        // Ask the unit for the exclusive right to buff it. The lease is an
+        // IDisposable owned by this block, and IsHeld flips true when granted
+        var lease = s.Use(unit.RequestBuff("healing-aura"));
 
-        var glow = Instantiate(glowVfxPrefab, unit.transform);
-        s.OnCleanup(() => Destroy(glow));
+        s.Phase(lease.IsHeld, s => {
+            var speedBoost = unit.Stats.AddModifier(Stat.Speed, x => x * 1.5f);
+            s.OnCleanup(() => unit.Stats.RemoveModifier(speedBoost));
 
-        var heal = StartCoroutine(HealTick(unit));
-        s.OnCleanup(() => StopCoroutine(heal));
+            var glow = Instantiate(glowVfxPrefab, unit.transform);
+            s.OnCleanup(() => Destroy(glow));
+
+            var heal = StartCoroutine(HealTick(unit));
+            s.OnCleanup(() => StopCoroutine(heal));
+        });
     };
 
     IEnumerator HealTick(Unit unit) {
@@ -261,7 +267,9 @@ public class HealingAura : SpokeBehaviour {
 
 The example introduces a lot of new concepts, and not all of it may make sense yet. The goal is to show a complex use case that Spoke is well‑suited for.
 
-Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically: units entering the radius already wounded, dying inside it, gaining or losing magic immunity mid-buff, either side changing faction, or the carrier dying and unwinding every buff at once. No matter how a buff ends, the same cleanup path returns the stat modifier, destroys the glow, and stops the heal coroutine. Nothing can leak.
+Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically: units entering the radius already wounded, dying inside it, gaining or losing magic immunity mid-buff, either side changing faction, or the carrier dying and unwinding every buff at once. And when a dying carrier's buffs unwind, any unit still covered by another carrier hands over automatically — the other carrier's lease is granted, its `Phase` mounts, and the buff comes back without a line of coordination code. No matter how a buff ends, the same cleanup path returns the stat modifier, destroys the glow, and stops the heal coroutine. Nothing can leak, and nothing double-applies.
+
+> `RequestBuff` isn't part of Spoke — it's this game's own `Unit` API. It returns an `IDisposable` lease exposing an `ISignal<bool> IsHeld`. The unit grants the lease to one requester at a time, and passes it to the next requester when the holder disposes. Signals and disposables are Spoke's native currency: when your game systems expose them, contested resources compose as easily as owned ones.
 
 Also notice there's no `Update()` method. Nothing is polled or diff-checked per frame. The whole behaviour is driven by events and state changes.
 
