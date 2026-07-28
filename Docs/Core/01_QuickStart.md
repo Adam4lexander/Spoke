@@ -206,64 +206,62 @@ public class DanceBehaviour : SpokeBehaviour {
 
 Those were some simple patterns you can start using immediately. But Spoke really shines as complexity increases and game logic depends on a mixture of events and runtime state.
 
-For example, imagine you're making a 3rd person action-fantasy game. You want to add a new player ability called _Spell Breaker_, which works like this:
+For example, imagine you're making an action-fantasy RTS. You want to add a new unit ability called _Healing Aura_, which works like this:
 
-- The player presses a button to activate it
-- If a hostile wizard nearby is casting a spell, the cast is interrupted
-- Show a "Activate SpellBreaker!" UI prompt when any valid wizard is casting
-- Show a targeting reticule over each wizard whose cast can be interrupted
-- Respond to dynamic faction changes, in case a friendly wizard becomes hostile
-- Respond to wizards entering range who were already mid-cast
-- If a wizard becomes _Frozen_ mid-cast, their cast pauses and becomes immune to interruption until thawed
+- While the carrier unit is alive, friendly units inside its aura radius gain +50% speed, a glowing VFX, and heal 5 HP per second
+- Magic-immune units are unaffected
+- Respond to units entering the radius in any state, or changing state while inside it
+- Respond to dynamic faction changes on either side — including the carrier being mind-controlled
+- Auras from multiple carriers stack independently
+- When the carrier dies, every buff it granted unwinds instantly
 
 Here's the whole thing using Spoke:
 
 ```cs
-public class SpellBreakerController : SpokeBehaviour {
+public class HealingAura : SpokeBehaviour {
 
     [Header("References")]
-    [SerializeField] ActorSensor actorSensor;
-    [SerializeField] GameObject spellBreakerUI;
-    [SerializeField] GameObject reticulePrefab;
-
-    // Wire this up to your input system, e.g. a PlayerInput component
-    [SerializeField] UnityEvent SpellBreakerPressed;
-
-    // Spoke.State is like UState, but not serializable
-    State<int> numberOfSpellCasts = new(0);
+    [SerializeField] Unit carrier;
+    [SerializeField] UnitSensor auraRadius;
+    [SerializeField] GameObject glowVfxPrefab;
 
     protected override void Init(EffectBuilder s) {
-        var dock = s.Dock(); // Docks are dynamic containers for Effects
-        s.Subscribe(actorSensor.OnActorInRange, actor => {
-            if (actor.IsWizard) dock.Effect(actor, WizardTracker(actor));
-        });
-        s.Subscribe(actorSensor.OnActorOutOfRange, actor => {
-            dock.Drop(actor);
-        });
-        s.Effect(s => {
-            spellBreakerUI.SetActive(s.D(numberOfSpellCasts) > 0);
+        s.Phase(carrier.IsAlive, s => {
+            var dock = s.Dock(); // Docks are dynamic containers for Effects
+            s.Subscribe(auraRadius.OnUnitEnter, unit => dock.Effect(unit, Aura(unit)));
+            s.Subscribe(auraRadius.OnUnitExit, unit => dock.Drop(unit));
         });
     }
 
-    // WizardTracker returns a parameterized, re-usable EffectBlock
-    // The double-lambda captures 'wizard' in a closure
-    EffectBlock WizardTracker(Actor wizard) => s => {
-        if (s.D(wizard.IsFriendly)) return;
-        if (s.D(wizard.IsFrozen)) return;
-        s.Phase(wizard.IsCastingSpell, s => {
-            var reticule = Instantiate(reticulePrefab, wizard.transform);
-            s.OnCleanup(() => Destroy(reticule));
-            s.Subscribe(SpellBreakerPressed, () => wizard.InterruptSpell());
-            numberOfSpellCasts.Update(x => x + 1);
-            s.OnCleanup(() => numberOfSpellCasts.Update(x => x - 1));
-        });
+    // Aura returns a parameterized, re-usable EffectBlock
+    // The double-lambda captures 'unit' in a closure
+    EffectBlock Aura(Unit unit) => s => {
+        if (!s.D(unit.IsAlive)) return;
+        if (s.D(unit.IsMagicImmune)) return;
+        if (s.D(unit.Faction) != s.D(carrier.Faction)) return;
+
+        var speedBoost = unit.Stats.AddModifier(Stat.Speed, x => x * 1.5f);
+        s.OnCleanup(() => unit.Stats.RemoveModifier(speedBoost));
+
+        var glow = Instantiate(glowVfxPrefab, unit.transform);
+        s.OnCleanup(() => Destroy(glow));
+
+        var heal = StartCoroutine(HealTick(unit));
+        s.OnCleanup(() => StopCoroutine(heal));
     };
+
+    IEnumerator HealTick(Unit unit) {
+        while (true) {
+            yield return new WaitForSeconds(1f);
+            unit.Health.Update(x => x + 5);
+        }
+    }
 }
 ```
 
 The example introduces a lot of new concepts, and not all of it may make sense yet. The goal is to show a complex use case that Spoke is well‑suited for.
 
-Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically, like wizards entering/leaving range while mid-cast, or wizards dynamically changing factions. And no matter how the cast ends — completed, interrupted, frozen, out of range, faction change — the reticule is destroyed by the same cleanup path. It can never be left hanging in the scene.
+Once you're familiar with Spoke, you can write code like this very quickly. It may be short, but it's handling a ton of edge cases automatically: units entering the radius already wounded, dying inside it, gaining or losing magic immunity mid-buff, either side changing faction, or the carrier dying and unwinding every buff at once. No matter how a buff ends, the same cleanup path returns the stat modifier, destroys the glow, and stops the heal coroutine. Nothing can leak.
 
 Also notice there's no `Update()` method. Nothing is polled or diff-checked per frame. The whole behaviour is driven by events and state changes.
 
