@@ -1,6 +1,6 @@
 # 🔘 Spoke - _A reactive framework for Unity_
 
-**Spoke** is a reactive framework for Unity that lets you express chaotic, indirect and entangled event-driven logic in a clear, composable, top-to-bottom structure.
+**Spoke** is a reactive framework for Unity that turns tangled event-driven logic into clear, composable, top-to-bottom code.
 
 Games are full of long-lived behaviours managed by symmetric Setup/Teardown functions:
 
@@ -15,9 +15,9 @@ Sometimes they're wired up with events, sometimes with polling and diff-checking
 
 In Spoke, these long-lived behaviours are modelled as localised blocks in a tree, where setup, reaction and cleanup are co-located in one function body. Lifecycle bugs are easy to avoid, the code becomes simpler to reason about and extend, and event-driven behaviour ends up feeling as straightforward as imperative code.
 
-- ✨ **Control complexity** — entangled, event-driven logic stays local and readable
+- ✨ **Control complexity** — event-driven logic stays local and readable
 - 🧪 **Use anywhere** — adopt it in one script, one system, or a whole project
-- 🪶 **Lightweight** — ~2,800 lines, zero dependencies, unit-tested, MIT
+- 🪶 **Lightweight** — ~2,800 lines of plain C#, zero dependencies, unit-tested, MIT
 
 ---
 
@@ -65,6 +65,8 @@ For a complete game built entirely with Spoke, see **[Base Defence](./Examples/0
 
 Clone this repo or copy **Spoke.Runtime**, **Spoke.Reactive** and **Spoke.Unity** into your project.<br>
 No dependencies, no setup.
+
+**Spoke.Runtime** and **Spoke.Reactive** have no Unity dependency — to use Spoke outside Unity, take just those two.
 
 ---
 
