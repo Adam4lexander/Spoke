@@ -11,7 +11,7 @@ Games are full of long-lived behaviours managed by symmetric Setup/Teardown func
 
 Even `OnValueChanged` handlers fit the pattern: teardown for the old value, setup for the new.
 
-Sometimes they're wired up with events, sometimes with polling and diff-checking in `Update()`. Either way, the symmetry is maintained by hand, and bugs slip through. For example, an enemy is destroyed while shooting its laser beam, and the laser asset is left behind because nothing cleaned it up.
+Sometimes they're wired up with events, sometimes with polling and diff-checking in `Update()`. Either way, the symmetry is maintained by hand, and bugs slip through. For example, an enemy is destroyed while shooting its laser beam, and the beam is left hanging in the scene because nothing cleaned it up.
 
 In Spoke, these long-lived behaviours are modelled as localised blocks in a tree, where setup, reaction and cleanup are co-located in one function body. Lifecycle bugs are easy to avoid, the code becomes simpler to reason about and extend, and event-driven behaviour ends up feeling as straightforward as imperative code.
 
@@ -28,14 +28,16 @@ _Show a HUD over the nearest enemy._
 ### 🟧 Vanilla Unity:
 
 ```csharp
+public UnityEvent<GameObject> OnNearestEnemyChanged = new();
+
 GameObject currHUD;
 
 void Awake() {
-    OnNearestEnemyChanged.AddEventListener(NearestEnemyChangedHandler);
+    OnNearestEnemyChanged.AddListener(NearestEnemyChangedHandler);
 }
 
 void OnDestroy() {
-    OnNearestEnemyChanged.RemoveEventListener(NearestEnemyChangedHandler);
+    OnNearestEnemyChanged.RemoveListener(NearestEnemyChangedHandler);
     if (currHUD != null) Destroy(currHUD);
 }
 
@@ -48,6 +50,8 @@ void NearestEnemyChangedHandler(GameObject enemy) {
 ### 🟦 Spoke:
 
 ```csharp
+public State<GameObject> NearestEnemy = new();
+
 void Init(EffectBuilder s) {
     if (s.D(NearestEnemy) == null) return;
     var hud = SpawnHUD(NearestEnemy.Now);
@@ -126,11 +130,11 @@ Spoke was inspired by frontend reactive frameworks like **React** and **SolidJS*
 
 ### Many reactive trees
 
-In Spoke, it's normal to have lots of small reactive trees. Each `SpokeBehaviour`, for example, creates its own tree. This helps Spoke integrate with Unity and its existing imperative code. Spoke is glue between imperative systems, it's not the master.
+In Spoke, it's normal to have lots of small reactive trees. Each `SpokeBehaviour`, for example, creates its own tree. This helps Spoke integrate with Unity and its existing imperative code. Spoke is glue between imperative systems, not the master.
 
 ### Imperative-ordered execution
 
-Spoke orders its reactive computations by source-code order, instead of doing any topological sorting. You can read Spoke code top-to-bottom to understand what order effects and memos will run in. Spoke allows you to modify reactive state inside an effect body, even if it causes ping-ponging, because execution order is deterministic. The consequence is that Spoke is not suitable for any arbitrary dependency graph. Or put another way, you wouldn't build Excel in Spoke.
+Spoke orders its reactive computations by source-code order, instead of doing any topological sorting. You can read Spoke code top-to-bottom to understand what order effects and memos will run in. Spoke allows you to modify reactive state inside an effect body, even if it causes ping-ponging, because execution order is deterministic. The trade-off is that Spoke is not suitable for arbitrary dependency graphs. Or put another way, you wouldn't build Excel in Spoke.
 
 ---
 
@@ -230,7 +234,7 @@ In Spoke, the entire subscription chain lives in one cohesive block. Setup and t
 
 ---
 
-Both patterns are really the same thing, they're lifecycle windows. With Spoke, you declare what happens in a window, how windows nest, and how to clean up when they end.
+Both patterns are really the same thing. They're lifecycle windows. With Spoke, you declare what happens in a window, how windows nest, and how to clean up when they end.
 
 ---
 
