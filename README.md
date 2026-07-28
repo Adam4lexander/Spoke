@@ -1,24 +1,29 @@
-# 🔘 Spoke - _A reactive framework for simulated worlds_
+# 🔘 Spoke - _A reactive framework for Unity_
 
-**Spoke** is a tiny reactivity engine for **C#** and **Unity**. <br>
-It’s tree-shaped and declarative, with imperative-ordered execution, and built to tame the chaos when many systems interact in dynamic, emergent ways.
+**Spoke** is a reactive framework for Unity that makes it simple to write event-driven code, and sidestep the chaos that comes with it.
 
-- Start and stop behaviours at the right time, keeping them in sync with runtime state.
-- Manage deeply nested logic while keeping it cohesive and clear.
+The core idea is that games are full of long-lived behaviours managed by symmetric Setup/Teardown functions:
 
-Inspired by React, Spoke adds strict guarantees on execution order, making it suitable for game logic. It makes indirect, entangled logic feel imperative, with **automatic lifecycle management** and **self-cleaning reactivity.**
+- `OnEnable`/`OnDisable`
+- `Awake`/`OnDestroy`
+- `OnEnemyDetected`/`OnEnemyLost`
+- `OnLaserStart`/`OnLaserEnd`
 
-No flag-checking. No brittle events. No manual cleanup.<br>
-Just _stateful blocks of logic_, expressed as a tree, that mount and unmount on their own.
+Even `OnValueChanged` handlers fit the pattern: teardown for the old value, setup for the new.
 
-- ✨ **Control complexity** — write clear, reactive gameplay logic
-- 🧪 **Use anywhere** — adopt in one script, one system, or your whole project
+Sometimes they're managed by events, sometimes by polling and diff-checking in `Update()`. Often with bugs from manual lifecycle management. For example, an enemy is destroyed while shooting its laser beam, and the laser asset is left behind because nothing cleaned it up.
+
+In Spoke, these long-lived behaviours are modelled as localised blocks in a tree, where setup, reaction and cleanup are co-located in one function body. Lifecycle bugs are easy to avoid, the code becomes simpler to reason about and extend, and event-driven behaviour ends up feeling as straightforward as imperative code.
+
+- ✨ **Control complexity** — entangled, event-driven logic stays local and readable
+- 🧪 **Use anywhere** — adopt it in one script, one system, or a whole project
+- 🪶 **Lightweight** — ~2,800 lines, zero dependencies, unit-tested, MIT
 
 ---
 
 ## ⚡ Example
 
-_Spawn a HUD over the nearest enemy_
+_Show a HUD over the nearest enemy._
 
 ### 🟧 Vanilla Unity:
 
@@ -50,24 +55,9 @@ void Init(EffectBuilder s) {
 }
 ```
 
-👉 In Spoke, the entire behaviour lives in one expressive block. Setup, reaction, and cleanup happen automatically.
+The Spoke version reads top to bottom: if there is no nearest enemy, do nothing. Otherwise spawn a HUD, and destroy it when the block ends. The block re-runs whenever `NearestEnemy` changes, because `s.D(...)` subscribes to it.
 
 For a complete game built entirely with Spoke, see **[Base Defence](./Examples/05_BaseDefence/)**.
-
----
-
-## 💡 Why Spoke?
-
-Unity’s lifecycle makes it easy for logic to get scattered:
-
-- Systems spread across `Awake`, `OnEnable`, `OnDisable`, `OnDestroy`
-- Polling state in `Update` just to detect changes
-- Brittle event chains with manual subscription cleanup
-- Initialization order bugs between dependent components
-- Scene teardown chaos: accessing destroyed objects
-
-Spoke collapses those problems into **scoped, self-cleaning windows of logic.**<br>
-You write: _"When this state exists — run this behaviour — and clean it up afterward.”_
 
 ---
 
@@ -120,35 +110,39 @@ public class MyBehaviour : SpokeBehaviour {
 
 The reactive model behind Spoke is built around a few simple primitives:
 
-- **Trigger** - fire-and-forget events
-- **State** - reactive container for values
-- **Effect** / **Phase** / **Reaction** - self-cleaning blocks of logic
-- **Memo** - computed reactive value
-- **Dock** - dynamic reactive container
+- **State** — a reactive value; read it, set it, subscribe to it
+- **Trigger** — a reactive event; fire it, subscribe to it
+- **Effect** / **Phase** / **Reaction** — self-cleaning blocks of logic; all re-run when a value they read changes, and differ in when they start: Effect immediately, Phase while a condition is true, Reaction when a trigger fires
+- **Memo** — a computed value, recalculated when its inputs change
+- **Dock** — attach and remove blocks dynamically, by key
 
 ---
 
-## 🤔 "Spoke-style" reactivity?
+## 🤔 Spoke-Style Reactivity
 
-Spoke shares DNA with frameworks like **React** and **SolidJS**<br>
-Instead of managing a DOM tree, you're sculpting **simulation logic:** behaviour trees, stateful systems, emergent gameplay.
+Spoke was inspired by frontend reactive frameworks like **React** and **SolidJS**. It most closely resembles **SolidJS** of the two. There are some important differences, though.
 
-These frameworks transformed how we write UI.<br>
-Spoke applies the same principles to **gameplay logic.**
+### Many reactive trees
 
----
+In Spoke, it's normal to have lots of small reactive trees. Each `SpokeBehaviour`, for example, creates its own tree. This helps Spoke integrate with Unity and its existing imperative code. Spoke is glue between imperative systems, it's not the master.
 
-## 🎮 Origins
+### Imperative-ordered execution
 
-Spoke was born out of necessity while building my VR mech game, **Power Grip Dragoons**. The game has brutal demands for dynamic, event-driven logic on Meta Quest hardware. Over 6 years I refined this architecture until it became the foundation I now use everywhere. Spoke is the result.
+Spoke orders its reactive computations by source-code order, instead of doing any topological sorting. You can read Spoke code top-to-bottom to understand what order effects and memos will run in. Spoke allows you to modify reactive state inside an effect body, even if it causes ping-ponging, because execution order is deterministic. The consequence is that Spoke is not suitable for any arbitrary dependency graph. Or put another way, you wouldn't build Excel in Spoke.
 
 ---
 
-## 🔍 Real-World Patterns
+## 🎮 Base Defence
 
-### Scattered Resource Management
+**[Base Defence](./Examples/05_BaseDefence/)** is a complete RTS-lite tower defence written entirely in Spoke, in around 2,600 lines. It has a power grid, spatial queries, enemy waves, building placement and object pooling, and no `Update()` methods. Per-frame work runs in coroutines whose lifetime Spoke manages.
 
-Managing disposables in Unity usually means spreading logic across lifecycle methods.
+It's the best place to see how Spoke is intended to be used in a real game. The smaller examples build up to it one concept at a time: [Lifecycle](./Examples/01_Lifecycle/), [State](./Examples/02_State/), [Effect](./Examples/03_Effect/), [Memo](./Examples/04_Memo/).
+
+---
+
+## 🔍 More Patterns
+
+### Resource lifecycles
 
 ```cs
 // --- MonoBehaviour
@@ -180,14 +174,11 @@ In Spoke, resource allocation and cleanup collapse into one scoped block. No mor
 
 ---
 
-### Chained Event Subscriptions
+### Chained event subscriptions
 
-Nested event subscriptions (`EnemyDetected → EnemyDestroyed`) get messy fast.
+When an enemy is detected on radar, and later destroyed, the cockpit voice should announce it:
 
 ```cs
-// When an enemy is detected on radar, and it becomes destroyed. Then the
-// cockpit voice (BitchinBetty) should speak the phrase: "Enemy Destroyed".
-
 // --- MonoBehaviour
 public class MyBehaviour : MonoBehaviour {
 
