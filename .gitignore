@@ -50,6 +50,11 @@ Thumbs.db
 /Docs.meta
 /Docs/**/*.meta
 
+# Godot generates a .uid file per script. Keeps the repo easy to browse.
+/Spoke.Runtime/**/*.uid
+/Spoke.Reactive/**/*.uid
+/Spoke.Godot/**/*.uid
+
 # The hand-authored test project lives in the Unity-ignored Tests~ folder.
 # It is NOT an auto-generated csproj, so re-include it despite the *.csproj rule above.
 !/Tests~/Spoke.Tests.csproj
