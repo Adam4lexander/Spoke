@@ -7,9 +7,9 @@ namespace Spoke.Examples.BaseDefence;
 /// A unit's body, and the three things that ever happen to it: a persistent tint, a damage blink,
 /// and a shatter-into-pieces death.
 ///
-/// The pieces are this node's own children in the unit's scene — one Sprite2D per part of the
-/// body — so what shatters is whatever the artist put there. A child named "Pivot" keeps the unit's
-/// origin and can be rotated in place: a radar dish, a turret barrel.
+/// The pieces are the children of ShatterRoot — one Sprite2D per part of the body — so what
+/// shatters is whatever the artist put there. A child named "Pivot" keeps the unit's origin and can
+/// be rotated in place: a radar dish, a turret barrel.
 ///
 /// Each command is a Trigger, handled by an effect docked for the duration of the animation. The
 /// Dock is what makes "start a new blink, replacing any blink already running" a single line —
@@ -25,6 +25,12 @@ public partial class UnitFX : SpokeNode2D {
     // Unity's shatter throws the pieces up and lets gravity bring them down. Top-down 2D has no
     // "up", so the pieces slide outward against drag and fade instead.
     const float Drag = 2.2f;
+
+    /// <summary>
+    /// The body that tints, blinks and shatters. Unset means this node, so everything under it
+    /// goes. A resource site points it at the crystals, leaving the mound standing once mined out.
+    /// </summary>
+    [Export] public Node2D ShatterRoot { get; set; }
 
     readonly List<Node2D> pieces = new();
     readonly List<Vector2> homePositions = new();
@@ -54,7 +60,7 @@ public partial class UnitFX : SpokeNode2D {
     public void Restore() => restoreCommand.Invoke();
 
     protected override void Init(EffectBuilder s) {
-        foreach (var child in GetChildren()) {
+        foreach (var child in (ShatterRoot ?? this).GetChildren()) {
             if (child is not Node2D piece) continue;
             pieces.Add(piece);
             homePositions.Add(piece.Position);

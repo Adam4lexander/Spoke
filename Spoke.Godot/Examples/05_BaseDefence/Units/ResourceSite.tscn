@@ -12,13 +12,16 @@
 script = ExtResource("0_unit")
 Hoverable = NodePath("ResourceSite")
 
-[node name="FX" type="Node2D" parent="."]
+[node name="FX" type="Node2D" parent="." node_paths=PackedStringArray("ShatterRoot")]
 script = ExtResource("4_fx")
+ShatterRoot = NodePath("Crystals")
 
 [node name="Mound" type="Sprite2D" parent="FX"]
 texture = ExtResource("5_body")
 
-[node name="Crystal" type="Sprite2D" parent="FX"]
+[node name="Crystals" type="Node2D" parent="FX"]
+
+[node name="Crystal" type="Sprite2D" parent="FX/Crystals"]
 position = Vector2(0, -12)
 texture = ExtResource("6_crystal")
 
