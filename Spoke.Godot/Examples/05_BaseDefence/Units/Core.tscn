@@ -1,0 +1,35 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://bn2bxqfjr0m8y" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Core.cs" id="1_core"]
+[ext_resource type="Script" uid="uid://cucmm65tsdk4m" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="2_fx"]
+[ext_resource type="Script" uid="uid://dui4h6fsf2clr" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="3_power"]
+[ext_resource type="Script" uid="uid://c62d7tqq4r5oq" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="4_bar"]
+[ext_resource type="Texture2D" uid="uid://b3lrsgmvuf1hg" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/core-body.svg" id="5_body"]
+[ext_resource type="Texture2D" uid="uid://d1x4rtgtupmc1" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/core-gem.svg" id="6_gem"]
+
+[node name="Core" type="Node2D"]
+script = ExtResource("1_core")
+MaxHp = 10.0
+Radius = 0.5
+DisplayName = "Core"
+Cost = 0
+Coverage = 1
+
+[node name="FX" type="Node2D" parent="."]
+script = ExtResource("2_fx")
+
+[node name="Body" type="Sprite2D" parent="FX"]
+texture = ExtResource("5_body")
+
+[node name="Gem" type="Sprite2D" parent="FX"]
+texture = ExtResource("6_gem")
+
+[node name="PowerNode" type="Node2D" parent="."]
+script = ExtResource("3_power")
+IsRoot = true
+ReceiveRange = 0.1
+ProvideRange = 4.0
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -44)
+script = ExtResource("4_bar")

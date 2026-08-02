@@ -1,0 +1,36 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" uid="uid://d3h3fhs6fkxv1" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/RepairStation.cs" id="1_repair"]
+[ext_resource type="Script" uid="uid://cucmm65tsdk4m" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="2_fx"]
+[ext_resource type="Script" uid="uid://dui4h6fsf2clr" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="3_power"]
+[ext_resource type="Script" uid="uid://c62d7tqq4r5oq" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="4_bar"]
+[ext_resource type="Texture2D" uid="uid://b1mebyi2oej2e" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/repair-body.svg" id="5_body"]
+[ext_resource type="Texture2D" uid="uid://cv74x6i081ryo" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/repair-cross.svg" id="6_cross"]
+
+[node name="Repair" type="Node2D"]
+script = ExtResource("1_repair")
+MaxHp = 10.0
+Radius = 0.5
+DisplayName = "Repair"
+Cost = 100
+Coverage = 4
+Range = 5.0
+RepairRate = 0.5
+
+[node name="FX" type="Node2D" parent="."]
+script = ExtResource("2_fx")
+
+[node name="Body" type="Sprite2D" parent="FX"]
+texture = ExtResource("5_body")
+
+[node name="Cross" type="Sprite2D" parent="FX"]
+texture = ExtResource("6_cross")
+
+[node name="PowerNode" type="Node2D" parent="."]
+script = ExtResource("3_power")
+ReceiveRange = 0.1
+ProvideRange = 0.0
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -44)
+script = ExtResource("4_bar")

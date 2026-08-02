@@ -11,8 +11,8 @@ namespace Spoke {
     // use SpokeHost instead, and give it the node it should drive.
 
     /// <summary>
-    /// Extend instead of Node. Override Init to declare your logic; it runs once, at _Ready, as the
-    /// root Effect of a SpokeTree scoped to this node's lifetime.
+    /// Extend instead of Node. Override Init to declare your logic; it runs once, as the node enters
+    /// the tree, as the root Effect of a SpokeTree scoped to this node's lifetime.
     /// </summary>
     public abstract partial class SpokeNode : Node, ISpokeNode {
 
@@ -22,9 +22,18 @@ namespace Spoke {
             => core = new SpokeNodeCore(this, Init);
 
         public Node HostNode => this;
+
+        /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
 
-        /// <summary>Declare your effects here. Replaces _Ready, and the teardown half of _ExitTree.</summary>
+        /// <summary>
+        /// True once _Ready has fired — this node and its children are set up. False during Init,
+        /// which runs earlier, on entering the tree. Gate anything that has to see its own children
+        /// initialised with s.Phase(IsReady, ...).
+        /// </summary>
+        public ISignal<bool> IsReady => core.IsReady;
+
+        /// <summary>Declare your effects here. Replaces _EnterTree, and the teardown half of _ExitTree.</summary>
         protected abstract void Init(EffectBuilder s);
 
         /// <summary>
@@ -54,7 +63,16 @@ namespace Spoke {
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
 
         public Node HostNode => this;
+
+        /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
+
+        /// <summary>
+        /// True once _Ready has fired — this node and its children are set up. False during Init,
+        /// which runs earlier, on entering the tree. Gate anything that has to see its own children
+        /// initialised with s.Phase(IsReady, ...).
+        /// </summary>
+        public ISignal<bool> IsReady => core.IsReady;
 
         /// <summary>
         /// True while the node is visible in the tree — self and every ancestor. Named IsShown
@@ -85,7 +103,16 @@ namespace Spoke {
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
 
         public Node HostNode => this;
+
+        /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
+
+        /// <summary>
+        /// True once _Ready has fired — this node and its children are set up. False during Init,
+        /// which runs earlier, on entering the tree. Gate anything that has to see its own children
+        /// initialised with s.Phase(IsReady, ...).
+        /// </summary>
+        public ISignal<bool> IsReady => core.IsReady;
 
         /// <summary>
         /// True while the node is visible in the tree — self and every ancestor. Named IsShown
@@ -116,7 +143,16 @@ namespace Spoke {
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
 
         public Node HostNode => this;
+
+        /// <summary>True while the control is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
+
+        /// <summary>
+        /// True once _Ready has fired — this control and its children are set up. False during Init,
+        /// which runs earlier, on entering the tree. Gate anything that has to see its own children
+        /// initialised with s.Phase(IsReady, ...).
+        /// </summary>
+        public ISignal<bool> IsReady => core.IsReady;
 
         /// <summary>
         /// True while the control is visible in the tree — self and every ancestor. Named IsShown

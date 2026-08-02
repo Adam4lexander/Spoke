@@ -1,7 +1,7 @@
 # Spoke.Godot Examples
 
-Four scenes, each isolating one idea. Run them in order — every one is a single script with no
-assets, so you can read the whole thing in a sitting.
+Four small scenes, each isolating one idea, and then a whole game. 01 to 04 are a single script
+each with no assets; 05 is a real project, with art and a scene per unit.
 
 | | Scene | Shows |
 |---|---|---|
@@ -9,15 +9,16 @@ assets, so you can read the whole thing in a sitting.
 | 02 | `02_State/02_State.tscn` | `State<T>` and `s.D(...)` dependency tracking |
 | 03 | `03_Effect/03_Effect.tscn` | `Effect` vs `Phase` vs `Reaction`, nesting, `Trigger` |
 | 04 | `04_Memo/04_Memo.tscn` | `Memo<T>` derived state, and memos chaining |
+| 05 | `05_BaseDefence/05_BaseDefence.tscn` | a complete game, built entirely on Spoke |
 
 Open a scene and press **F6** to run it. Each prints its controls on screen; 01 also logs to the
 Output panel.
 
 ## 01 — Lifecycle
 
-Godot's lifecycle windows as Spoke phases. `Init` mounts at `_Ready` and disposes when the node is
-freed; `IsInTree`, `IsShown` and `IsPaused` are windows that open and close underneath it. Setup and
-teardown live next to each other rather than in separate callbacks.
+Godot's lifecycle windows as Spoke phases. `Init` mounts as the node enters the tree and disposes
+when it is freed; `IsInTree`, `IsReady` and `IsShown` are windows that open and close underneath it.
+Setup and teardown live next to each other rather than in separate callbacks.
 
 Press **T** to detach the node from the tree and watch its phases close and reopen — the Spoke tree
 itself survives the trip, which is why reparenting doesn't reset your state.
@@ -43,9 +44,20 @@ coroutine the Unity version of this example uses.
 depends on `count`. Worth noticing that changing the count from 2 to 4 doesn't recompute `labelText`,
 because `evenOdd` produced the same value both times.
 
----
+## 05 — Base Defence
 
-There's no Godot port of the Unity **Base Defence** example yet.
+A tower defence game, ported from the Unity example of the same name, down to its balance values
+and its level layout. Everything in it extends a Spoke node, and there's no `_Process`, no `_Ready`
+and no show/hide bookkeeping in the whole folder.
+
+Worth reading after the first four, for what the idioms look like at scale: a power grid that
+propagates outages without polling, overlays that exist only while something wants them, and an
+object pool whose reset story is "the scene tree already did it". It's also the one example laid
+out like a real project — art, a scene per unit with its stats as exported values, and a root scene
+holding those as `PackedScene` fields. Its own [README](05_BaseDefence/README.md) covers the game
+and what the port changed.
+
+---
 
 ## A note on the `.uid` files
 

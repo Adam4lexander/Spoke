@@ -5,7 +5,8 @@ namespace Spoke.Examples;
 /// <summary>
 /// Godot's lifecycle windows, expressed as Spoke phases.
 ///
-/// Init mounts at _Ready and disposes when the node is freed. Everything else is a Phase: a block
+/// Init mounts as the node enters the tree, and disposes when it is freed. Everything else is a
+/// Phase: a block
 /// that mounts while a condition holds, and disposes the moment it stops. Setup and teardown sit
 /// next to each other instead of in separate callbacks.
 ///
@@ -15,7 +16,7 @@ public partial class Lifecycle_Example : SpokeNode2D {
 
     protected override void Init(EffectBuilder s) {
 
-        // Mounted at _Ready, disposed when the node is freed.
+        // Mounted on entering the tree, disposed when the node is freed.
         GD.Print("Init mounted");
         s.OnCleanup(() => GD.Print("Init disposed"));
 

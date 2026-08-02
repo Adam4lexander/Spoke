@@ -24,10 +24,7 @@ namespace Spoke {
 
         SpokeNodeCore core;
 
-        /// <summary>
-        /// Attaches a tree to <paramref name="target"/>. Call from _Ready — Godot forbids AddChild
-        /// while a node is entering the tree.
-        /// </summary>
+        /// <summary>Attaches a tree to <paramref name="target"/>. Init runs during the AddChild below.</summary>
         public static SpokeHost Attach(Node target, EffectBlock init, string name = "SpokeHost") {
             var host = new SpokeHost { Name = name };
             host.core = new SpokeNodeCore(target, init);
@@ -37,6 +34,9 @@ namespace Spoke {
 
         /// <summary>True while the target is inside the SceneTree.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
+
+        /// <summary>True once the host has readied. See <see cref="SpokeNodeCore"/>.</summary>
+        public ISignal<bool> IsReady => core.IsReady;
 
         public sealed override void _Notification(int what) {
             base._Notification(what);

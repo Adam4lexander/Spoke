@@ -7,8 +7,8 @@ namespace Spoke {
     /// tree's logger — messages are tagged with the node's path, so you can find the culprit.
     ///
     /// The Spoke node base classes export one into their tree automatically. Extensions that need to
-    /// reach the host node — s.OnProcess and s.AddChild — retrieve it with s.Import&lt;GodotContext&gt;().
-    /// Hand-spawned trees can pass their own, or none at all.
+    /// reach the host node — s.OnProcess, and anything you write yourself — retrieve it with
+    /// s.Import&lt;GodotContext&gt;(). Hand-spawned trees can pass their own, or none at all.
     /// </summary>
     public class GodotContext : ISpokeLogger {
 

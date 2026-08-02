@@ -1,0 +1,185 @@
+[gd_scene load_steps=19 format=3]
+
+[ext_resource type="Script" uid="uid://cabnvcyh4l7s6" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/GameState.cs" id="1_gamestate"]
+[ext_resource type="Script" uid="uid://c2aip3nxaa0qf" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Ground.cs" id="2_ground"]
+[ext_resource type="Script" uid="uid://dc8m0jjtfsb40" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Controls/CameraControls.cs" id="3_camera"]
+[ext_resource type="Script" uid="uid://c425dpsy0sh45" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Controls/InputSignals.cs" id="4_input"]
+[ext_resource type="Script" uid="uid://b4l70vxs4hrpp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/WaveDirector.cs" id="5_director"]
+[ext_resource type="Script" uid="uid://68r7xbpxfpdv" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/BoardInteractions.cs" id="6_interactions"]
+[ext_resource type="Script" uid="uid://cvp6j38wiqcbd" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/SideBar.cs" id="7_sidebar"]
+[ext_resource type="Script" uid="uid://hf55lw8dd0cl" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/Announcer.cs" id="8_announcer"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Core.tscn" id="9_core"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Relay.tscn" id="10_relay"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Radar.tscn" id="11_radar"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Turret.tscn" id="12_turret"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Repair.tscn" id="13_repair"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/ResourceSite.tscn" id="14_site"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy1.tscn" id="15_enemy1"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy2.tscn" id="16_enemy2"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy3.tscn" id="17_enemy3"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/BombBlast.tscn" id="18_bomb"]
+
+[node name="BaseDefence" type="Node2D"]
+process_mode = 3
+script = ExtResource("1_gamestate")
+StartMoney = 100.0
+Dimensions = Vector2(40, 40)
+CoreScene = ExtResource("9_core")
+RelayScene = ExtResource("10_relay")
+RadarScene = ExtResource("11_radar")
+TurretScene = ExtResource("12_turret")
+RepairScene = ExtResource("13_repair")
+ResourceSiteScene = ExtResource("14_site")
+Enemy1Scene = ExtResource("15_enemy1")
+Enemy2Scene = ExtResource("16_enemy2")
+Enemy3Scene = ExtResource("17_enemy3")
+BombBlastScene = ExtResource("18_bomb")
+
+[node name="Board" type="Node2D" parent="."]
+process_mode = 1
+
+[node name="Ground" type="Node2D" parent="Board"]
+z_index = -100
+script = ExtResource("2_ground")
+GridStep = 5.0
+
+[node name="Interactions" type="Node2D" parent="Board"]
+script = ExtResource("6_interactions")
+
+[node name="Core" parent="Board" instance=ExtResource("9_core")]
+
+[node name="Site01" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-127.36, 6.4)
+
+[node name="Site02" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-83.2, 80.64)
+
+[node name="Site03" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(109.44, -3.84)
+
+[node name="Site04" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-501.76, -490.88)
+
+[node name="Site05" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(487.04, -464.64)
+
+[node name="Site06" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-518.4, 502.4)
+
+[node name="Site07" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(393.6, 496)
+
+[node name="Site08" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-62.72, -890.24)
+
+[node name="Site09" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(30.08, -993.92)
+
+[node name="Site10" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-878.72, -926.08)
+
+[node name="Site11" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-1000.96, -942.72)
+
+[node name="Site12" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-979.84, -854.4)
+
+[node name="Site13" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(900.48, -956.8)
+
+[node name="Site14" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(1008.64, -909.44)
+
+[node name="Site15" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(893.44, -856.32)
+
+[node name="Site16" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-1007.36, -55.68)
+
+[node name="Site17" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-1063.04, 22.4)
+
+[node name="Site18" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(968.32, -48)
+
+[node name="Site19" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(894.08, 34.56)
+
+[node name="Site20" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-11.52, 1054.08)
+
+[node name="Site21" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(69.12, 970.24)
+
+[node name="Site22" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-890.24, 976.64)
+
+[node name="Site23" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-974.08, 1025.92)
+
+[node name="Site24" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(-972.8, 918.4)
+
+[node name="Site25" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(990.72, 1011.84)
+
+[node name="Site26" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(869.12, 999.68)
+
+[node name="Site27" parent="Board" instance=ExtResource("14_site")]
+position = Vector2(967.68, 921.6)
+
+[node name="Camera" type="Node2D" parent="."]
+script = ExtResource("3_camera")
+
+[node name="Camera2D" type="Camera2D" parent="Camera"]
+
+[node name="Input" type="Node" parent="."]
+script = ExtResource("4_input")
+
+[node name="WaveDirector" type="Node" parent="."]
+script = ExtResource("5_director")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Announcer" type="Control" parent="UI"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -320.0
+mouse_filter = 2
+script = ExtResource("8_announcer")
+
+[node name="Message" type="Label" parent="UI/Announcer"]
+anchor_right = 1.0
+offset_top = 40.0
+offset_bottom = 80.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+
+[node name="SideBar" type="Control" parent="UI"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+script = ExtResource("7_sidebar")
+
+[node name="Background" type="ColorRect" parent="UI/SideBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.074092194, 0.0831238, 0.14150941, 1)
+
+[node name="Margin" type="MarginContainer" parent="UI/SideBar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="Column" type="VBoxContainer" parent="UI/SideBar/Margin"]
+mouse_filter = 2
+theme_override_constants/separation = 10

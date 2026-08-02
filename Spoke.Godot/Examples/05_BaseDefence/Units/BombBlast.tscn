@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://dq5d8uwwrmg0" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Enemies/BombBlast.cs" id="1_bomb"]
+
+[node name="BombBlast" type="Node2D"]
+script = ExtResource("1_bomb")
+Radius = 1.2
+Damage = 0.5
+Duration = 0.3

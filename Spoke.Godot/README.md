@@ -29,7 +29,7 @@ public partial class Turret : SpokeNode2D {
 
     protected override void Init(EffectBuilder s) {
 
-        // Runs once, at _Ready. Cleanup runs when the node is freed.
+        // Runs once, as the node enters the tree. Cleanup runs when the node is freed.
         s.OnCleanup(() => GD.Print("turret gone"));
 
         // A window that opens and closes with a condition
@@ -49,8 +49,8 @@ public partial class Turret : SpokeNode2D {
 }
 ```
 
-`Init` replaces `_Ready` and the teardown half of `_ExitTree`. Every other virtual — `_Process`,
-`_Input`, `_Draw`, `_UnhandledInput` — is untouched and still yours to override.
+`Init` replaces `_EnterTree` and the teardown half of `_ExitTree`. Every other virtual — `_Ready`,
+`_Process`, `_Input`, `_Draw` — is untouched and still yours to override.
 
 Reactive state reaches the inspector through a normal exported property, no wrapper type needed:
 
@@ -64,9 +64,32 @@ State<float> speed = State.Create(5f);
 | Signal | True while | Available on |
 |---|---|---|
 | `IsInTree` | the node is inside the SceneTree | all |
+| `IsReady` | `_Ready` has fired — this node's children are set up | all |
 | `IsShown` | the node is visible in the tree (self and ancestors) | `SpokeNode2D`, `SpokeNode3D`, `SpokeControl` |
 
 Gate work with `s.Phase(IsInTree, ...)` and friends.
+
+### Which way does your dependency point?
+
+`Init` runs as the node **enters the tree**, and `_EnterTree` propagates top-down — so a node's
+`Init` runs before any of its descendants'. That's the direction dependencies usually run: a hub
+node publishes what the nodes beneath it read, and it can do that from `Init` like everything else,
+with no separate `_EnterTree` override.
+
+The other direction is `IsReady`. `_Ready` propagates bottom-up, so anything that has to see its own
+children initialised waits for it:
+
+```csharp
+protected override void Init(EffectBuilder s) {
+    var camera = GetNode<Camera2D>("Camera2D");   // the node exists now...
+
+    s.Phase(IsReady, s => camera.MakeCurrent());  // ...but it isn't in the tree yet
+}
+```
+
+Once true, `IsReady` stays true — including across a reparent — exactly as `Node.IsNodeReady()`
+does. Both orderings are signals, which is the point: callback order is the thing Spoke exists to
+stop you depending on.
 
 ### Reacting to pause
 
@@ -163,6 +186,12 @@ Three things to get right in either version, all learned the hard way:
 > disposing a node destroys it *immediately*, the `Free()` path rather than `QueueFree()`, with the
 > hazard described above.
 
+The Base Defence example writes both, and is worth a look if you're deciding what yours should do:
+`Examples/05_BaseDefence/Scripts/SpokeExtensions.cs` has an `s.Own` that frees and an `s.Spawn` that
+returns to a pool. Its pooling also shows why `IsInTree` matters — `RemoveChild` takes a unit out of
+play without destroying it, so everything under `s.Phase(IsInTree, ...)` unwinds and comes back
+fresh on reuse, with no reset path to write.
+
 ## Everything else
 
 Anything not in that list is an ordinary Godot call, with `s.OnCleanup` as the teardown half. C#
@@ -197,12 +226,18 @@ everything. Godot attaches scripts by inheritance and `Node2D`/`Node3D`/`Control
 hierarchies, so there's no single base class that works everywhere. All four are thin shims over
 `SpokeNodeCore`, which holds the logic once. `SpokeHost` covers the rest.
 
-**The tree spawns at `_Ready`, not `_EnterTree`.** `_Ready` is Godot's setup callback: children have
-run their own `_Ready`, and the node is no longer blocked, so `Init` can call `AddChild`. Both are
-forbidden during `_EnterTree`.
+**The tree spawns at `_EnterTree`, not `_Ready`,** so `Init` runs parent-before-child. A node whose
+descendants depend on it — a hub, a context, a service — can set that up in `Init` along with
+everything else. Spawning at `_Ready` inverts the order and forces those nodes into a separate
+`_EnterTree` override, which is the abstraction leaking.
 
-**No `IsReady` signal.** Unity needs `Awake` vs `Start` because `Awake` can't see other objects'
-initialization. Godot's bottom-up `_Ready` already solves that, so `Init` *is* the ready state.
+The cost is that a node's `Init` can't see state its *children's* `Init` established, and `IsReady`
+is the answer to that. Between the two, both orderings are available as signals.
+
+> An earlier version of this file claimed `AddChild` was forbidden during `_EnterTree`, and used
+> that to justify spawning at `_Ready`. It isn't forbidden: `data.blocked` guards a node while *it*
+> is iterating its own children, and the node receiving the notification isn't the one iterating.
+> The reason was wrong, and it was the wrong thing to weigh anyway.
 
 **The tree is disposed at `PREDELETE`, not `_ExitTree`,** so it survives reparenting — a node removed
 and re-added keeps its state, and `IsInTree` just cycles. A `QueueFree`d node is torn down at
@@ -210,7 +245,7 @@ and re-added keeps its state, and `IsInTree` just cycles. A `QueueFree`d node is
 
 **`_Notification` is sealed** on the base classes, because a user override that forgets `base` would
 silently orphan the tree. Override `OnNotification(int what)` instead. Routing everything through
-notifications is also what keeps `_Ready`, `_Process` and the rest free.
+notifications is also what keeps `_Ready`, `_Process` and the rest free for you.
 
 **No `UState<T>`.** Unity needs 188 lines of `ISerializationCallbackReceiver` and a custom
 `PropertyDrawer` because it serializes *fields*. Godot exports *properties* with setter bodies, so a
