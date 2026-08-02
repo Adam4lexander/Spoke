@@ -18,6 +18,9 @@
 [ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy1.tscn" id="16_enemy1"]
 [ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy2.tscn" id="17_enemy2"]
 [ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/Enemy3.tscn" id="18_enemy3"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/UI/Pregame.tscn" id="19_pregame"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/UI/Gameplay.tscn" id="20_gameplay"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/UI/EndScreen.tscn" id="21_endscreen"]
 
 [sub_resource type="Resource" id="Res_relay"]
 script = ExtResource("9_builditem")
@@ -173,12 +176,19 @@ SpawnMargin = 6.0
 
 [node name="UI" type="CanvasLayer" parent="."]
 
-[node name="Announcer" type="Control" parent="UI"]
+[node name="Announcer" type="Control" parent="UI" node_paths=PackedStringArray("OnscreenText", "NorthWarning", "EastWarning", "SouthWarning", "WestWarning")]
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_right = -320.0
 mouse_filter = 2
 script = ExtResource("8_announcer")
+OnscreenText = NodePath("Message")
+NorthWarning = NodePath("NorthWarning")
+EastWarning = NodePath("EastWarning")
+SouthWarning = NodePath("SouthWarning")
+WestWarning = NodePath("WestWarning")
+WaveWarningBlinkTime = 0.5
+OnscreenMessageTime = 4.0
 
 [node name="Message" type="Label" parent="UI/Announcer"]
 anchor_right = 1.0
@@ -189,6 +199,34 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 24
 horizontal_alignment = 1
 
+[node name="NorthWarning" type="ColorRect" parent="UI/Announcer"]
+anchor_right = 1.0
+offset_bottom = 12.0
+mouse_filter = 2
+color = Color(1, 0.3160377, 0.3160377, 1)
+
+[node name="SouthWarning" type="ColorRect" parent="UI/Announcer"]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -12.0
+mouse_filter = 2
+color = Color(1, 0.3160377, 0.3160377, 1)
+
+[node name="WestWarning" type="ColorRect" parent="UI/Announcer"]
+anchor_bottom = 1.0
+offset_right = 12.0
+mouse_filter = 2
+color = Color(1, 0.3160377, 0.3160377, 1)
+
+[node name="EastWarning" type="ColorRect" parent="UI/Announcer"]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -12.0
+mouse_filter = 2
+color = Color(1, 0.3160377, 0.3160377, 1)
+
 [node name="SideBar" type="Control" parent="UI" node_paths=PackedStringArray("Interactions")]
 anchor_left = 1.0
 anchor_right = 1.0
@@ -197,6 +235,9 @@ offset_left = -320.0
 script = ExtResource("7_sidebar")
 Interactions = NodePath("../../Board/Interactions")
 BuildItems = [SubResource("Res_relay"), SubResource("Res_radar"), SubResource("Res_turret"), SubResource("Res_repair")]
+PregameScene = ExtResource("19_pregame")
+GameplayScene = ExtResource("20_gameplay")
+EndScreenScene = ExtResource("21_endscreen")
 
 [node name="Background" type="ColorRect" parent="UI/SideBar"]
 anchor_right = 1.0
@@ -213,6 +254,3 @@ theme_override_constants/margin_top = 18
 theme_override_constants/margin_right = 18
 theme_override_constants/margin_bottom = 18
 
-[node name="Column" type="VBoxContainer" parent="UI/SideBar/Margin"]
-mouse_filter = 2
-theme_override_constants/separation = 10

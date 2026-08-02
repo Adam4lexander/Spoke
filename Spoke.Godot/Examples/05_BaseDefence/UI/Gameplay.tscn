@@ -1,0 +1,79 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/Panels/GameplayPanel.cs" id="1_panel"]
+
+[node name="Gameplay" type="Control" node_paths=PackedStringArray("WaveText", "MoneyText", "ResourcesText", "MessageText", "BuildButtons")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_panel")
+WaveText = NodePath("Column/WaveInfo")
+MoneyText = NodePath("Column/Money")
+ResourcesText = NodePath("Column/Resources")
+MessageText = NodePath("Column/Message")
+BuildButtons = [NodePath("Column/BuildRelay"), NodePath("Column/BuildRadar"), NodePath("Column/BuildTurret"), NodePath("Column/BuildRepair")]
+
+[node name="Column" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="WaveInfo" type="RichTextLabel" parent="Column"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+mouse_filter = 2
+theme_override_font_sizes/normal_font_size = 14
+
+[node name="Money" type="RichTextLabel" parent="Column"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+mouse_filter = 2
+theme_override_font_sizes/normal_font_size = 18
+
+[node name="Resources" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+
+[node name="BuildHeading" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "Buildings"
+
+[node name="BuildRelay" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="BuildRadar" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="BuildTurret" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="BuildRepair" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+
+[node name="Gap" type="Control" parent="Column"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="Message" type="Label" parent="Column"]
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 3
+vertical_alignment = 0

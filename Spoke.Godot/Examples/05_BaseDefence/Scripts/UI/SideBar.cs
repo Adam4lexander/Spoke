@@ -2,116 +2,98 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-
-/// <summary>
-/// The sidebar. Routes the game mode to one of four panels, and each panel is a block: the controls
-/// it needs exist while it's mounted, and are gone when it isn't.
-///
-/// Godot's UI is nodes, so building a panel and wiring a panel are the same act here. There's no
-/// SetActive(true/false) anywhere in this file, and no per-panel root to remember to hide — the
-/// Unity version needs both.
-/// </summary>
+// The sidebar routes the game mode to one of four panels. Each panel is its own scene, so its
+// layout is authored in the editor; the block only decides when it exists and what it says.
+// Mounting instantiates it, unmounting frees it — nothing is left hidden but alive.
 public partial class SideBar : SpokeControl {
 
+    [ExportGroup("References")]
     [Export] public BoardInteractions Interactions { get; set; }
     [Export] public Godot.Collections.Array<BuildItem> BuildItems { get; set; } = new();
 
-    protected override void Init(EffectBuilder s) {
-        // The panel, its background and its column are scene structure — they exist for the whole
-        // game. Only what changes with the mode is built by a block.
-        var column = GetNode<VBoxContainer>("Margin/Column");
+    [ExportGroup("Panels")]
+    [Export] public PackedScene PregameScene { get; set; }
+    [Export] public PackedScene GameplayScene { get; set; }
+    [Export] public PackedScene EndScreenScene { get; set; }
 
-        // One effect, four panels. Changing mode disposes whichever panel is mounted — taking its
-        // labels, its buttons and its signal connections with it — and mounts the next.
+    protected override void Init(EffectBuilder s) {
+        var host = GetNode<Control>("Margin");
+
         s.Effect(s => {
             switch (s.D(GameState.Mode)) {
                 case GameMode.Pregame:
-                    s.Effect("Pregame", Pregame(column));
+                    s.Effect("Pregame", Pregame(host));
                     break;
                 case GameMode.Playing:
-                    s.Effect("Gameplay", Gameplay(column));
+                    s.Effect("Gameplay", Gameplay(host));
                     break;
                 case GameMode.GameOver:
-                    s.Effect("GameOver", EndScreen(column, "DEFEATED", Palette.Danger,
-                        "The Core is gone, and the grid died with it."));
+                    s.Effect("GameOver", EndScreen(host, "DEFEATED", Palette.Danger,
+                        "Core building was destroyed"));
                     break;
                 default:
-                    s.Effect("Victory", EndScreen(column, "VICTORY", Palette.Healthy,
-                        "Every resource site on the map is mined out."));
+                    s.Effect("Victory", EndScreen(host, "VICTORY", Palette.Healthy,
+                        "All resource sites were harvested"));
                     break;
             }
         });
     }
 
-    EffectBlock Pregame(Node column) => s => {
-        Heading(s, column, "BASE DEFENCE", Palette.PaleBlue);
-        Body(s, column,
-            "Your Core seeds a power grid. Buildings work only while a chain of relays connects " +
-            "them back to it.\n\n" +
-            "Harvest every resource site to win. Lose the Core and it's over.\n\n" +
-            "WASD pans the camera.");
-
-        Spacer(s, column, 10);
-        var start = s.Own(column, MakeButton("Start", 20));
-        s.Subscribe(start, Button.SignalName.Pressed, () => GameState.Mode.Set(GameMode.Playing));
+    EffectBlock Pregame(Node host) => s => {
+        var panel = s.Own(host, PregameScene.Instantiate<PregamePanel>());
+        s.Subscribe(panel.PlayButton, Button.SignalName.Pressed, () => GameState.Mode.Set(GameMode.Playing));
     };
 
-    EffectBlock Gameplay(Node column) => s => {
-        var wave = s.Own(column, MakeLabel(14));       // waveText, Unity font size 14
-        var money = s.Own(column, MakeLabel(18));      // moneyText, 18
-        var resources = s.Own(column, MakeLabel(14));  // resourcesText, 14
-
-        Spacer(s, column, 6);
-        Body(s, column, "BUILD", Palette.Text, 12);
-
-        foreach (var item in BuildItems) ControlBuildItem(s, column, item);
-
-        Spacer(s, column, 10);
-        var message = s.Own(column, MakeLabel(14));    // messageText, 14
-        message.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        message.CustomMinimumSize = new Vector2(0, 140);
-        message.VerticalAlignment = VerticalAlignment.Top;
+    EffectBlock Gameplay(Node host) => s => {
+        var panel = s.Own(host, GameplayScene.Instantiate<GameplayPanel>());
 
         s.Effect(s => {
-            var status = s.D(GameState.Director.Wave);
-            var direction = status.Front.ToString();
-            if (status.IsAssaulting) {
-                wave.Text = $"Wave {status.Number}\n{direction} attacking";
-                wave.AddThemeColorOverride("font_color", Palette.Danger);
-            } else if (status.Front != WaveFront.None) {
-                wave.Text = $"Wave {status.Number}\n{direction} in {status.StartsIn}s";
-                wave.AddThemeColorOverride("font_color", CountdownColour(status.StartsIn));
+            var wave = s.D(GameState.Director.Wave);
+            var header = $"[b]Wave {wave.Number}[/b]";
+            var direction = wave.Front.ToString();
+            if (wave.IsAssaulting) {
+                panel.WaveText.Text = $"{header}\n[color=#{Palette.Danger.ToHtml(false)}][b]{direction} attacking[/b][/color]";
             } else {
-                wave.Text = $"Wave {status.Number}\nin {status.StartsIn}s";
-                wave.AddThemeColorOverride("font_color", CountdownColour(status.StartsIn));
+                var colour = CountdownColour(wave.StartsIn).ToHtml(false);
+                var where = wave.Front == WaveFront.None ? "" : $"{direction} ";
+                panel.WaveText.Text = $"{header}\n{where}in [color=#{colour}]{wave.StartsIn}s[/color]";
             }
         });
 
         s.Effect(s => {
-            var amount = Mathf.FloorToInt(s.D(GameState.Money));
-            var rate = s.D(GameState.CollectRate);
-            var paused = s.D(GameState.Director.Wave).IsAssaulting;
-            money.Text = paused
-                ? $"${amount} (+{rate:0.#})\nharvesting paused"
-                : $"${amount} (+{rate:0.#})";
-            money.AddThemeColorOverride("font_color", paused ? Palette.Amber : Palette.Text);
+            var money = $"${Mathf.FloorToInt(s.D(GameState.Money))} (+{s.D(GameState.CollectRate):0.#})";
+            panel.MoneyText.Text = s.D(GameState.Director.Wave).IsAssaulting
+                ? $"{money}\n[font_size=10][color=#{Palette.Amber.ToHtml(false)}]harvesting paused[/color][/font_size]"
+                : money;
         });
 
-        s.Effect(s => resources.Text = $"Resource Sites: {s.D(GameState.ResourcesRemaining)}");
+        s.Effect(s => panel.ResourcesText.Text = $"Resource Sites: {s.D(GameState.ResourcesRemaining)}");
 
         // The message line: placement instructions take priority, then the hovered unit's description.
         s.Effect(s => {
             var placing = s.D(Interactions.Placing);
             var hovered = s.D(Interactions.Hovering);
-            if (placing != null) message.Text = $"Placing {placing.DisplayName} — press Escape to cancel";
-            else if (hovered != null) message.Text = s.D(hovered.HoverInfo).Description;
-            else message.Text = "";
+            if (placing != null) panel.MessageText.Text = $"Placing {placing.DisplayName} — press Escape to cancel";
+            else if (hovered != null) panel.MessageText.Text = s.D(hovered.HoverInfo).Description;
+            else panel.MessageText.Text = "";
         });
+
+        // The buttons are authored in the panel and pair with BuildItems in order.
+        var count = Mathf.Min(BuildItems.Count, panel.BuildButtons.Count);
+        for (var i = 0; i < count; i++) ControlBuildItem(s, BuildItems[i], panel.BuildButtons[i]);
     };
 
-    void ControlBuildItem(EffectBuilder s, Node column, BuildItem item) {
+    EffectBlock EndScreen(Node host, string heading, Color colour, string body) => s => {
+        var panel = s.Own(host, EndScreenScene.Instantiate<EndScreenPanel>());
+        panel.Heading.Text = heading;
+        panel.Heading.AddThemeColorOverride("font_color", colour);
+        panel.Body.Text = body;
+        s.Subscribe(panel.RestartButton, Button.SignalName.Pressed, GameState.Restart);
+    };
+
+    void ControlBuildItem(EffectBuilder s, BuildItem item, Button button) {
         var idleLabel = $"{item.DisplayName} ({item.Hotkey}) - ${item.Cost}";
-        var button = s.Own(column, MakeButton(idleLabel, 15));
+        button.Text = idleLabel;
 
         var canAfford = s.Memo(s => item.Cost <= s.D(GameState.Money));
         var isPlacing = s.Memo(s => s.D(Interactions.Placing) != null);
@@ -144,14 +126,6 @@ public partial class SideBar : SpokeControl {
         });
     }
 
-    EffectBlock EndScreen(Node column, string title, Color colour, string body) => s => {
-        Heading(s, column, title, colour);
-        Body(s, column, body);
-        Spacer(s, column, 10);
-        var restart = s.Own(column, MakeButton("Play again", 18));
-        s.Subscribe(restart, Button.SignalName.Pressed, GameState.Restart);
-    };
-
     // Pale blue far out, sliding through amber to red as the wave closes in.
     static Color CountdownColour(int startsIn) {
         var lull = GameState.Director.LullDuration;
@@ -160,33 +134,4 @@ public partial class SideBar : SpokeControl {
             ? Palette.PaleBlue.Lerp(Palette.Amber, closeness / 0.5f)
             : Palette.Amber.Lerp(Palette.Danger, (closeness - 0.5f) / 0.5f);
     }
-
-    // ------------------------------------------------------------------ small builders
-
-    static Label MakeLabel(int size, Color? colour = null) {
-        var label = new Label();
-        label.AddThemeFontSizeOverride("font_size", size);
-        label.AddThemeColorOverride("font_color", colour ?? Palette.Text);
-        return label;
-    }
-
-    static Button MakeButton(string text, int size) {
-        var button = new Button { Text = text };
-        button.AddThemeFontSizeOverride("font_size", size);
-        return button;
-    }
-
-    static void Heading(EffectBuilder s, Node column, string text, Color colour) {
-        var label = s.Own(column, MakeLabel(24, colour));
-        label.Text = text;
-    }
-
-    static void Body(EffectBuilder s, Node column, string text, Color? colour = null, int size = 14) {
-        var label = s.Own(column, MakeLabel(size, colour ?? Palette.Text));
-        label.Text = text;
-        label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-    }
-
-    static void Spacer(EffectBuilder s, Node column, int height)
-        => s.Own(column, new Control { CustomMinimumSize = new Vector2(0, height) });
 }

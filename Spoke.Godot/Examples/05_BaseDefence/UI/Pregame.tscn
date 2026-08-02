@@ -1,0 +1,67 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/Panels/PregamePanel.cs" id="1_panel"]
+
+[node name="Pregame" type="Control" node_paths=PackedStringArray("PlayButton")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_panel")
+PlayButton = NodePath("Column/Play")
+
+[node name="Column" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "Base Defence"
+autowrap_mode = 3
+
+[node name="ObjectivesHeading" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Objectives"
+autowrap_mode = 3
+
+[node name="ObjectiveList" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 13
+text = "1. Protect your core
+2. Harvest all resources on map"
+autowrap_mode = 3
+
+[node name="TipsHeading" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Tips"
+autowrap_mode = 3
+
+[node name="TipList" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 12
+text = "- WASD to pan camera
+- Relays extend your power grid
+- Harvest resources by placing a relay
+- Income is paused during attack
+- Radar reveals enemies for turrets"
+autowrap_mode = 3
+
+[node name="Gap" type="Control" parent="Column"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="Play" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "PLAY"

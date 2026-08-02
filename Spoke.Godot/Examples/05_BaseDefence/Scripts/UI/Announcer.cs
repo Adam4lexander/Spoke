@@ -2,86 +2,70 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Announces events over the board: flash messages, and a blinking bar along the screen edge the
-/// next wave will attack from.
-/// </summary>
+// Announces game events over the board: flash messages in the onscreen text,
+// and a blinking bar along the screen edge the next wave will attack from.
 public partial class Announcer : SpokeControl {
 
-    // Both serialized on the Announcer in BaseDefence.unity.
-    const float BlinkTime = 0.5f;       // seconds per on/off phase
-    const float MessageTime = 4f;       // how long a message lingers
+    [ExportGroup("References")]
+    [Export] public Label OnscreenText { get; set; }
+    [Export] public Control NorthWarning { get; set; }
+    [Export] public Control EastWarning { get; set; }
+    [Export] public Control SouthWarning { get; set; }
+    [Export] public Control WestWarning { get; set; }
 
-    const float BarThickness = 12f;
+    [ExportGroup("Attributes")]
+    [Export] public float WaveWarningBlinkTime { get; set; } = 0.5f;   // seconds per on/off phase
+    [Export] public float OnscreenMessageTime { get; set; } = 4f;      // seconds a message lingers
 
     protected override void Init(EffectBuilder s) {
-        var text = GetNode<Label>("Message");
+        OnscreenText.Text = "";
+        NorthWarning.Visible = false;
+        EastWarning.Visible = false;
+        SouthWarning.Visible = false;
+        WestWarning.Visible = false;
 
         var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
 
         s.Phase(isPlaying, s => {
-            s.Effect(WaveWarning);
+            s.Effect(ShowWaveWarning);
 
-            // Each announcement is docked under one key, so a new one replaces the one before it —
-            // and replacing it runs its cleanup, which clears the label.
+            // Each announcement is docked under one key, so a new one replaces the one before it.
             var dock = s.Dock();
             s.Subscribe(GameState.Director.WaveStarted, wave =>
-                dock.Effect("announce", Flash(text, $"Wave {wave.Number} incoming — harvesting paused")));
+                dock.Effect("announce", FlashMessage($"Wave {wave.Number} Incoming\nHarvesters Paused")));
             s.Subscribe(GameState.Director.WaveDefeated, wave =>
-                dock.Effect("announce", Flash(text, $"Wave {wave.Number} defeated")));
+                dock.Effect("announce", FlashMessage($"Wave {wave.Number} Defeated")));
         });
     }
 
-    EffectBlock Flash(Label label, string message) => s => {
-        label.Text = message;
-        s.OnCleanup(() => label.Text = "");
-        s.Wait(MessageTime, () => label.Text = "");
+    // Shows a message in the onscreen text, clearing it after a few seconds.
+    EffectBlock FlashMessage(string message) => s => {
+        OnscreenText.Text = message;
+        s.OnCleanup(() => OnscreenText.Text = "");
+        s.Wait(OnscreenMessageTime, () => OnscreenText.Text = "");
     };
 
-    // Blink along the threatened edge once the wave's direction is revealed.
-    EffectBlock WaveWarning => s => {
-        var front = s.Memo(s => {
+    // Blink along the threatened screen edge once the wave's direction is revealed.
+    EffectBlock ShowWaveWarning => s => {
+        var waveFront = s.Memo(s => {
             var wave = s.D(GameState.Director.Wave);
             return wave.IsAssaulting ? WaveFront.None : wave.Front;
         });
 
         s.Effect(s => {
-            var side = s.D(front);
-            if (side == WaveFront.None) return;
+            var bar = s.D(waveFront) switch {
+                WaveFront.North => NorthWarning,
+                WaveFront.East => EastWarning,
+                WaveFront.South => SouthWarning,
+                WaveFront.West => WestWarning,
+                _ => null,
+            };
+            if (bar == null) return;
 
-            var bar = s.Own(this, new ColorRect { Color = Palette.WarningBar, MouseFilter = MouseFilterEnum.Ignore });
-            Place(bar, side);
+            bar.Visible = true;
+            s.OnCleanup(() => bar.Visible = false);
 
-            // The blink stops when this block unmounts, which is the moment the front changes or
-            // the assault begins.
-            var lit = true;
-            s.Every(BlinkTime, () => {
-                lit = !lit;
-                bar.Visible = lit;
-            });
+            s.Every(WaveWarningBlinkTime, () => bar.Visible = !bar.Visible);
         });
     };
-
-    static void Place(Control bar, WaveFront side) {
-        switch (side) {
-            case WaveFront.West:
-                bar.AnchorTop = 0f; bar.AnchorBottom = 1f;
-                bar.OffsetLeft = 0f; bar.OffsetRight = BarThickness;
-                break;
-            case WaveFront.East:
-                bar.AnchorLeft = 1f; bar.AnchorRight = 1f;
-                bar.AnchorTop = 0f; bar.AnchorBottom = 1f;
-                bar.OffsetLeft = -BarThickness; bar.OffsetRight = 0f;
-                break;
-            case WaveFront.North:
-                bar.AnchorRight = 1f;
-                bar.OffsetTop = 0f; bar.OffsetBottom = BarThickness;
-                break;
-            default:
-                bar.AnchorRight = 1f;
-                bar.AnchorTop = 1f; bar.AnchorBottom = 1f;
-                bar.OffsetTop = -BarThickness; bar.OffsetBottom = 0f;
-                break;
-        }
-    }
 }

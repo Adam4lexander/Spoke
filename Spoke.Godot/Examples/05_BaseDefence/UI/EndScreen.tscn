@@ -1,0 +1,43 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/Panels/EndScreenPanel.cs" id="1_panel"]
+
+[node name="EndScreen" type="Control" node_paths=PackedStringArray("Heading", "Body", "RestartButton")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_panel")
+Heading = NodePath("Column/Heading")
+Body = NodePath("Column/Body")
+RestartButton = NodePath("Column/Restart")
+
+[node name="Column" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 20
+text = "VICTORY"
+autowrap_mode = 3
+
+[node name="Body" type="Label" parent="Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = ""
+autowrap_mode = 3
+
+[node name="Gap" type="Control" parent="Column"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="Restart" type="Button" parent="Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "RESTART"
