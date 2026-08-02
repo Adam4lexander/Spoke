@@ -60,13 +60,7 @@ public partial class SideBar : SpokeControl {
         Spacer(s, column, 6);
         Body(s, column, "BUILD", Palette.Text, 12);
 
-        // The button is created here, not inside BuildItem. A nested effect runs after the block
-        // that declared it, so a child added from inside one lands after every child this block
-        // adds — and the sidebar would come out in the wrong order.
-        foreach (var (spec, hotkey) in Units.Buildable) {
-            var button = s.Own(column, MakeButton($"{spec.DisplayName} ({hotkey}) — ${spec.Cost}", 15));
-            s.Effect(BuildItem(button, spec, hotkey));
-        }
+        foreach (var (spec, hotkey) in Units.Buildable) BuildItem(s, column, spec, hotkey);
 
         Spacer(s, column, 10);
         var message = s.Own(column, MakeLabel(14));    // messageText, 14
@@ -110,8 +104,12 @@ public partial class SideBar : SpokeControl {
         });
     };
 
-    EffectBlock BuildItem(Button button, UnitSpec spec, Key hotkey) => s => {
-        var idleLabel = button.Text;
+    // One build button and everything that drives it. A plain method, not a block: nothing here
+    // re-runs, so there's nothing for an effect to re-run. The memos and phases attach to whichever
+    // builder is passed in, and unmount with it.
+    static void BuildItem(EffectBuilder s, Node column, UnitSpec spec, Key hotkey) {
+        var idleLabel = $"{spec.DisplayName} ({hotkey}) — ${spec.Cost}";
+        var button = s.Own(column, MakeButton(idleLabel, 15));
         var placing = GameState.Interactions.Placing;
 
         var canAfford = s.Memo(s => spec.Cost <= s.D(GameState.Money));
@@ -142,7 +140,7 @@ public partial class SideBar : SpokeControl {
                 s.Subscribe(InputSignals.KeyDown(hotkey), cancel);
             });
         });
-    };
+    }
 
     EffectBlock EndScreen(Node column, string title, Color colour, string body) => s => {
         Heading(s, column, title, colour);

@@ -261,12 +261,3 @@ public static T Own<T>(this EffectBuilder s, Node parent, T node) where T : Node
 A turret's beam, a coverage overlay, a radar-tracked marker, the Core's death flare — all of them
 are one of these, and none can outlive the reason it exists, because there is nowhere else to write
 the teardown.
-
----
-
-## One Godot gotcha worth knowing
-
-A nested `s.Effect` runs **after** the block that declared it. That's invisible most of the time,
-but it matters when the block is adding nodes to a container, because child order is creation
-order: anything a nested effect adds lands after everything the enclosing block adds. `SideBar`
-creates its build buttons in the outer block and passes each one into its effect for that reason.
