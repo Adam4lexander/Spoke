@@ -14,9 +14,6 @@ namespace Spoke {
 
         /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         ISignal<bool> IsInTree { get; }
-
-        /// <summary>True while SceneTree pause is stopping this node from processing.</summary>
-        ISignal<bool> IsPaused { get; }
     }
 
     /// <summary>
@@ -35,6 +32,11 @@ namespace Spoke {
     /// - The tree is disposed on PREDELETE, not EXIT_TREE, so it survives reparenting. A node that
     ///   is removed from the tree and re-added keeps its state; IsInTree just goes false and back.
     ///   Gate anything that needs a live tree with s.Phase(IsInTree, ...).
+    ///
+    /// - Pause is deliberately not a signal. s.OnProcess already stops while a node can't process,
+    ///   which is the part that matters, and pause-bracketed setup/teardown is rare enough that it
+    ///   doesn't belong on every node's surface. The recipe for adding it to one node that needs it
+    ///   is in README.md, under "Reacting to pause".
     /// </summary>
     public sealed class SpokeNodeCore {
 
@@ -43,7 +45,6 @@ namespace Spoke {
         readonly Func<bool> visibilityProbe;
 
         readonly State<bool> isInTree = State.Create(false);
-        readonly State<bool> isPaused = State.Create(false);
         readonly State<bool> isVisible = State.Create(false);
 
         SpokeTree<Effect> tree;
@@ -51,9 +52,6 @@ namespace Spoke {
 
         /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => isInTree;
-
-        /// <summary>True while SceneTree pause is stopping this node from processing.</summary>
-        public ISignal<bool> IsPaused => isPaused;
 
         /// <summary>
         /// True while the node is visible in the tree. Only meaningful for hosts that supplied a
@@ -89,7 +87,6 @@ namespace Spoke {
                     break;
 
                 case Node.NotificationReady:
-                    isPaused.Set(!node.CanProcess());
                     RefreshVisibility();
                     Spawn();
                     break;
@@ -101,14 +98,6 @@ namespace Spoke {
                     // But a queue_free'd node exits the tree first and is deleted later, and by then
                     // it is too late to run cleanup that touches the tree.
                     if (node.IsQueuedForDeletion()) Teardown();
-                    break;
-
-                case Node.NotificationPaused:
-                    isPaused.Set(true);
-                    break;
-
-                case Node.NotificationUnpaused:
-                    isPaused.Set(false);
                     break;
 
                 case CanvasItem.NotificationVisibilityChanged:

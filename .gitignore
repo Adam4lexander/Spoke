@@ -57,6 +57,11 @@ Thumbs.db
 /Spoke.Reactive/**/*.uid
 /Spoke.Godot/**/*.uid
 
+# ...except under Examples. The example scenes reference their scripts by uid rather than by path,
+# so they keep working wherever Spoke is installed in a consuming project. That only holds if the
+# uid files are committed alongside them.
+!/Spoke.Godot/Examples/**/*.uid
+
 # The hand-authored test project lives in the Unity-ignored Tests~ folder.
 # It is NOT an auto-generated csproj, so re-include it despite the *.csproj rule above.
 !/Tests~/Spoke.Tests.csproj

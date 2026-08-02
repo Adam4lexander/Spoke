@@ -64,10 +64,31 @@ State<float> speed = State.Create(5f);
 | Signal | True while | Available on |
 |---|---|---|
 | `IsInTree` | the node is inside the SceneTree | all |
-| `IsPaused` | SceneTree pause is stopping this node processing | all |
 | `IsShown` | the node is visible in the tree (self and ancestors) | `SpokeNode2D`, `SpokeNode3D`, `SpokeControl` |
 
 Gate work with `s.Phase(IsInTree, ...)` and friends.
+
+### Reacting to pause
+
+There's no `IsPaused` signal. `s.OnProcess` already stops while a node can't process, which covers
+the common case, and pause-bracketed setup/teardown is rare enough that it doesn't belong on every
+node. If one node needs it, `OnNotification` is the hook:
+
+```csharp
+State<bool> isPaused = State.Create(false);
+
+protected override void OnNotification(int what) {
+    switch ((long)what) {
+        case NotificationPaused: isPaused.Set(true); break;
+        case NotificationUnpaused: isPaused.Set(false); break;
+    }
+}
+```
+
+Two things worth knowing. Godot sends `NOTIFICATION_PAUSED` for **both** causes — `SceneTree.paused`
+reaching the node, *and* the node's own `ProcessMode` being set to `Disabled` — so this tracks
+either, and always agrees with `CanProcess()`. And seed it from `!CanProcess()` in `_Ready` if a node
+can start out disabled, since no notification fires for the initial state.
 
 ## EffectBuilder extensions
 

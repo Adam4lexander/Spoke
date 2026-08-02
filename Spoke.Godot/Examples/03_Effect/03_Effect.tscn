@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://c53sa884le2pk" path="res://Spoke/Spoke.Godot/Examples/03_Effect/Effect_Example.cs" id="1_effect"]
+
+[node name="Effect" type="Node2D"]
+script = ExtResource("1_effect")
+MountOuterPhase = true
+MountInnerPhase = true

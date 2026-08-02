@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://b5llbdq7leahb" path="res://Spoke/Spoke.Godot/Examples/04_Memo/Memo_Example.cs" id="1_memo"]
+
+[node name="Memo" type="Node2D"]
+script = ExtResource("1_memo")

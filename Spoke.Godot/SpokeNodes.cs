@@ -23,7 +23,6 @@ namespace Spoke {
 
         public Node HostNode => this;
         public ISignal<bool> IsInTree => core.IsInTree;
-        public ISignal<bool> IsPaused => core.IsPaused;
 
         /// <summary>Declare your effects here. Replaces _Ready, and the teardown half of _ExitTree.</summary>
         protected abstract void Init(EffectBuilder s);
@@ -56,7 +55,6 @@ namespace Spoke {
 
         public Node HostNode => this;
         public ISignal<bool> IsInTree => core.IsInTree;
-        public ISignal<bool> IsPaused => core.IsPaused;
 
         /// <summary>
         /// True while the node is visible in the tree — self and every ancestor. Named IsShown
@@ -88,7 +86,6 @@ namespace Spoke {
 
         public Node HostNode => this;
         public ISignal<bool> IsInTree => core.IsInTree;
-        public ISignal<bool> IsPaused => core.IsPaused;
 
         /// <summary>
         /// True while the node is visible in the tree — self and every ancestor. Named IsShown
@@ -120,7 +117,6 @@ namespace Spoke {
 
         public Node HostNode => this;
         public ISignal<bool> IsInTree => core.IsInTree;
-        public ISignal<bool> IsPaused => core.IsPaused;
 
         /// <summary>
         /// True while the control is visible in the tree — self and every ancestor. Named IsShown

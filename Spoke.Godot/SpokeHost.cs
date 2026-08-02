@@ -7,8 +7,8 @@ namespace Spoke {
     /// wrote, a third-party node, or one node that needs several independent trees.
     ///
     /// SpokeHost is a child node, so Godot's own ownership rules do the work: it enters and leaves
-    /// the tree with its target, inherits its pause state, and is freed when the target is freed,
-    /// which tears the tree down. Signals reported here describe the target, not the host.
+    /// the tree with its target and is freed when the target is freed, which tears the tree down.
+    /// Signals reported here describe the target, not the host.
     ///
     /// <code>
     /// public partial class Player : CharacterBody2D {
@@ -37,9 +37,6 @@ namespace Spoke {
 
         /// <summary>True while the target is inside the SceneTree.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
-
-        /// <summary>True while SceneTree pause is stopping the target from processing.</summary>
-        public ISignal<bool> IsPaused => core.IsPaused;
 
         public sealed override void _Notification(int what) {
             base._Notification(what);
