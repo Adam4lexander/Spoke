@@ -3,19 +3,10 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// The game's own EffectBuilder extensions. Adding methods here makes them available as s.Xxx(...)
-/// inside any Init, exactly like Spoke's built-in ones.
-///
-/// Spoke.Godot deliberately ships no node-lifetime helper, because scoping a node to a block means
-/// choosing what cleanup does, and that's a per-game call. This game makes that call twice, and
-/// they're different: things a block owns outright are freed (s.Own, below), and units go back to
-/// the Pool instead. Only the first is common enough to be worth an extension.
-///
-/// s.Wait and s.Every replace the coroutines the Unity version uses; Godot C# has no coroutines,
-/// and both are a few lines over s.OnProcess. They inherit its behaviour for free: they stop while
-/// the host can't process, so the whole game freezes on GetTree().Paused without a single check.
-/// </summary>
+// Extend Spoke by adding extension methods to EffectBuilder: they become new s.Xxx(...) calls
+// usable inside any Init, exactly like Spoke's built-in ones. Godot C# has no coroutines, so
+// s.Wait and s.Every stand in for the Unity version's s.Coroutine, and s.Own scopes a node to
+// the block that made it.
 public static class SpokeExtensions {
 
     /// <summary>

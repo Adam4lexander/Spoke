@@ -1,14 +1,36 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
-[ext_resource type="Script" uid="uid://bwieoyvdqtbc4" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Enemies/Enemy.cs" id="1_enemy"]
-[ext_resource type="Script" uid="uid://cucmm65tsdk4m" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="2_fx"]
-[ext_resource type="Script" uid="uid://c62d7tqq4r5oq" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="3_bar"]
-[ext_resource type="Texture2D" uid="uid://cbyrtduw8sxkp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/enemy-2.svg" id="4_body"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Enemies/Enemy.cs" id="1_enemy"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Health.cs" id="2_health"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="3_bar"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="4_fx"]
+[ext_resource type="Texture2D" uid="uid://cbyrtduw8sxkp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/enemy-2.svg" id="5_body"]
+[ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/BombBlast.tscn" id="6_bomb"]
 
 [node name="Enemy2" type="Node2D"]
 z_index = 10
-script = ExtResource("1_enemy")
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("2_health")
 MaxHp = 8.0
+
+[node name="FX" type="Node2D" parent="."]
+script = ExtResource("4_fx")
+
+[node name="Body" type="Sprite2D" parent="FX"]
+texture = ExtResource("5_body")
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -36)
+script = ExtResource("3_bar")
+
+[node name="Enemy" type="Node" parent="." node_paths=PackedStringArray("Health", "HealthBar", "FX", "FlightRoot")]
+script = ExtResource("1_enemy")
+BombBlastPrefab = ExtResource("6_bomb")
+Health = NodePath("../Health")
+HealthBar = NodePath("../HealthBar")
+FX = NodePath("../FX")
+FlightRoot = NodePath("../FX/Body")
 Radius = 0.4
 MoveSpeed = 1.0
 StopDistance = 1.2
@@ -16,13 +38,3 @@ FireRate = 1.0
 ProximityBias = 0.5
 SeparationDistance = 0.6
 SeparationStrength = 0.2
-
-[node name="FX" type="Node2D" parent="."]
-script = ExtResource("2_fx")
-
-[node name="Body" type="Sprite2D" parent="FX"]
-texture = ExtResource("4_body")
-
-[node name="HealthBar" type="Node2D" parent="."]
-position = Vector2(0, -36)
-script = ExtResource("3_bar")

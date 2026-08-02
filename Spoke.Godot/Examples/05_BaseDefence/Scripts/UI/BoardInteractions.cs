@@ -7,13 +7,13 @@ namespace Spoke.Examples.BaseDefence;
 /// nested block, so what's on screen is always exactly what the current situation calls for —
 /// there is no show/hide bookkeeping anywhere in this file.
 /// </summary>
-public partial class BoardInteractions : SpokeNode2D {
+public partial class BoardInteractions : SpokeNode {
 
     readonly State<IHoverable> hovering = State.Create<IHoverable>(null);
     readonly State<Circle> hoveringCircle = State.Create(default(Circle));
 
-    /// <summary>What the player is placing, or null when they aren't.</summary>
-    public State<UnitSpec> Placing { get; } = State.Create<UnitSpec>(null);
+    /// <summary>The build item currently being placed, or null when not placing.</summary>
+    public State<BuildItem> Placing { get; } = State.Create<BuildItem>(null);
 
     /// <summary>The unit under the pointer, or null when there isn't one.</summary>
     public ISignal<IHoverable> Hovering => hovering;
@@ -55,7 +55,7 @@ public partial class BoardInteractions : SpokeNode2D {
 
         s.Effect(s => {
             var overlap = sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null;
-            hovering.Set(overlap?.Owner);
+            hovering.Set(overlap?.Owner.GetNodeOrNull<Node>("Describes") as IHoverable);
             hoveringCircle.Set(overlap?.Circle ?? default);
         }, sensor.OverlapsChanged);
     };
@@ -81,18 +81,18 @@ public partial class BoardInteractions : SpokeNode2D {
     // Power coverage and the placed type's own coverage show while choosing a spot, and the
     // footprint follows the pointer, recoloured by whether it can go there — touching provider
     // coverage, clear of everything else. A click on a valid spot buys it.
-    EffectBlock PlaceBuilding(UnitSpec spec) => s => {
+    EffectBlock PlaceBuilding(BuildItem item) => s => {
         s.Effect(CoverageDisplay.Draw(GameState.PowerZone, Palette.PowerCoverage, body => body.IsProvider));
-        if (spec.Coverage != CoverageType.Power) s.Effect(ShowCoverage(spec.Coverage));
+        if (item.Coverage != CoverageType.Power) s.Effect(ShowCoverage(item.Coverage));
 
         var mouse = s.Memo(s => s.D(GameState.View).MousePoint ?? Vector2.Zero);
-        var footprint = s.Memo(s => new Circle(s.D(mouse), spec.RadiusPx));
+        var footprint = s.Memo(s => new Circle(s.D(mouse), World.Px(item.Radius)));
 
         var groundSensor = s.Use(GameState.GroundZone.AddSensor(() => footprint.Now));
         var powerSensor = s.Use(GameState.PowerZone.AddSensor(() => new Circle(mouse.Now, 0f), body => body.IsProvider));
 
         var isValid = s.Memo(
-            s => groundSensor.Overlaps.Count == 0 && powerSensor.Overlaps.Count > 0 && spec.Cost <= s.D(GameState.Money),
+            s => groundSensor.Overlaps.Count == 0 && powerSensor.Overlaps.Count > 0,
             groundSensor.OverlapsChanged, powerSensor.OverlapsChanged);
 
         var colour = s.Memo(s => s.D(isValid) ? Palette.ValidPlacement : Palette.InvalidPlacement);
@@ -100,8 +100,8 @@ public partial class BoardInteractions : SpokeNode2D {
 
         s.Subscribe(InputSignals.LeftClick, () => {
             if (!isValid.Now) return;
-            Pool.Spawn(spec, mouse.Now);
-            GameState.Money.Update(x => x - spec.Cost);
+            Pool.Spawn(item.Prefab, mouse.Now);
+            GameState.Money.Update(x => x - item.Cost);
             Placing.Set(null);
         });
 

@@ -115,26 +115,31 @@ above. In Godot that's a 2D scene, which removes a surprising amount of code:
   white so the unpowered tint stays a plain multiply. The 3D shatter throws pieces up and lets
   gravity land them — top-down 2D has no "up", so they slide outward against drag and fade.
 
-### Components became inheritance
+### Components became child nodes
 
 Unity attaches behaviour by composition: a building is one `GameObject` carrying `Building`,
-`Health`, `MeshFX`, `HealthBar`, `PowerNode` and `Turret` side by side. Godot has no component
-model, so that split three ways:
+`Health`, `MeshFX`, `HealthBar`, `PowerNode` and `Turret` side by side. Godot's unit of composition
+is the node, so each component became a child node of the unit's root, and the root itself carries
+no script — it's the `GameObject`:
 
-- Things with a position or something to draw became **child nodes in the unit's scene** — `UnitFX`,
-  `HealthBar`, `PowerNode`.
-- Things that are only state became **plain objects** — `Health` is a class the unit owns and
-  mounts with `s.Effect(health.Mount)`. Making it a node would have added a line to every unit's
-  tree and bought nothing.
-- What was a second component beside `Building` became a **subclass** of it. `Turret`, `Radar`,
-  `Relay`, `RepairStation` and `Core` all extend `Building`, which extends `Unit`.
+```
+TurretBuilding
+  Health / FX / PowerNode / HealthBar / Building / Describes
+```
 
-`Unit` seals `Init` and offers three hooks instead — `Always`, `Alive`, `Dying` — because the shape
-of a unit's life is the same for all of them, and each hook's name says exactly when it runs.
+References between them are `[Export]`, which is Godot's `[SerializeField]`: a node picker in the
+inspector, stored in the `.tscn` as a `NodePath`. `Building` names its `Health`, `FX`, `HealthBar`
+and `PowerNode`; `Turret` names its `Building` and the sprite it rotates. Nothing is looked up by
+type or hunted for at runtime.
+
+Two lookups can't be wired, because what they find is whatever a collider happened to hit — the
+same two the Unity version answers with `GetComponent`. Godot has no equivalent, so they go by
+node name instead: `GetNodeOrNull<Health>("Health")` for blast damage and repair targets, and
+`GetNodeOrNull<Node>("Describes")` for the component that describes a hovered unit. That's why
+every unit scene names its describing component `Describes`.
 
 `UnitFX` takes whatever `Node2D` children the scene gave it as the pieces to tint, blink and
-shatter, and treats one named `Pivot` as the part that rotates. That's the radar's dish and the
-turret's barrel, and it means the art decides what the body is made of.
+shatter, so the art decides what the body is made of.
 
 ### Prefabs became scenes, and the scene is the level
 
@@ -177,10 +182,9 @@ the scene. Everything they reach for on their way up (the collision worlds, `Boa
 `ProcessFrame` handler in the game, so the sim never reads a stale world. All of it lives in `Init`;
 there isn't a lifecycle override anywhere in the folder.
 
-Two places need the *other* direction — a node's own children being set up — and both say so with a
-phase rather than a callback. `CameraControls` waits on `IsReady` before making its `Camera2D`
-current, and `Unit` gates its whole life on `IsReady && IsInTree`, because `UnitFX` doesn't know
-which of its pieces is the `Pivot` a turret aims until its own `Init` has run.
+One place needs the *other* direction — a node's own children being set up — and says so with a
+phase rather than a callback: `CameraControls` waits on `IsReady` before making its `Camera2D`
+current.
 
 ### Coroutines became `s.OnProcess`
 

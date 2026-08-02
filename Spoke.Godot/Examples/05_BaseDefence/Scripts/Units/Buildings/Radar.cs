@@ -2,30 +2,36 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Reveals enemies inside its coverage so turrets can shoot at them. Does nothing without power.
-/// </summary>
-public partial class Radar : Building {
+// Reveals enemies within its coverage so turrets can target them. Runs only while powered.
+public partial class Radar : SpokeNode, IHoverable {
 
-    /// <summary>Coverage radius in metres.</summary>
+    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
+    Node2D Unit => Building.Unit;
+
+    [ExportGroup("References")]
+    [Export] public Building Building { get; set; }
+    [Export] public Node2D DishPivot { get; set; }
+
+    [ExportGroup("Attributes")]
     [Export] public float Range { get; set; } = 8f;
-
-    /// <summary>Dish rotation in degrees per second.</summary>
     [Export] public float DishRotationSpeed { get; set; } = 90f;
 
-    protected override string Blurb =>
-        "Reveals enemies inside its coverage to turrets.\n\n" +
-        "Turrets cannot fire at an enemy no radar has revealed.";
+    readonly State<HoverInfo> hoverInfo = State.Create(default(HoverInfo));
+    public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
-    protected override void Alive(EffectBuilder s) {
-        base.Alive(s);
+    protected override void Init(EffectBuilder s) {
+        hoverInfo.Set(new HoverInfo(
+            $"{Building.DisplayName.ToUpper()}\n\n" +
+            "Reveals enemies inside its coverage to turrets.\n\n" +
+            "Turrets cannot fire at enemies that no radar has revealed.",
+            CoverageType.Radar, Building.Power));
 
-        s.Phase(IsRunning(s), s => {
-            s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(GlobalPosition, World.Px(Range))));
+        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(Building.Power.HasPower));
 
-            // The dish only turns while the radar is powered and alive, because that's the only
-            // time this block is mounted.
-            s.OnProcess(delta => FX.Pivot.Rotation += Mathf.DegToRad(DishRotationSpeed) * (float)delta);
+        s.Phase(isRunning, s => {
+            s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(Unit.GlobalPosition, World.Px(Range))));
+
+            s.OnProcess(delta => DishPivot.Rotation += Mathf.DegToRad(DishRotationSpeed) * (float)delta);
         });
     }
 }

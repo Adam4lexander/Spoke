@@ -2,31 +2,22 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// The health of a unit. Not a node — it has no position and nothing to draw, so making it one
-/// would only add a line to every unit's scene tree.
-///
-/// Unity models this as a separate MonoBehaviour because that's how Unity composes behaviour onto
-/// an object. Godot composes by nesting nodes, which is the wrong shape for a bag of reactive
-/// numbers; a plain class the unit owns and mounts is closer to the intent, and it costs the unit
-/// one line: s.Effect(health.Mount).
-/// </summary>
-public class Health {
+/// <summary>Basic health system used by buildings, resource sites and enemies.</summary>
+public partial class Health : SpokeNode {
+
+    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
+    public Node2D Unit => (Node2D)Owner;
+
+    [Export] public float MaxHp { get => maxHp.Now; set => maxHp.Set(value); }
 
     readonly State<float> maxHp = State.Create(1f);
     readonly State<float> damage = State.Create(0f);
-    readonly State<float> hpFraction = State.Create(1f);
+    readonly State<float> hpFrac = State.Create(1f);
     readonly State<bool> isAlive = State.Create(true);
     readonly Trigger damaged = Trigger.Create();
 
-    /// <summary>Full health, in hit points. Driven by the owning unit's exported MaxHp.</summary>
-    public float MaxHp {
-        get => maxHp.Now;
-        set => maxHp.Set(value);
-    }
-
     /// <summary>Current HP as a fraction of max, from 1 down to 0.</summary>
-    public ISignal<float> HPFraction => hpFraction;
+    public ISignal<float> HPFraction => hpFrac;
 
     /// <summary>True while HP is above zero.</summary>
     public ISignal<bool> IsAlive => isAlive;
@@ -35,7 +26,6 @@ public class Health {
     public ITrigger Damaged => damaged;
 
     public void Damage(float amount) {
-        if (!isAlive.Now) return;
         damage.Update(x => x + amount);
         damaged.Invoke();
     }
@@ -45,17 +35,14 @@ public class Health {
         damage.Update(x => Mathf.Max(0f, x - amount));
     }
 
-    /// <summary>Mounted by the owning unit. Derives the fraction and the alive flag from damage taken.</summary>
-    public EffectBlock Mount => s => {
+    protected override void Init(EffectBuilder s) {
         var hp = s.Memo(s => s.D(maxHp) - s.D(damage));
 
         s.Effect(s => {
-            hpFraction.Set(s.D(hp) / s.D(maxHp));
+            hpFrac.Set(s.D(hp) / s.D(maxHp));
             isAlive.Set(s.D(hp) > 0f);
         });
 
-        // Full health on the way back to the pool. This is the only reset the whole game writes by
-        // hand, because damage is the only unit state that isn't itself scoped to a phase.
-        s.OnCleanup(() => damage.Set(0f));
-    };
+        s.Phase(IsInTree, s => s.OnCleanup(() => damage.Set(0f)));   // restore full health on return to the pool
+    }
 }

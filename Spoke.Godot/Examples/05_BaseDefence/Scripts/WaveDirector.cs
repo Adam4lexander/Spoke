@@ -39,20 +39,24 @@ public readonly struct WaveStatus : IEquatable<WaveStatus> {
 /// </summary>
 public partial class WaveDirector : SpokeNode {
 
-    // Every value here is serialized on the WaveDirector in BaseDefence.unity.
-    public const float LullDuration = 30f;   // seconds of calm between waves
+    [ExportGroup("Prefabs")]
+    [Export] public PackedScene Enemy1Prefab { get; set; }
+    [Export] public PackedScene Enemy2Prefab { get; set; }
+    [Export] public PackedScene Enemy3Prefab { get; set; }
 
-    const float FrontRevealTime = 5f;      // the direction is revealed this many seconds early
-    const int BaseBudget = 2;              // wave 1's spawn budget (a tier 1 enemy costs 1)
-    const float BudgetPerWave = 1f;        // extra budget each wave
-    const int Tier2UnlockWave = 4;
-    const int Tier3UnlockWave = 8;
-    const float BaseSpawnInterval = 1f;
-    const float SpawnIntervalStep = 0.1f;
-    const float MinSpawnInterval = 0.25f;
-    const float SpawnMargin = 6f;          // metres outside the level bounds that enemies appear
+    [ExportGroup("Attributes")]
+    [Export] public float LullDuration { get; set; } = 30f;          // seconds of calm between waves
+    [Export] public float FrontRevealTime { get; set; } = 5f;        // the direction is revealed this many seconds before a wave hits
+    [Export] public int BaseBudget { get; set; } = 2;                // wave 1's spawn budget (a basic enemy costs 1)
+    [Export] public float BudgetPerWave { get; set; } = 1f;          // extra budget added each wave
+    [Export] public int Enemy2UnlockWave { get; set; } = 4;          // first wave with tier 2 enemies
+    [Export] public int Enemy3UnlockWave { get; set; } = 8;          // first wave with tier 3 enemies
+    [Export] public float BaseSpawnInterval { get; set; } = 1f;      // interval between spawns on wave 1
+    [Export] public float SpawnIntervalStep { get; set; } = 0.1f;    // the interval drops this much each wave
+    [Export] public float MinSpawnInterval { get; set; } = 0.25f;    // smallest the interval gets
+    [Export] public float SpawnMargin { get; set; } = 6f;            // enemies spawn this far outside the level bounds
 
-    readonly State<WaveStatus> wave = State.Create(new WaveStatus(1, WaveFront.None, Mathf.CeilToInt(LullDuration)));
+    readonly State<WaveStatus> wave = State.Create(default(WaveStatus));
     readonly Trigger<WaveStatus> waveStarted = Trigger.Create<WaveStatus>();
     readonly Trigger<WaveStatus> waveDefeated = Trigger.Create<WaveStatus>();
 
@@ -64,6 +68,8 @@ public partial class WaveDirector : SpokeNode {
     public ITrigger<WaveStatus> WaveDefeated => waveDefeated;
 
     protected override void Init(EffectBuilder s) {
+        wave.Set(new WaveStatus(1, WaveFront.None, Mathf.CeilToInt(LullDuration)));
+
         var isPlaying = s.Memo(s => s.D(GameState.Mode) == GameMode.Playing);
 
         s.Phase(isPlaying, s => {
@@ -109,10 +115,10 @@ public partial class WaveDirector : SpokeNode {
                 doneSpawning.Set(true);
                 return;
             }
-            var (spec, cost) = PickEnemy(number, budget);
+            var (prefab, cost) = PickEnemy(number, budget);
             budget -= cost;
 
-            var enemy = (Enemy)Pool.Spawn(spec, EdgePoint(front));
+            var enemy = Pool.Spawn(prefab, EdgePoint(front)).GetNode<Enemy>("Enemy");
             remaining.Update(x => x + 1);
             dock.Effect(enemy, s => {
                 if (s.D(enemy.Health.IsAlive)) return;
@@ -132,19 +138,19 @@ public partial class WaveDirector : SpokeNode {
     // Tiers cost less than their health multiple: every tier deals the same damage, so hp
     // concentrated in fewer bodies is worth less than the same hp spread out. Heavier tiers unlock
     // as waves progress, and a pick never overshoots the budget left.
-    static (UnitSpec spec, float cost) PickEnemy(int wave, float budget) {
-        var maxTier = wave >= Tier3UnlockWave ? 3 : wave >= Tier2UnlockWave ? 2 : 1;
+    (PackedScene prefab, float cost) PickEnemy(int wave, float budget) {
+        var maxTier = wave >= Enemy3UnlockWave ? 3 : wave >= Enemy2UnlockWave ? 2 : 1;
         if (maxTier > 2 && budget < 2.5f) maxTier = 2;
         if (maxTier > 1 && budget < 1.5f) maxTier = 1;
         return GD.RandRange(1, maxTier) switch {
-            1 => (Units.Enemy1, 1f),
-            2 => (Units.Enemy2, 1.5f),
-            _ => (Units.Enemy3, 2.5f),
+            1 => (Enemy1Prefab, 1f),
+            2 => (Enemy2Prefab, 1.5f),
+            _ => (Enemy3Prefab, 2.5f),
         };
     }
 
-    // A random point along the given edge of the level, just outside its bounds.
-    static Vector2 EdgePoint(WaveFront front) {
+    // A random point along the given front's edge of the level, just outside its bounds.
+    Vector2 EdgePoint(WaveFront front) {
         var b = GameState.LevelBounds;
         var margin = World.Px(SpawnMargin);
         var x = (float)GD.RandRange(b.Position.X, b.End.X);

@@ -2,42 +2,47 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Fires at the nearest radar-revealed enemy inside its coverage, while powered. Blind on its own.
-/// </summary>
-public partial class Turret : Building {
+// Fires at the nearest radar-revealed enemy in its coverage, while powered. Blind without radar.
+public partial class Turret : SpokeNode, IHoverable {
 
-    /// <summary>Coverage radius in metres.</summary>
+    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
+    Node2D Unit => Building.Unit;
+
+    [ExportGroup("References")]
+    [Export] public Building Building { get; set; }
+    [Export] public Node2D Pivot { get; set; }
+
+    [ExportGroup("Attributes")]
     [Export] public float Range { get; set; } = 5f;
-
-    /// <summary>Barrel traverse in degrees per second.</summary>
     [Export] public float RotationSpeed { get; set; } = 180f;
-
-    /// <summary>Damage per shot, in hit points.</summary>
     [Export] public float Damage { get; set; } = 0.5f;
-
-    /// <summary>Shots per second.</summary>
-    [Export] public float FireRate { get; set; } = 2f;
-
-    /// <summary>How closely the barrel must line up before it fires, in degrees.</summary>
-    [Export] public float FireAngle { get; set; } = 2f;
-
-    /// <summary>How long the beam stays on screen, in seconds.</summary>
+    [Export] public float FireRate { get; set; } = 2f;       // shots per second
+    [Export] public float FireAngle { get; set; } = 2f;      // max muzzle-to-target angle (deg) allowed to fire
     [Export] public float BeamFlashTime { get; set; } = 0.1f;
 
-    protected override string Blurb =>
-        "Fires at enemies inside its coverage that radar has revealed.\n\n" +
-        "Pair it with radar coverage — a turret alone sees nothing.";
+    float targetDirection;
+    readonly State<HoverInfo> hoverInfo = State.Create(default(HoverInfo));
 
-    protected override void Alive(EffectBuilder s) {
-        base.Alive(s);
+    public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
-        s.Phase(IsRunning(s), s => {
-            var rangePx = World.Px(Range);
-            s.Use(GameState.TurretZone.AddCollider(this, () => new Circle(GlobalPosition, rangePx)));
+    protected override void Init(EffectBuilder s) {
+        hoverInfo.Set(new HoverInfo(
+            $"{Building.DisplayName.ToUpper()}\n\n" +
+            "Fires at enemies inside its coverage that radar has revealed.\n\n" +
+            "Pair with radar coverage — a turret alone sees nothing.",
+            CoverageType.Turret, Building.Power));
 
-            // Overlaps arrive nearest-first, so this is the closest enemy radar has revealed.
-            var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(GlobalPosition, rangePx)));
+        targetDirection = Pivot.Rotation;
+
+        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(Building.Power.HasPower));
+
+        s.Phase(isRunning, s => {
+            s.Effect(RotateToTarget);
+
+            s.Use(GameState.TurretZone.AddCollider(this, () => new Circle(Unit.GlobalPosition, World.Px(Range))));
+
+            // Overlaps are nearest-first, so this picks the closest radar-revealed enemy.
+            var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(Unit.GlobalPosition, World.Px(Range))));
             var target = s.Memo(s => {
                 foreach (var c in sensor.Overlaps) {
                     if (s.D(c.Owner.IsTracked)) return c.Owner;
@@ -45,63 +50,59 @@ public partial class Turret : Building {
                 return null;
             }, sensor.OverlapsChanged);
 
-            // Where the barrel wants to point. Whichever behaviour is mounted writes it; the
-            // rotation below reads it, and neither has to know about the other.
-            var aim = FX.Pivot.Rotation;
-
-            s.OnProcess(delta => {
-                var step = Mathf.DegToRad(RotationSpeed) * (float)delta;
-                var diff = Mathf.AngleDifference(FX.Pivot.Rotation, aim);
-                FX.Pivot.Rotation += Mathf.Clamp(diff, -step, step);
-            });
-
-            // Nothing to shoot: sweep to a new bearing every couple of seconds.
-            EffectBlock idle = s => {
-                aim = GD.Randf() * Mathf.Tau;
-                s.Every(GD.RandRange(1.0, 3.0), () => aim = GD.Randf() * Mathf.Tau);
-            };
-
-            // Track the target, and fire when the cooldown is up and the barrel is lined up.
-            EffectBlock attack(Enemy enemy) => s => {
-                var ready = State.Create(true);
-                var firing = State.Create(false);
-
-                s.OnProcess(_ => {
-                    if (!GodotObject.IsInstanceValid(enemy)) return;
-                    aim = (enemy.GlobalPosition - GlobalPosition).Angle();
-                    if (!ready.Now || firing.Now) return;
-                    if (Mathf.Abs(Mathf.AngleDifference(FX.Pivot.Rotation, aim)) > Mathf.DegToRad(FireAngle)) return;
-                    firing.Set(true);
-                });
-
-                // The beam is a phase, so it's on screen for exactly as long as the shot lasts —
-                // and if the turret loses power mid-shot, the beam goes with everything else.
-                s.Phase(firing, s => {
-                    var from = GlobalPosition;
-                    var to = GodotObject.IsInstanceValid(enemy) ? enemy.GlobalPosition : from;
-                    var beam = s.Own(GameState.Board, new DrawLayer(30) {
-                        OnDraw = l => l.DrawLine(from, to, Palette.TurretBeam, 3f, true),
-                    });
-                    beam.Refresh();
-
-                    // Show the beam first, then land the hit, so the killing shot is seen before
-                    // the enemy dies and the turret retargets.
-                    s.Wait(BeamFlashTime, () => {
-                        if (GodotObject.IsInstanceValid(enemy)) enemy.Health.Damage(Damage);
-                        firing.Set(false);
-                        ready.Set(false);
-                    });
-                });
-
-                var cooling = s.Memo(s => !s.D(ready));
-                s.Phase(cooling, s => s.Wait(1f / FireRate, () => ready.Set(true)));
-            };
-
             s.Effect(s => {
                 var targetNow = s.D(target);
-                if (targetNow == null) s.Effect("Idle", idle);
-                else s.Effect("Attack", attack(targetNow));
+                if (targetNow == null) s.Effect(IdleBehaviour);
+                else s.Effect(AttackBehaviour(targetNow));
             });
         });
     }
+
+    EffectBlock RotateToTarget => s => {
+        s.OnProcess(delta => {
+            var step = Mathf.DegToRad(RotationSpeed) * (float)delta;
+            var diff = Mathf.AngleDifference(Pivot.Rotation, targetDirection);
+            Pivot.Rotation += Mathf.Clamp(diff, -step, step);
+        });
+    };
+
+    EffectBlock IdleBehaviour => s => {
+        const float minInterval = 1f;
+        const float maxInterval = 3f;
+        targetDirection = GD.Randf() * Mathf.Tau;
+        s.Every(GD.RandRange(minInterval, maxInterval), () => targetDirection = GD.Randf() * Mathf.Tau);
+    };
+
+    EffectBlock AttackBehaviour(Enemy target) => s => {
+        var ready = State.Create(true);
+        var firing = State.Create(false);
+
+        s.OnProcess(_ => {
+            if (!GodotObject.IsInstanceValid(target)) return;
+            targetDirection = (target.Unit.GlobalPosition - Pivot.GlobalPosition).Angle();
+            if (!ready.Now || firing.Now) return;
+            if (Mathf.Abs(Mathf.AngleDifference(Pivot.Rotation, targetDirection)) > Mathf.DegToRad(FireAngle)) return;
+            firing.Set(true);
+        });
+
+        // Flash the beam first, then land the hit, so the killing shot is seen
+        // before the enemy dies and we retarget.
+        s.Phase(firing, s => {
+            var from = Unit.GlobalPosition;
+            var to = GodotObject.IsInstanceValid(target) ? target.Unit.GlobalPosition : from;
+            var beam = s.Own(GameState.Board, new DrawLayer(30) {
+                OnDraw = l => l.DrawLine(from, to, Palette.TurretBeam, 3f, true),
+            });
+            beam.Refresh();
+
+            s.Wait(BeamFlashTime, () => {
+                if (GodotObject.IsInstanceValid(target)) target.Health.Damage(Damage);
+                firing.Set(false);
+                ready.Set(false);
+            });
+        });
+
+        var cooling = s.Memo(s => !s.D(ready));
+        s.Phase(cooling, s => s.Wait(1f / FireRate, () => ready.Set(true)));
+    };
 }

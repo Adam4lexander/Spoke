@@ -36,7 +36,9 @@ public partial class BombBlast : SpokeNode2D {
 
             s.Wait(Duration, () => {
                 foreach (var hit in GameState.GroundZone.Query(new Circle(GlobalPosition, World.Px(Radius)))) {
-                    hit.Owner.Health.Damage(Damage);
+                    var health = hit.Owner.GetNodeOrNull<Health>("Health");
+                    if (health == null) continue;
+                    health.Damage(Damage);
                 }
                 Pool.Despawn(this);
             });

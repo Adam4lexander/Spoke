@@ -2,6 +2,7 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
+
 /// <summary>
 /// The sidebar. Routes the game mode to one of four panels, and each panel is a block: the controls
 /// it needs exist while it's mounted, and are gone when it isn't.
@@ -11,6 +12,9 @@ namespace Spoke.Examples.BaseDefence;
 /// Unity version needs both.
 /// </summary>
 public partial class SideBar : SpokeControl {
+
+    [Export] public BoardInteractions Interactions { get; set; }
+    [Export] public Godot.Collections.Array<BuildItem> BuildItems { get; set; } = new();
 
     protected override void Init(EffectBuilder s) {
         // The panel, its background and its column are scene structure — they exist for the whole
@@ -60,7 +64,7 @@ public partial class SideBar : SpokeControl {
         Spacer(s, column, 6);
         Body(s, column, "BUILD", Palette.Text, 12);
 
-        foreach (var (spec, hotkey) in Units.Buildable) BuildItem(s, column, spec, hotkey);
+        foreach (var item in BuildItems) ControlBuildItem(s, column, item);
 
         Spacer(s, column, 10);
         var message = s.Own(column, MakeLabel(14));    // messageText, 14
@@ -70,12 +74,15 @@ public partial class SideBar : SpokeControl {
 
         s.Effect(s => {
             var status = s.D(GameState.Director.Wave);
+            var direction = status.Front.ToString();
             if (status.IsAssaulting) {
-                wave.Text = $"Wave {status.Number} — {status.Front} attacking";
+                wave.Text = $"Wave {status.Number}\n{direction} attacking";
                 wave.AddThemeColorOverride("font_color", Palette.Danger);
+            } else if (status.Front != WaveFront.None) {
+                wave.Text = $"Wave {status.Number}\n{direction} in {status.StartsIn}s";
+                wave.AddThemeColorOverride("font_color", CountdownColour(status.StartsIn));
             } else {
-                var where = status.Front == WaveFront.None ? "" : $"{status.Front} ";
-                wave.Text = $"Wave {status.Number} — {where}in {status.StartsIn}s";
+                wave.Text = $"Wave {status.Number}\nin {status.StartsIn}s";
                 wave.AddThemeColorOverride("font_color", CountdownColour(status.StartsIn));
             }
         });
@@ -84,60 +91,55 @@ public partial class SideBar : SpokeControl {
             var amount = Mathf.FloorToInt(s.D(GameState.Money));
             var rate = s.D(GameState.CollectRate);
             var paused = s.D(GameState.Director.Wave).IsAssaulting;
-            money.Text = paused ? $"${amount}   harvesting paused" : $"${amount}   +{rate:0.#}/s";
+            money.Text = paused
+                ? $"${amount} (+{rate:0.#})\nharvesting paused"
+                : $"${amount} (+{rate:0.#})";
             money.AddThemeColorOverride("font_color", paused ? Palette.Amber : Palette.Text);
         });
 
-        s.Effect(s => resources.Text = $"Resource sites left: {s.D(GameState.ResourcesRemaining)}");
+        s.Effect(s => resources.Text = $"Resource Sites: {s.D(GameState.ResourcesRemaining)}");
 
-        // Placement instructions take priority, then whatever the pointer is over.
+        // The message line: placement instructions take priority, then the hovered unit's description.
         s.Effect(s => {
-            var placing = s.D(GameState.Interactions.Placing);
-            var hovered = s.D(GameState.Interactions.Hovering);
-            if (placing != null) {
-                message.Text = $"Placing {placing.DisplayName}.\n\nClick a spot inside power coverage, clear of other units. Right-click or Escape to cancel.";
-            } else if (hovered != null) {
-                message.Text = s.D(hovered.HoverInfo).Description;
-            } else {
-                message.Text = "";
-            }
+            var placing = s.D(Interactions.Placing);
+            var hovered = s.D(Interactions.Hovering);
+            if (placing != null) message.Text = $"Placing {placing.DisplayName} — press Escape to cancel";
+            else if (hovered != null) message.Text = s.D(hovered.HoverInfo).Description;
+            else message.Text = "";
         });
     };
 
-    // One build button and everything that drives it. A plain method, not a block: nothing here
-    // re-runs, so there's nothing for an effect to re-run. The memos and phases attach to whichever
-    // builder is passed in, and unmount with it.
-    static void BuildItem(EffectBuilder s, Node column, UnitSpec spec, Key hotkey) {
-        var idleLabel = $"{spec.DisplayName} ({hotkey}) — ${spec.Cost}";
+    void ControlBuildItem(EffectBuilder s, Node column, BuildItem item) {
+        var idleLabel = $"{item.DisplayName} ({item.Hotkey}) - ${item.Cost}";
         var button = s.Own(column, MakeButton(idleLabel, 15));
-        var placing = GameState.Interactions.Placing;
 
-        var canAfford = s.Memo(s => spec.Cost <= s.D(GameState.Money));
-        var isPlacingAnything = s.Memo(s => s.D(placing) != null);
-        var isPlacingThis = s.Memo(s => s.D(placing) == spec);
-        var isIdle = s.Memo(s => !s.D(isPlacingAnything));
+        var canAfford = s.Memo(s => item.Cost <= s.D(GameState.Money));
+        var isPlacing = s.Memo(s => s.D(Interactions.Placing) != null);
+        var isNotPlacing = s.Memo(s => !s.D(isPlacing));
 
-        s.Phase(isIdle, s => {
+        s.Phase(isNotPlacing, s => {
             s.Effect(s => button.Disabled = !s.D(canAfford));
 
-            void begin() {
-                if (canAfford.Now) placing.Set(spec);
+            void beginPlacing() {
+                if (canAfford.Now) Interactions.Placing.Set(item);
             }
-            s.Subscribe(button, Button.SignalName.Pressed, begin);
-            s.Subscribe(InputSignals.KeyDown(hotkey), begin);
+            s.Subscribe(button, Button.SignalName.Pressed, beginPlacing);
+            s.Subscribe(InputSignals.KeyDown(item.Hotkey), beginPlacing);
         });
 
-        s.Phase(isPlacingAnything, s => {
-            // Only the selected button stays live, and it becomes the cancel affordance.
+        s.Phase(isPlacing, s => {
+            var isPlacingThis = s.Memo(s => s.D(Interactions.Placing) == item);
+
+            // Only the selected button stays live, becoming the cancel affordance.
             s.Effect(s => button.Disabled = !s.D(isPlacingThis));
 
             s.Phase(isPlacingThis, s => {
-                button.Text = $"Cancel ({hotkey})";
+                button.Text = $"Cancel ({item.Hotkey})";
                 s.OnCleanup(() => button.Text = idleLabel);
 
-                void cancel() => placing.Set(null);
+                void cancel() => Interactions.Placing.Set(null);
                 s.Subscribe(button, Button.SignalName.Pressed, cancel);
-                s.Subscribe(InputSignals.KeyDown(hotkey), cancel);
+                s.Subscribe(InputSignals.KeyDown(Key.Escape), cancel);
             });
         });
     }
@@ -152,7 +154,8 @@ public partial class SideBar : SpokeControl {
 
     // Pale blue far out, sliding through amber to red as the wave closes in.
     static Color CountdownColour(int startsIn) {
-        var closeness = Mathf.Clamp(1f - startsIn / WaveDirector.LullDuration, 0f, 1f);
+        var lull = GameState.Director.LullDuration;
+        var closeness = lull > 0f ? Mathf.Clamp(1f - startsIn / lull, 0f, 1f) : 1f;
         return closeness < 0.5f
             ? Palette.PaleBlue.Lerp(Palette.Amber, closeness / 0.5f)
             : Palette.Amber.Lerp(Palette.Danger, (closeness - 0.5f) / 0.5f);

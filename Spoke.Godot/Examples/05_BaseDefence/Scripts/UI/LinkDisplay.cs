@@ -16,7 +16,7 @@ public static class LinkDisplay {
             for (var node = start; node != null;) {
                 var parent = s.D(node.Parent);
                 if (parent == null) break;
-                list.Add((node.GlobalPosition, parent.GlobalPosition));
+                list.Add((node.Unit.GlobalPosition, parent.Unit.GlobalPosition));
                 node = parent;
             }
             return list;
@@ -31,7 +31,7 @@ public static class LinkDisplay {
             foreach (var node in s.D(PowerNode.All)) {
                 var parent = s.D(node.Parent);
                 if (parent == null) continue;
-                list.Add((node.GlobalPosition, parent.GlobalPosition));
+                list.Add((node.Unit.GlobalPosition, parent.Unit.GlobalPosition));
             }
             return list;
         });

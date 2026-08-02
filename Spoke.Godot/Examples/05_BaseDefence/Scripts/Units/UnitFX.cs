@@ -38,9 +38,6 @@ public partial class UnitFX : SpokeNode2D {
     readonly Trigger shatterCommand = Trigger.Create();
     readonly Trigger restoreCommand = Trigger.Create();
 
-    /// <summary>The child named "Pivot", for units that rotate part of themselves. Null if there isn't one.</summary>
-    public Node2D Pivot { get; private set; }
-
     /// <summary>True once the shatter has finished and the pieces are hidden.</summary>
     public ISignal<bool> IsShattered => isShattered;
 
@@ -62,7 +59,6 @@ public partial class UnitFX : SpokeNode2D {
             pieces.Add(piece);
             homePositions.Add(piece.Position);
             homeRotations.Add(piece.Rotation);
-            if (piece.Name == "Pivot") Pivot = piece;
         }
 
         // restoreCommand re-runs this block, which tears down any docked blink or shatter and

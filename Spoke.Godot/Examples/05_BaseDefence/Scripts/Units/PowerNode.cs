@@ -25,7 +25,10 @@ public class PowerBody {
 ///
 /// Ranges are in metres, matching the Unity prefabs.
 /// </summary>
-public partial class PowerNode : SpokeNode2D {
+public partial class PowerNode : SpokeNode {
+
+    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
+    public Node2D Unit => (Node2D)Owner;
 
     const float PowerSettleDelay = 0.15f;
 
@@ -51,8 +54,12 @@ public partial class PowerNode : SpokeNode2D {
     /// <summary>How far this node relays power onward, in metres. Zero for a leaf.</summary>
     [Export] public float ProvideRange { get; set; }
 
+    readonly State<bool> enabled = State.Create(true);
     readonly State<PowerNode> parent = State.Create<PowerNode>(null);
     readonly State<bool> hasPower = State.Create(false);
+
+    /// <summary>Switched off while the unit is dying, the way Unity disables the component.</summary>
+    public IState<bool> Enabled => enabled;
 
     /// <summary>The provider this node draws power from; null for the root, or an unpowered node.</summary>
     public ISignal<PowerNode> Parent => parent;
@@ -64,13 +71,7 @@ public partial class PowerNode : SpokeNode2D {
     public bool IsLeaf => ProvideRange <= 0f;
 
     protected override void Init(EffectBuilder s) {
-        // The unit this belongs to. Its Health exists from its constructor, so it's safe to read
-        // here even though a child's _Ready runs before its parent's.
-        var unit = GetParent<Unit>();
-
-        // IsInTree is this game's IsEnabled. A pooled unit leaves the tree without being destroyed,
-        // so everything below unmounts on despawn and mounts fresh on reuse.
-        var isOnline = s.Memo(s => s.D(IsInTree) && s.D(unit.Health.IsAlive));
+        var isOnline = s.Memo(s => s.D(IsInTree) && s.D(enabled));
 
         s.Phase(isOnline, s => {
             UpdateAll(list => list.Add(this));
@@ -100,7 +101,7 @@ public partial class PowerNode : SpokeNode2D {
     EffectBlock ReceivePower => s => {
         var collider = s.Use(GameState.PowerZone.AddCollider(
             new PowerBody(this, false),
-            () => new Circle(GlobalPosition, World.Px(ReceiveRange)),
+            () => new Circle(Unit.GlobalPosition, World.Px(ReceiveRange)),
             body => body.IsProvider));
 
         s.OnCleanup(() => parent.Set(null));
@@ -127,7 +128,7 @@ public partial class PowerNode : SpokeNode2D {
     EffectBlock ProvidePower => s => {
         var collider = s.Use(GameState.PowerZone.AddCollider(
             new PowerBody(this, true),
-            () => new Circle(GlobalPosition, World.Px(ProvideRange)),
+            () => new Circle(Unit.GlobalPosition, World.Px(ProvideRange)),
             body => !body.IsProvider));
 
         // One walk up the chain answers both questions: who my ancestors are (for the steal guard),
@@ -154,8 +155,8 @@ public partial class PowerNode : SpokeNode2D {
                     if (parentNow == null || parentNow == this) return true;
                     // Steal the node from a farther provider, unless it's one of our own ancestors,
                     // which would close the chain into a loop.
-                    var mine = node.GlobalPosition.DistanceSquaredTo(GlobalPosition);
-                    var theirs = node.GlobalPosition.DistanceSquaredTo(parentNow.GlobalPosition);
+                    var mine = node.Unit.GlobalPosition.DistanceSquaredTo(Unit.GlobalPosition);
+                    var theirs = node.Unit.GlobalPosition.DistanceSquaredTo(parentNow.Unit.GlobalPosition);
                     if (mine >= theirs) return false;
                     return !s.D(chain).ancestors.Contains(node);
                 });

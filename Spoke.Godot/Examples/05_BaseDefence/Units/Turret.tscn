@@ -1,41 +1,57 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
-[ext_resource type="Script" uid="uid://hm72xssfuorr" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Turret.cs" id="1_turret"]
-[ext_resource type="Script" uid="uid://cucmm65tsdk4m" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="2_fx"]
-[ext_resource type="Script" uid="uid://dui4h6fsf2clr" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="3_power"]
-[ext_resource type="Script" uid="uid://c62d7tqq4r5oq" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="4_bar"]
-[ext_resource type="Texture2D" uid="uid://clbjtec1h2atp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-body.svg" id="5_body"]
-[ext_resource type="Texture2D" uid="uid://elaadlkmvarf" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-barrel.svg" id="6_barrel"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Building.cs" id="1_building"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Turret.cs" id="2_turret"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Health.cs" id="3_health"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="4_power"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="5_bar"]
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/UnitFX.cs" id="6_fx"]
+[ext_resource type="Texture2D" uid="uid://clbjtec1h2atp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-body.svg" id="7_body"]
+[ext_resource type="Texture2D" uid="uid://elaadlkmvarf" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-barrel.svg" id="8_barrel"]
 
-[node name="Turret" type="Node2D"]
-script = ExtResource("1_turret")
+[node name="TurretBuilding" type="Node2D"]
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("3_health")
 MaxHp = 5.0
-Radius = 0.4
+
+[node name="FX" type="Node2D" parent="."]
+script = ExtResource("6_fx")
+
+[node name="Body" type="Sprite2D" parent="FX"]
+texture = ExtResource("7_body")
+
+[node name="Barrel" type="Sprite2D" parent="FX"]
+texture = ExtResource("8_barrel")
+offset = Vector2(10, 0)
+
+[node name="PowerNode" type="Node" parent="."]
+script = ExtResource("4_power")
+ReceiveRange = 0.1
+ProvideRange = 0.0
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -38)
+script = ExtResource("5_bar")
+
+[node name="Building" type="Node" parent="." node_paths=PackedStringArray("Health", "HealthBar", "FX", "Power")]
+script = ExtResource("1_building")
+Health = NodePath("../Health")
+HealthBar = NodePath("../HealthBar")
+FX = NodePath("../FX")
+Power = NodePath("../PowerNode")
 DisplayName = "Turret"
 Cost = 50
-Coverage = 3
+Radius = 0.4
+UnpoweredDim = 0.35
+
+[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Building", "Pivot")]
+script = ExtResource("2_turret")
+Building = NodePath("../Building")
+Pivot = NodePath("../FX/Barrel")
 Range = 5.0
 RotationSpeed = 180.0
 Damage = 0.5
 FireRate = 2.0
 FireAngle = 2.0
 BeamFlashTime = 0.1
-
-[node name="FX" type="Node2D" parent="."]
-script = ExtResource("2_fx")
-
-[node name="Body" type="Sprite2D" parent="FX"]
-texture = ExtResource("5_body")
-
-[node name="Pivot" type="Sprite2D" parent="FX"]
-texture = ExtResource("6_barrel")
-offset = Vector2(10, 0)
-
-[node name="PowerNode" type="Node2D" parent="."]
-script = ExtResource("3_power")
-ReceiveRange = 0.1
-ProvideRange = 0.0
-
-[node name="HealthBar" type="Node2D" parent="."]
-position = Vector2(0, -38)
-script = ExtResource("4_bar")
