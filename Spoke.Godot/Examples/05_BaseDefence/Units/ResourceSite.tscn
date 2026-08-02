@@ -8,9 +8,9 @@
 [ext_resource type="Texture2D" uid="uid://cpc31iln5potg" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/resource-body.svg" id="5_body"]
 [ext_resource type="Texture2D" uid="uid://bhqx5g76wwymh" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/resource-crystal.svg" id="6_crystal"]
 
-[node name="Resource" type="Node2D" node_paths=PackedStringArray("Describes")]
+[node name="Resource" type="Node2D" node_paths=PackedStringArray("Hoverable")]
 script = ExtResource("0_unit")
-Describes = NodePath("Describes")
+Hoverable = NodePath("ResourceSite")
 
 [node name="FX" type="Node2D" parent="."]
 script = ExtResource("4_fx")
@@ -32,7 +32,7 @@ ProvideRange = 0.0
 position = Vector2(0, -48)
 script = ExtResource("3_bar")
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Power", "HealthBar", "FX")]
+[node name="ResourceSite" type="Node" parent="." node_paths=PackedStringArray("Unit", "Power", "HealthBar", "FX")]
 script = ExtResource("1_site")
 Unit = NodePath("..")
 Power = NodePath("../PowerNode")

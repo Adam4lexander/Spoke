@@ -124,7 +124,7 @@ no script — it's the `GameObject`:
 
 ```
 TurretBuilding
-  Health / FX / PowerNode / HealthBar / Building / Describes
+  Health / FX / PowerNode / HealthBar / Building / Turret
 ```
 
 References between them are `[Export]`, which is Godot's `[SerializeField]`: a node picker in the
@@ -139,12 +139,12 @@ instead of looked up at runtime:
 ```csharp
 public partial class Unit : Node2D {
     [Export] public Health Health { get; set; }     // what a blast damages, a repair station heals
-    [Export] public Node Describes { get; set; }    // what names it when the pointer hovers it
+    [Export] public Node Hoverable { get; set; }    // what names it when the pointer hovers it
 }
 ```
 
 That's what `GameState.GroundZone` is generic over, so `BombBlast`, `Repair` and
-`BoardInteractions` read `c.Owner.Health` and `c.Owner.Describes` directly. Nothing in the folder
+`BoardInteractions` read `c.Owner.Health` and `c.Owner.Hoverable` directly. Nothing in the folder
 searches for a component.
 
 Only the components that own a transform are `Node2D` — `UnitFX`, which parents the sprite pieces,

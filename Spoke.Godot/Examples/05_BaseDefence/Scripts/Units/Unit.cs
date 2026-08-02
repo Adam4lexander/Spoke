@@ -13,6 +13,7 @@ public partial class Unit : Node2D {
     /// <summary>What a blast damages and a repair station heals. Unset on resource sites.</summary>
     [Export] public Health Health { get; set; }
 
-    /// <summary>The component that names this unit when the pointer hovers it. Unset on enemies.</summary>
-    [Export] public Node Describes { get; set; }
+    /// <summary>The component implementing IHoverable, which names this unit when the pointer
+    /// hovers it. Unset on enemies.</summary>
+    [Export] public Node Hoverable { get; set; }
 }

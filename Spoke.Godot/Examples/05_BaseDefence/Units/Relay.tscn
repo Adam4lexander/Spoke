@@ -10,10 +10,10 @@
 [ext_resource type="Texture2D" uid="uid://ywbc3lmyn6lb" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/relay-body.svg" id="7_body"]
 [ext_resource type="Texture2D" uid="uid://5towhw20e4qr" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/relay-gem.svg" id="8_gem"]
 
-[node name="RelayBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Describes")]
+[node name="RelayBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Hoverable")]
 script = ExtResource("0_unit")
 Health = NodePath("Health")
-Describes = NodePath("Describes")
+Hoverable = NodePath("Relay")
 
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
@@ -51,7 +51,7 @@ Cost = 10
 Radius = 0.3
 unpoweredDim = 0.35
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building")]
+[node name="Relay" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building")]
 script = ExtResource("2_relay")
 Unit = NodePath("..")
 Building = NodePath("../Building")

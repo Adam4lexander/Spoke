@@ -10,10 +10,10 @@
 [ext_resource type="Texture2D" uid="uid://b3lrsgmvuf1hg" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/core-body.svg" id="7_body"]
 [ext_resource type="Texture2D" uid="uid://d1x4rtgtupmc1" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/core-gem.svg" id="8_gem"]
 
-[node name="CoreBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Describes")]
+[node name="CoreBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Hoverable")]
 script = ExtResource("0_unit")
 Health = NodePath("Health")
-Describes = NodePath("Describes")
+Hoverable = NodePath("Core")
 
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
@@ -52,7 +52,7 @@ Cost = 0
 Radius = 0.5
 unpoweredDim = 0.35
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building", "Health")]
+[node name="Core" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building", "Health")]
 script = ExtResource("2_core")
 Unit = NodePath("..")
 Building = NodePath("../Building")

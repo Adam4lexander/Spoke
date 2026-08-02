@@ -10,10 +10,10 @@
 [ext_resource type="Texture2D" uid="uid://clbjtec1h2atp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-body.svg" id="7_body"]
 [ext_resource type="Texture2D" uid="uid://elaadlkmvarf" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/turret-barrel.svg" id="8_barrel"]
 
-[node name="TurretBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Describes")]
+[node name="TurretBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Hoverable")]
 script = ExtResource("0_unit")
 Health = NodePath("Health")
-Describes = NodePath("Describes")
+Hoverable = NodePath("Turret")
 
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
@@ -52,7 +52,7 @@ Cost = 50
 Radius = 0.4
 unpoweredDim = 0.35
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building", "Pivot")]
+[node name="Turret" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building", "Pivot")]
 script = ExtResource("2_turret")
 Unit = NodePath("..")
 Building = NodePath("../Building")
