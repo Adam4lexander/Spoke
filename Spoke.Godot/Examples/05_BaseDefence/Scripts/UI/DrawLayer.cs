@@ -3,15 +3,9 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// A Node2D whose _Draw is supplied as a delegate, so an effect can create one, point it at a
-/// closure, and let cleanup take it away.
-///
-/// This is what replaces the Unity version's mesh building. Unity has no immediate-mode 2D drawing
-/// at runtime, so CoverageDisplay and LinkDisplay there each build a GameObject, a Mesh and a
-/// Material instance, and hand-write vertex and index buffers. In Godot, DrawArc and DrawLine are
-/// enough — the whole of both displays reduces to "recompute the shapes, then QueueRedraw".
-/// </summary>
+// A Node2D whose _Draw is supplied as a delegate, so an effect can create one, point it at a
+// closure, and let cleanup take it away. Replaces the mesh and material the Unity displays build
+// by hand, since Godot draws arcs and lines directly.
 public partial class DrawLayer : Node2D {
 
     /// <summary>Called from _Draw. Call Refresh() after changing anything it reads.</summary>

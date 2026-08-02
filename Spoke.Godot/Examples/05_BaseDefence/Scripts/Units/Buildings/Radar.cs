@@ -5,7 +5,6 @@ namespace Spoke.Examples.BaseDefence;
 // Reveals enemies within its coverage so turrets can target them. Runs only while powered.
 public partial class Radar : SpokeNode, IHoverable {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
     Node2D Unit => Building.Unit;
 
     [ExportGroup("References")]

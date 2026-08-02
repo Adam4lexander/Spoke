@@ -3,13 +3,12 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// A centre-and-radius circle in world space. The whole game is overlapping circles: power
-/// coverage, radar coverage, turret range, repair range, unit footprints.
-/// </summary>
+/// <summary>A center-and-radius circle on the board.</summary>
 public readonly struct Circle : IEquatable<Circle> {
 
+    /// <summary>World-space anchor, usually a unit's GlobalPosition.</summary>
     public readonly Vector2 Center;
+    /// <summary>Radius, in pixels.</summary>
     public readonly float Radius;
 
     public Circle(Vector2 center, float radius) {
@@ -17,7 +16,7 @@ public readonly struct Circle : IEquatable<Circle> {
         Radius = radius;
     }
 
-    /// <summary>True when the circles intersect or one contains the other. Exactly touching doesn't count.</summary>
+    /// <summary>True when the two circles intersect or one contains the other. Exactly touching doesn't count.</summary>
     public bool Overlaps(Circle other) {
         var reach = Radius + other.Radius;
         return Center.DistanceSquaredTo(other.Center) < reach * reach;

@@ -9,11 +9,7 @@ namespace Spoke.Examples.BaseDefence;
 // the block that made it.
 public static class SpokeExtensions {
 
-    /// <summary>
-    /// Adds a child, and frees it when the block ends. Every transient thing on screen is one of
-    /// these — a turret's beam, a coverage overlay, a radar-tracked marker — and none of them can
-    /// outlive the reason they exist, because there's nowhere else to write the teardown.
-    /// </summary>
+    /// <summary>Adds a child, and frees it when the surrounding effect unmounts.</summary>
     public static T Own<T>(this EffectBuilder s, Node parent, T node) where T : Node {
         parent.AddChild(node);
         s.OnCleanup(() => {
@@ -23,9 +19,8 @@ public static class SpokeExtensions {
     }
 
     /// <summary>
-    /// Runs onElapsed once, after a delay, if the block is still mounted by then. Unmount before it
-    /// fires and it never fires — which is the whole point: a countdown that outlives its reason to
-    /// exist is the bug this replaces.
+    /// Runs onElapsed once after a delay, if the surrounding effect is still mounted by then.
+    /// Unmount before it fires and it never fires -- no cancellation to remember.
     /// </summary>
     public static void Wait(this EffectBuilder s, double seconds, Action onElapsed) {
         var elapsed = 0.0;
@@ -39,7 +34,7 @@ public static class SpokeExtensions {
         });
     }
 
-    /// <summary>Runs onTick on a fixed interval while the block is mounted.</summary>
+    /// <summary>Runs onTick on a fixed interval while the surrounding effect is mounted.</summary>
     public static void Every(this EffectBuilder s, double seconds, Action onTick) {
         if (seconds <= 0.0) throw new ArgumentOutOfRangeException(nameof(seconds));
         var elapsed = 0.0;

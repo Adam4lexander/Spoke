@@ -5,7 +5,6 @@ namespace Spoke.Examples.BaseDefence;
 // Fires at the nearest radar-revealed enemy in its coverage, while powered. Blind without radar.
 public partial class Turret : SpokeNode, IHoverable {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
     Node2D Unit => Building.Unit;
 
     [ExportGroup("References")]

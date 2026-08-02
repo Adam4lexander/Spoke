@@ -5,21 +5,11 @@ namespace Spoke.Examples.BaseDefence;
 /// <summary>The states a playthrough moves through. Only Playing runs the simulation; the rest freeze it.</summary>
 public enum GameMode { Pregame, Playing, GameOver, Victory }
 
-/// <summary>
-/// The game's central hub, and the scene root. Holds the shared state every system reads, and owns
-/// the win and loss conditions.
-///
-/// It does not build the game. The board, the camera, the UI, the Core and all 27 resource sites
-/// are authored in 05_BaseDefence.tscn, the same way the Unity version authors them in
-/// BaseDefence.unity — the starting state of a level is scene data, not a loop in C#. What this
-/// class does is find those nodes and publish them.
-///
-/// Unity's version is a SpokeSingleton. Godot has no generic-script equivalent — Godot scripts
-/// can't be generic — and its own answer, an autoload, would need a Project Settings entry in
-/// whatever project imports this folder. So this is what the Unity version's comment describes
-/// anyway: a hand-placed node that publishes itself from Init, which — because Init runs on
-/// entering the tree — happens before any descendant’s. Every unit in the scene can read it.
-/// </summary>
+// The game's central hub: a hand-placed singleton holding the shared state every system reads.
+// It also owns the win/loss conditions (see Init).
+//
+// Godot scripts can't be generic, so there's no SpokeSingleton here -- it publishes itself from
+// Init instead, which runs on entering the tree, before any descendant's.
 public partial class GameState : SpokeNode2D {
 
     [ExportGroup("References")]
@@ -35,7 +25,6 @@ public partial class GameState : SpokeNode2D {
 
     static GameState instance;
 
-    /// <summary>The hub. Valid from the first descendant's Init onwards.</summary>
     public static GameState Instance => instance;
 
     readonly State<GameMode> mode = State.Create(GameMode.Pregame);
@@ -55,25 +44,22 @@ public partial class GameState : SpokeNode2D {
     public static IState<GameMode> Mode => instance.mode;
     public static IState<float> Money => instance.money;
 
-    /// <summary>Total money earned per second across all active harvesters.</summary>
+    // Total money earned per second across all active harvesters.
     public static IState<float> CollectRate => instance.collectRate;
 
-    /// <summary>Resource sites not yet mined out; victory when it reaches zero.</summary>
+    // Resource sites on the map not yet mined out; victory when it reaches zero.
     public static IState<int> ResourcesRemaining => instance.resourcesRemaining;
 
-    /// <summary>What the camera can see, and where the cursor points on the board.</summary>
+    // The current camera view: what board the camera sees, and where the cursor points on it.
     public static ISignal<View> View => instance.CameraControls.View;
 
     public static WaveDirector Director => instance.WaveDirector;
     public static Node2D Board => instance.BoardRoot;
 
-    /// <summary>The play area in pixels.</summary>
     public static Rect2 LevelBounds => BoundsOf(instance.Dimensions);
 
-    /// <summary>
-    /// The play area a given size would give, in pixels, centred on the origin. Static because
-    /// Ground is a [Tool] script and draws the level in the editor, where there's no live Instance.
-    /// </summary>
+    // Static because Ground is a [Tool] script and draws the level in the editor, where there's
+    // no live instance.
     public static Rect2 BoundsOf(Vector2 metres) {
         var size = metres * World.PixelsPerMetre;
         return new Rect2(-size * 0.5f, size);
@@ -86,13 +72,12 @@ public partial class GameState : SpokeNode2D {
     public static CollisionWorld<Repair> RepairZone => instance.repairZone;
     public static CollisionWorld<Enemy> EnemyZone => instance.enemyZone;
 
-    /// <summary>Reloads the scene, restarting from Pregame.</summary>
+    /// <summary>Reloads the active scene, restarting the game from Pregame.</summary>
     public static void Restart() => instance.GetTree().ReloadCurrentScene();
 
     protected override void Init(EffectBuilder s) {
 
-        // Init runs as this node enters the tree, and _EnterTree propagates top-down, so the hub is
-        // published before any unit in the scene reaches for it.
+        // _EnterTree propagates top-down, so the hub is published before any unit reaches for it.
         instance = this;
 
         // Every world is re-sampled once a frame, before anything reads it.
@@ -109,6 +94,8 @@ public partial class GameState : SpokeNode2D {
         s.OnCleanup(Pool.Clear);
 
         var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);
+
+        // Pause the sim unless we're in GameMode.Playing
         s.Effect(s => GetTree().Paused = !s.D(isPlaying));
 
         s.Phase(isPlaying, s => {

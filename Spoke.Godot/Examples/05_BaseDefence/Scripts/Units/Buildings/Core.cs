@@ -6,7 +6,6 @@ namespace Spoke.Examples.BaseDefence;
 // ends the game.
 public partial class Core : SpokeNode, IHoverable {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
     Node2D Unit => Building.Unit;
 
     [Export] public Building Building { get; set; }

@@ -113,8 +113,7 @@ public partial class Enemy : SpokeNode {
             // health bar) never inherit rotation.
             if (dist > 0.001f) FlightRoot.Rotation = to.Angle();
             if (dist > stop) {
-                // The unit moves, not this component. Unity's transform.position is the GameObject's;
-                // here the components are children, so moving one would leave the body behind.
+                // The unit moves, not this component -- components are children of it.
                 Unit.GlobalPosition += to / dist * Mathf.Min(World.Px(MoveSpeed) * (float)delta, dist - stop);
             }
             inRange.Set(dist <= stop + 1f);

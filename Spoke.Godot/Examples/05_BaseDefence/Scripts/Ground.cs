@@ -2,18 +2,11 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// The board itself: the play area, its grid, and the ground beyond its edge.
-///
-/// Nothing reactive about it, so it isn't a Spoke node — a plain Node2D with _Draw. The rest of the
-/// integration doesn't mind: extending SpokeNode2D is for nodes that want an Init, not a tax on
-/// every node in the scene.
-///
-/// [Tool] so it draws in the editor as well as in the game. Without it the level is invisible while
-/// you're arranging the scene, which rather defeats the point of the scene holding the level. Note
-/// that the attribute is safe here precisely because this node has no Init — putting [Tool] on a
-/// Spoke node would spawn its tree in the editor and run the game there.
-/// </summary>
+// The board itself: the play area, its grid, and the ground beyond its edge. Nothing reactive
+// about it, so it's a plain Node2D rather than a Spoke node.
+//
+// [Tool] so it draws in the editor too, where the level is arranged. Safe here precisely because
+// there's no Init -- [Tool] on a Spoke node would spawn its tree and run the game in the editor.
 [Tool]
 public partial class Ground : Node2D {
 
@@ -30,14 +23,11 @@ public partial class Ground : Node2D {
         }
     }
 
-    // The play area is GameState's to define, so this reads it rather than keeping its own copy.
-    // Owner is the scene root both in the editor and at runtime, and an exported value is applied
-    // by the loader whether or not the script it's on is [Tool].
+    // The play area is GameState's to define, so read it rather than keeping a copy.
     Vector2 Dimensions => Owner is GameState game ? game.Dimensions : new Vector2(40f, 40f);
 
     public override void _Process(double delta) {
-        // Editor only: keep the preview live when Dimensions is edited on the root. The game never
-        // changes it, so this costs nothing at runtime.
+        // Editor only: keep the preview live when Dimensions is edited on the root.
         if (!Engine.IsEditorHint()) return;
         if (Dimensions == lastDimensions) return;
         lastDimensions = Dimensions;

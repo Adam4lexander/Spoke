@@ -5,7 +5,6 @@ namespace Spoke.Examples.BaseDefence;
 // Heals the most damaged building in its coverage, one at a time, while powered.
 public partial class Repair : SpokeNode, IHoverable {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
     Node2D Unit => Building.Unit;
 
     [ExportGroup("References")]

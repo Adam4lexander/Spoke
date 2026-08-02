@@ -4,7 +4,6 @@ namespace Spoke.Examples.BaseDefence;
 
 // The sidebar routes the game mode to one of four panels. Each panel is its own scene, so its
 // layout is authored in the editor; the block only decides when it exists and what it says.
-// Mounting instantiates it, unmounting frees it — nothing is left hidden but alive.
 public partial class SideBar : SpokeControl {
 
     [ExportGroup("References")]
@@ -126,7 +125,7 @@ public partial class SideBar : SpokeControl {
         });
     }
 
-    // Pale blue far out, sliding through amber to red as the wave closes in.
+    // Pale blue far out, sliding through amber to red as the wave gets close.
     static Color CountdownColour(int startsIn) {
         var lull = GameState.Director.LullDuration;
         var closeness = lull > 0f ? Mathf.Clamp(1f - startsIn / lull, 0f, 1f) : 1f;

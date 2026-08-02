@@ -3,33 +3,19 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// A unit's body, and the three things that ever happen to it: a persistent tint, a damage blink,
-/// and a shatter-into-pieces death.
-///
-/// The pieces are the children of ShatterRoot — one Sprite2D per part of the body — so what
-/// shatters is whatever the artist put there. A child named "Pivot" keeps the unit's origin and can
-/// be rotated in place: a radar dish, a turret barrel.
-///
-/// Each command is a Trigger, handled by an effect docked for the duration of the animation. The
-/// Dock is what makes "start a new blink, replacing any blink already running" a single line —
-/// re-docking under the same key detaches the previous one, which unwinds its own cleanup.
-/// </summary>
+// Sprite visual effects for a unit: tint, a colour blink, and a shatter-into-pieces explosion.
+// The pieces are the children of ShatterRoot, so what shatters is whatever the artist put there.
 public partial class UnitFX : SpokeNode2D {
 
-    // Straight from the Unity MeshFX prefab values.
     const float ShatterTime = 2f;
     const float BlinkTime = 0.15f;
-    const float BlastSpeed = 2f;   // metres per second
+    const float BlastSpeed = 2f;
 
     // Unity's shatter throws the pieces up and lets gravity bring them down. Top-down 2D has no
     // "up", so the pieces slide outward against drag and fade instead.
     const float Drag = 2.2f;
 
-    /// <summary>
-    /// The body that tints, blinks and shatters. Unset means this node, so everything under it
-    /// goes. A resource site points it at the crystals, leaving the mound standing once mined out.
-    /// </summary>
+    /// <summary>The body that tints, blinks and shatters. Unset means this node.</summary>
     [Export] public Node2D ShatterRoot { get; set; }
 
     readonly List<Node2D> pieces = new();
@@ -44,19 +30,19 @@ public partial class UnitFX : SpokeNode2D {
     readonly Trigger shatterCommand = Trigger.Create();
     readonly Trigger restoreCommand = Trigger.Create();
 
-    /// <summary>True once the shatter has finished and the pieces are hidden.</summary>
+    /// <summary>True once the shatter animation has finished and the pieces are hidden.</summary>
     public ISignal<bool> IsShattered => isShattered;
 
-    /// <summary>Sets a persistent colour multiplier on the body.</summary>
+    /// <summary>Sets a persistent colour tint on the body.</summary>
     public void SetTint(Color colour) => tint.Set(colour);
 
     /// <summary>Flashes the body to a colour, then fades back.</summary>
     public void Blink(Color colour) => blinkCommand.Invoke(colour);
 
-    /// <summary>Blasts the body apart, then hides the pieces.</summary>
+    /// <summary>Blasts the body apart into pieces, then hides them.</summary>
     public void Shatter() => shatterCommand.Invoke();
 
-    /// <summary>Cancels everything in flight and puts the body back the way it started.</summary>
+    /// <summary>Cancels any effects and returns the body to its original state.</summary>
     public void Restore() => restoreCommand.Invoke();
 
     protected override void Init(EffectBuilder s) {

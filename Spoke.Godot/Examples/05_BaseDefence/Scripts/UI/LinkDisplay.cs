@@ -3,13 +3,12 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Draws the power grid as lines from each node to whatever is powering it. Like CoverageDisplay,
-/// the overlay is created by the block that wants it and taken away when that block ends.
-/// </summary>
+// Renders a set of line segments. Like CoverageDisplay it creates and owns its own overlay node,
+// torn down on cleanup, and redraws whenever the segments change.
 public static class LinkDisplay {
 
-    /// <summary>One node's chain up to the root. Re-walks whenever any parent along it changes.</summary>
+    // Shows the node's parent chain up to the root: a line from each node to the provider
+    // powering it. Re-walks whenever any parent along the chain changes.
     public static EffectBlock Draw(PowerNode start, Color colour) => s => {
         var segments = s.Memo(s => {
             var list = new List<(Vector2 from, Vector2 to)>();
@@ -24,7 +23,7 @@ public static class LinkDisplay {
         s.Effect(DrawSegments(segments, colour));
     };
 
-    /// <summary>Every node's link to its provider: the grid's whole spanning tree.</summary>
+    // Shows every node's link to the provider powering it: the grid's whole spanning tree.
     public static EffectBlock DrawAll(Color colour) => s => {
         var segments = s.Memo(s => {
             var list = new List<(Vector2 from, Vector2 to)>();

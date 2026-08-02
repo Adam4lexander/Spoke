@@ -15,7 +15,7 @@ public readonly struct WaveStatus : IEquatable<WaveStatus> {
     /// <summary>Seconds until the wave begins; 0 once it's attacking.</summary>
     public readonly int StartsIn;
 
-    /// <summary>True while the wave is underway.</summary>
+    /// <summary>True while the wave is underway (countdown has reached zero).</summary>
     public bool IsAssaulting => StartsIn == 0;
 
     public WaveStatus(int number, WaveFront front, int startsIn) {
@@ -33,10 +33,8 @@ public readonly struct WaveStatus : IEquatable<WaveStatus> {
     public static bool operator !=(WaveStatus a, WaveStatus b) => !a.Equals(b);
 }
 
-/// <summary>
-/// Sends enemies in waves. Each assault pours in from one edge, and each wave is bigger, faster and
-/// heavier than the last, with a lull in between.
-/// </summary>
+// Sends enemies in waves: each assault pours in from one edge of the level, and each wave is
+// bigger, faster and heavier than the last, with a lull in between.
 public partial class WaveDirector : SpokeNode {
 
     [ExportGroup("Prefabs")]
@@ -92,14 +90,13 @@ public partial class WaveDirector : SpokeNode {
                 wave.Set(new WaveStatus(wave.Now.Number, front, Mathf.CeilToInt(remaining)));
                 return;
             }
-            // StartsIn hits zero, IsAssaulting flips, and this whole phase swaps for Assault.
             wave.Set(new WaveStatus(wave.Now.Number, chosen, 0));
             waveStarted.Invoke(wave.Now);
         });
     };
 
-    // The assault ends when every enemy it spawned is dead. Each spawn docks a tracker that counts
-    // its death exactly once, then undocks itself.
+    // The assault ends when every enemy it spawned is dead. Each spawn docks a
+    // tracker that counts its death exactly once, then undocks.
     EffectBlock Assault => s => {
         var number = wave.Now.Number;
         var front = wave.Now.Front;
@@ -135,9 +132,9 @@ public partial class WaveDirector : SpokeNode {
         });
     };
 
-    // Tiers cost less than their health multiple: every tier deals the same damage, so hp
-    // concentrated in fewer bodies is worth less than the same hp spread out. Heavier tiers unlock
-    // as waves progress, and a pick never overshoots the budget left.
+    // Tiers cost less than their health multiple: all tiers deal the same damage, so
+    // hp concentrated in fewer bodies is worth less than the same hp spread out.
+    // Heavier tiers unlock as waves progress, and a pick never overshoots the budget left.
     (PackedScene prefab, float cost) PickEnemy(int wave, float budget) {
         var maxTier = wave >= Enemy3UnlockWave ? 3 : wave >= Enemy2UnlockWave ? 2 : 1;
         if (maxTier > 2 && budget < 2.5f) maxTier = 2;

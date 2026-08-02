@@ -2,20 +2,15 @@ using Godot;
 
 namespace Spoke.Examples;
 
-/// <summary>
-/// State&lt;T&gt; is a reactive variable: read it, set it, subscribe to it. Blocks that read a State
-/// re-run when it changes.
-///
-/// Press SPACE to flip the colour.
-/// </summary>
 public partial class State_Example : SpokeNode2D {
 
-    // A reactive variable. Changing it notifies everything that read it.
+    // State<T> is like a reactive variable you can subscribe to.
+    // When its value changes all subscribers will be notified.
     State<bool> isRed = State.Create(false);
 
     protected override void Init(EffectBuilder s) {
 
-        // Children are added the ordinary Godot way; s.OnCleanup is the teardown half.
+        // Children are added the ordinary Godot way, and s.OnCleanup is the teardown half
         var swatch = new ColorRect {
             Position = new Vector2(40, 80),
             Size = new Vector2(200, 200)
@@ -30,22 +25,23 @@ public partial class State_Example : SpokeNode2D {
         AddChild(label);
         s.OnCleanup(() => label.QueueFree());
 
-        // Re-runs whenever isRed changes.
-        // s.D(...) reads a signal *and* registers it as a dependency of this block.
+        // Reactively update the swatch's colour when `isRed` changes.
         s.Effect(s => {
+            // s.D(...) tracks a dynamic dependency -- this effect will re-run if `isRed` changes.
             swatch.Color = s.D(isRed) ? Colors.Red : Colors.Blue;
         });
 
-        // The same thing with an explicit dependency instead of s.D(...):
-        //
-        //     s.Effect(s => {
-        //         swatch.Color = isRed.Now ? Colors.Red : Colors.Blue;
-        //     }, isRed);
-        //
-        // s.D(...) is generally preferred — the dependency can't drift out of sync with the code.
+        // You could write the effect with explicit dependencies, instead of using s.D(...)
+        /*
+        s.Effect(s => {
+            swatch.Color = isRed.Now ? Colors.Red : Colors.Blue;
+        }, isRed); // Dependency `isRed` given explicitly
+        */
+        // Generally s.D(...) is preferred though
     }
 
     public override void _UnhandledKeyInput(InputEvent @event) {
+        // Flip the colour each time space is pressed
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Space }) {
             isRed.Update(v => !v);
             // Or: isRed.Set(!isRed.Now);

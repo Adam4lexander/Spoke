@@ -2,11 +2,8 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// The player's contact with the board: hovering, and placing. Every overlay the two need is a
-/// nested block, so what's on screen is always exactly what the current situation calls for —
-/// there is no show/hide bookkeeping anywhere in this file.
-/// </summary>
+// The player's interaction with the game board: hover and placement,
+// with the coverage and link displays that support them.
 public partial class BoardInteractions : SpokeNode {
 
     readonly State<IHoverable> hovering = State.Create<IHoverable>(null);
@@ -78,9 +75,10 @@ public partial class BoardInteractions : SpokeNode {
         s.Effect(CoverageDisplay.Draw(new Circle(circle.Center, circle.Radius * 1.4f), Palette.HoverRing));
     };
 
-    // Power coverage and the placed type's own coverage show while choosing a spot, and the
-    // footprint follows the pointer, recoloured by whether it can go there — touching provider
-    // coverage, clear of everything else. A click on a valid spot buys it.
+    // The placement experience: power coverage and the placed type's own coverage show while
+    // choosing a spot, and the building's footprint follows the pointer, recoloured by whether
+    // it can go there (touching provider coverage, clear of other units). A click on a valid
+    // spot buys and places the building.
     EffectBlock PlaceBuilding(BuildItem item) => s => {
         s.Effect(CoverageDisplay.Draw(GameState.PowerZone, Palette.PowerCoverage, body => body.IsProvider));
         if (item.Coverage != CoverageType.Power) s.Effect(ShowCoverage(item.Coverage));
@@ -109,7 +107,7 @@ public partial class BoardInteractions : SpokeNode {
         s.Subscribe(InputSignals.KeyDown(Key.Escape), () => Placing.Set(null));
     };
 
-    // One coverage type, one zone, one colour.
+    // One coverage type -> its zone drawn in its palette colour.
     EffectBlock ShowCoverage(CoverageType type) => s => {
         switch (type) {
             case CoverageType.Power:

@@ -2,31 +2,18 @@ using Godot;
 
 namespace Spoke.Examples;
 
-/// <summary>
-/// The three block types, side by side. All of them re-run when a dependency changes; they differ
-/// in when they first mount.
-///
-///   Effect    mounts immediately, re-runs on every trigger
-///   Phase     mounts only while a condition is true
-///   Reaction  doesn't mount until a trigger fires
-///
-/// Each block flashes its swatch green and fades to blue while mounted, and turns it red on
-/// disposal — so you can see exactly which blocks re-ran.
-///
-/// SPACE  fire the trigger      1  toggle the outer phase      2  toggle the inner phase
-/// </summary>
 public partial class Effect_Example : SpokeNode2D {
 
     State<bool> mountOuterPhase = State.Create(true);
     State<bool> mountInnerPhase = State.Create(true);
 
-    // Godot exports *properties*, so a reactive value reaches the Inspector as a two-line pair.
-    // This is what replaces Unity's UState<T> — no wrapper type, no custom PropertyDrawer, and
-    // editing the value in the Inspector drives the reactive graph like any other Set().
+    // Godot exports properties, so wrapping a State<T> in one makes it visible in the Inspector --
+    // same reactive behavior, and editing it there drives the graph like any other Set()
     [Export] public bool MountOuterPhase { get => mountOuterPhase.Now; set => mountOuterPhase.Set(value); }
     [Export] public bool MountInnerPhase { get => mountInnerPhase.Now; set => mountInnerPhase.Set(value); }
 
-    // A Trigger is Spoke's simplest signal: a fire-and-forget pulse with no value attached.
+    // Trigger is the simplest reactive signal in Spoke -- a fire-and-forget pulse.
+    // When invoked, any subscribed effects or memos will run.
     Trigger flashCommand = Trigger.Create();
 
     protected override void Init(EffectBuilder s) {
@@ -38,34 +25,39 @@ public partial class Effect_Example : SpokeNode2D {
         var inner = Row(s, 2);
         var reaction = Row(s, 3);
 
-        // Mounts immediately, and re-runs every time flashCommand fires.
+        // Effect: Mounts immediately and remounts when any dependency is triggered
         s.Effect(Flash("Effect", effect), flashCommand);
 
-        // Mounts only while mountOuterPhase is true, and re-runs on flashCommand while mounted.
+        // Phase: Mounts only while `mountOuterPhase` is true. Remounts whenever any dependency triggers.
         s.Phase(mountOuterPhase, s => {
 
-            // Nested inside the phase, so it mounts and disposes with it.
+            // This effect is nested in the phase. It's mounted when the phase is mounted.
             s.Effect(Flash("Phase (Outer)", outer));
 
-            // A phase within a phase — mounted only when both conditions hold.
+            // This inner phase only mounts while `mountInnerPhase` is true
             s.Phase(mountInnerPhase, Flash("Phase (Inner)", inner), flashCommand);
 
         }, flashCommand);
 
-        // Stays unmounted until flashCommand fires for the first time.
+        // Reaction: Does not mount until a dependency is triggered.
         s.Reaction(Flash("Reaction", reaction), flashCommand);
     }
 
-    // An EffectBlock is the `s => { ... }` you pass to Effect/Phase/Reaction. Pulling it out into a
-    // method that *returns* one lets it be parameterised and reused, and keeps Init readable.
+    // EffectBlock is a function delegate type given to effect/phase/reaction.
+    // When you see `s.Effect(s => { })`, the `s => { }` is an EffectBlock.
+    //
+    // Sometimes we want to extract the EffectBlock instead of declaring them inline.
+    // So it's re-usable, parameterisable, and Init won't become a huge nested structure.
+    //
+    // Flash is a double lambda. A function returning a function.
+    // This pattern lets us return a parameterised EffectBlock, with `name` and `row`
+    // parameters captured in a closure.
     EffectBlock Flash(string name, (ColorRect Swatch, Label Text) row) => s => {
 
         row.Text.Text = $"{name} — mounted";
         row.Swatch.Color = Colors.Green;
 
-        // Unity's version of this example drove the flash with a coroutine whose lifetime Spoke
-        // managed. Godot C# has no coroutines; s.OnProcess is the equivalent, and it stops when
-        // this block disposes — including mid-fade.
+        // Godot C# has no coroutines, so the fade runs on s.OnProcess instead
         var elapsed = 0.0;
         s.OnProcess(delta => {
             elapsed += delta;
@@ -73,8 +65,9 @@ public partial class Effect_Example : SpokeNode2D {
             row.Swatch.Color = Colors.Green.Lerp(Colors.Blue, t);
         });
 
+        // Stop the flash if this scope is cleaned up early
         s.OnCleanup(() => {
-            // The row itself may already be gone if the whole node is tearing down.
+            // The row itself may already be gone if the whole node is tearing down
             if (!GodotObject.IsInstanceValid(row.Swatch)) return;
             row.Text.Text = $"{name} — disposed";
             row.Swatch.Color = Colors.Red;
@@ -104,6 +97,7 @@ public partial class Effect_Example : SpokeNode2D {
         s.OnCleanup(() => label.QueueFree());
     }
 
+    // Press space to invoke the flash trigger, 1 and 2 to toggle the phases
     public override void _UnhandledKeyInput(InputEvent @event) {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
         switch (key.Keycode) {

@@ -6,10 +6,9 @@ namespace Spoke.Examples.BaseDefence;
 
 // A tiny collision system for circles, used instead of Godot's physics server.
 //
-// Godot's Area2D would work, but it would drag in collision layers and masks that a consuming
-// project has to configure, and its overlap callbacks are deferred by a frame. The whole game only
-// needs circle-circle overlap, so a spatial hash is both smaller and easier to reason about — and
-// it gives overlaps as a *reactive* signal, which is the part that matters here.
+// I avoided Godot physics so the example wouldn't depend on how collision layers are set up in
+// the project it's imported into. The whole game only needs circle-circle overlap tests, so a
+// custom collision engine was simple to write.
 //
 // ------------------------------------------------------------------------------------------
 //  var world = new CollisionWorld<Building>();          // owners are type T
@@ -69,13 +68,9 @@ public class CollisionWorld<T> {
     public ICollider<T> AddCollider(T owner, Func<Circle> getCircle, Func<T, bool> filter = null)
         => new Body(this, owner, getCircle, detectable: true, filter);
 
-    /// <summary>
-    /// Syncs positions, recalculates overlaps, and fires OverlapsChanged where they changed.
-    ///
-    /// Wrapped in SpokeRuntime.Batch so the whole sweep lands as one flush: without it, each
-    /// OverlapsChanged would flush the effects that depend on it before the next body is even
-    /// re-sampled, and a turret could retarget against a half-updated world.
-    /// </summary>
+    /// <summary>Syncs collider/sensor positions, calculates overlaps, and fires OverlapsChanged where they changed</summary>
+    // Batched so the whole sweep lands as one flush, rather than each OverlapsChanged
+    // flushing its effects against a half-updated world.
     public void Tick() => SpokeRuntime.Batch(step);
 
     /// <summary>One-off immediate lookup of colliders overlapping area.</summary>

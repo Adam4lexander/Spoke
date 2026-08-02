@@ -2,31 +2,22 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// A fractional bar floating above a unit, recolouring healthy → moderate → severe as it drains.
-/// A child of the unit's scene, positioned there.
-///
-/// The Unity version spends most of its length billboarding the bar towards the camera. In 2D
-/// there's no billboarding to do, so what's left is the part that was always the interesting bit:
-/// one signal in, a colour and a width out.
-/// </summary>
+// A fractional bar that shrinks and recolours (healthy/moderate/severe) with its Fraction. There's
+// no billboarding to do in 2D, so the whole job is one signal in, a colour and a width out.
 public partial class HealthBar : SpokeNode2D {
 
-    /// <summary>Bar width in metres.</summary>
     [Export] public float Width { get; set; } = 0.7f;
-
-    /// <summary>Bar height in metres.</summary>
     [Export] public float Height { get; set; } = 0.1f;
 
     readonly State<float> _fraction = State.Create(1f);
     readonly State<Color> colour = State.Create(Palette.Healthy);
 
-    // A reactive value reaches the Inspector as a private export over the state. The public member
-    // stays the state itself, so the bar can be scrubbed in the editor and driven from code.
+    // Exporting a property over the state puts it in the Inspector, so the bar can be
+    // scrubbed in the editor as well as driven from code.
     [ExportGroup("Inputs")]
     [Export] float fraction { get => _fraction.Now; set => _fraction.Set(value); }
 
-    /// <summary>The fill amount, 0 to 1, driving the bar's width and colour.</summary>
+    /// <summary>The fill amount, 0 to 1, driving the bar's size and colour.</summary>
     public IState<float> Fraction => _fraction;
 
     protected override void Init(EffectBuilder s) {
@@ -39,8 +30,7 @@ public partial class HealthBar : SpokeNode2D {
             colour.Set(f > 0.7f ? Palette.Healthy : f > 0.3f ? Palette.Moderate : Palette.Severe);
         });
 
-        // The bar is redrawn only when a value it shows actually changed — the effect re-runs on a
-        // change, and QueueRedraw is the whole of "keep the picture in sync".
+        // Repaint only when a value the bar shows actually changed.
         s.Effect(s => {
             s.D(clamped);
             s.D(colour);

@@ -3,14 +3,8 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Publishes input as Spoke triggers, so systems subscribe to the events they care about while
-/// mounted, instead of polling Input themselves.
-///
-/// The Unity version polls Input in a coroutine every frame. Godot delivers input as events, and
-/// _UnhandledInput only fires for events the UI didn't consume — so a click on a sidebar button
-/// never reaches the board, with no "is the pointer over UI" check anywhere.
-/// </summary>
+// Publishes input events as triggers, so components subscribe to the events
+// they care about while mounted instead of polling Input themselves.
 public partial class InputSignals : SpokeNode {
 
     static InputSignals instance;
@@ -21,7 +15,6 @@ public partial class InputSignals : SpokeNode {
 
     /// <summary>Fires when the left mouse button goes down over the board.</summary>
     public static ITrigger LeftClick => instance.leftClick;
-
     /// <summary>Fires when the right mouse button goes down over the board.</summary>
     public static ITrigger RightClick => instance.rightClick;
 
@@ -38,6 +31,8 @@ public partial class InputSignals : SpokeNode {
         ProcessMode = ProcessModeEnum.Always;
     }
 
+    // _UnhandledInput only sees events the UI didn't consume, so a click on a sidebar
+    // button never reaches the board.
     public override void _UnhandledInput(InputEvent @event) {
         switch (@event) {
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }:

@@ -2,17 +2,9 @@ using Godot;
 
 namespace Spoke.Examples;
 
-/// <summary>
-/// Memo&lt;T&gt; is derived state. It tracks its own dependencies and recalculates only when they
-/// change. Unlike State&lt;T&gt; you can't Set() it — its value is computed.
-///
-/// Memos chain: labelText below depends on evenOdd, which depends on count.
-///
-/// UP / DOWN  change the count      SPACE  toggle casing
-/// </summary>
 public partial class Memo_Example : SpokeNode2D {
 
-    // Reactive inputs.
+    // Reactive input states
     State<int> count = State.Create(0);
     State<bool> useUpperCase = State.Create(false);
 
@@ -22,18 +14,24 @@ public partial class Memo_Example : SpokeNode2D {
         var evenOddLabel = AddLabel(s, 140);
         AddLabel(s, 40).Text = "UP / DOWN  change count      SPACE  toggle casing";
 
-        // Recomputes whenever count changes.
+        // Memo<T> represents derived state.
+        // It automatically tracks dependencies and recalculates only when they change.
+        // Unlike State<T>, you can't Set() it manually -- its value is computed.
+        //
+        // Here, `evenOdd` is a derived value that updates whenever `count` changes.
         var evenOdd = s.Memo(s => s.D(count) % 2 == 0 ? "Even" : "Odd");
 
-        // Depends on another memo *and* a state. Recomputes when either changes — but note it does
-        // not recompute when count changes from 2 to 4, because evenOdd's value didn't change.
+        // This memo reacts to both `evenOdd` and `useUpperCase`
+        // and computes the final label string with dynamic casing.
         var labelText = s.Memo(s => {
             var raw = s.D(evenOdd);
             return s.D(useUpperCase) ? raw.ToUpper() : raw.ToLower();
         });
 
+        // Display the current count
         s.Effect(s => countLabel.Text = $"Count: {s.D(count)}");
 
+        // Display the computed even/odd label
         s.Effect(s => evenOddLabel.Text = s.D(labelText));
     }
 
@@ -47,6 +45,7 @@ public partial class Memo_Example : SpokeNode2D {
     public override void _UnhandledKeyInput(InputEvent @event) {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
         switch (key.Keycode) {
+            // Press Up/Down to change the count, Space to toggle casing
             case Key.Up: count.Update(c => c + 1); break;
             case Key.Down: count.Update(c => c - 1); break;
             case Key.Space: useUpperCase.Update(b => !b); break;

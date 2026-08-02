@@ -4,21 +4,16 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// Draws the outline of the merged union of a set of circles, with the interior overlap arcs
-/// hidden, as one overlay that lives exactly as long as the block that asked for it.
-///
-/// The Unity version builds a GameObject, a Mesh and a Material instance for this, and fills vertex
-/// and index buffers by hand. Godot draws arcs directly, so the same picture is DrawArc in a loop.
-/// </summary>
+// Renders the outline of the merged union of a set of circles (interior overlap arcs hidden).
+// It creates and owns its own overlay node, torn down on cleanup, and redraws whenever the
+// circles signal changes.
 public static class CoverageDisplay {
 
     static readonly List<float> breaks = new();
 
-    /// <summary>
-    /// Coverage circles for a whole zone, gathered inside the camera's view — a sensor sized to
-    /// what's on screen, recentred as it moves. The filter, if given, keeps only matching colliders.
-    /// </summary>
+    // Coverage circles for a zone, gathered within the camera's view (a sensor sized to that view,
+    // recentred as it changes; dedups when stationary). The filter, if given, keeps only matching
+    // colliders.
     public static EffectBlock Draw<T>(CollisionWorld<T> zone, Color colour, Func<T, bool> filter = null) => s => {
         var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.VisibleArea, filter));
         var circles = s.Memo(s => {
@@ -29,13 +24,13 @@ public static class CoverageDisplay {
         s.Effect(DrawCircles(circles, colour));
     };
 
-    /// <summary>Draws the outline of a single fixed circle.</summary>
+    // Draws the outline of a single fixed circle.
     public static EffectBlock Draw(Circle circle, Color colour) => s => {
         var circles = State.Create(new List<Circle> { circle });
         s.Effect(DrawCircles(circles, colour));
     };
 
-    /// <summary>Draws the outline of a single circle that can move or resize.</summary>
+    // Draws the outline of a single circle that can move or resize.
     public static EffectBlock Draw(ISignal<Circle> circle, ISignal<Color> colour) => s => {
         var circles = s.Memo(s => new List<Circle> { s.D(circle) });
         var layer = s.Own(GameState.Board, new DrawLayer(15));
@@ -56,9 +51,9 @@ public static class CoverageDisplay {
         });
     };
 
-    // For each circle, split its ring at the angles where other circles cross it, then keep only
-    // the arcs on the union boundary — the ones whose midpoint is outside every other circle. The
-    // split angles are exact intersection points, so adjacent circles' arcs meet there.
+    // For each circle, split its ring at the angles where other circles cross it, then keep
+    // only the arcs on the union boundary (midpoint outside every other circle). The split
+    // angles are exact intersection points, so adjacent circles' arcs meet there.
     static void Outline(DrawLayer layer, List<Circle> circles, Color colour) {
         if (circles == null) return;
 

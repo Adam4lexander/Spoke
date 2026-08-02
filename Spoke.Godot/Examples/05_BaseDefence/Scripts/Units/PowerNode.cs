@@ -4,27 +4,17 @@ using Godot;
 
 namespace Spoke.Examples.BaseDefence;
 
-/// <summary>
-/// One entry in the power zone: a node, tagged as either a provider (coverage range) or a receiver
-/// (footprint). Queries filter on IsProvider to tell the two apart.
-/// </summary>
+// One entry in the power zone (GameState.PowerZone): a node, tagged as either a provider
+// (coverage range) or a receiver (footprint). Queries filter on IsProvider to tell the two apart.
 public class PowerBody {
     public readonly PowerNode Node;
     public readonly bool IsProvider;
     public PowerBody(PowerNode node, bool isProvider) { Node = node; IsProvider = isProvider; }
 }
 
-/// <summary>
-/// A unit's link to the power grid, and a child of the unit's scene. Nodes form a tree rooted at
-/// the Core: each draws power from a parent provider whose coverage it overlaps, and is powered
-/// only if that chain reaches the root.
-///
-/// This is the piece of the game that most repays being reactive. Nothing here polls, and nothing
-/// walks the grid on a timer. Destroying a relay drops one node's parent, and the loss propagates
-/// out through the branch below it because each node's HasPower reads its parent's.
-///
-/// Ranges are in metres, matching the Unity prefabs.
-/// </summary>
+// A building's link to the power grid. Nodes form a tree rooted at the Core: each draws power
+// from a parent provider whose coverage it overlaps, and is powered only if that chain reaches
+// the root.
 public partial class PowerNode : SpokeNode {
 
     [Export] public Unit Unit { get; set; }
@@ -33,10 +23,11 @@ public partial class PowerNode : SpokeNode {
 
     static readonly State<ReadOnlyList<PowerNode>> all = new(new ReadOnlyList<PowerNode>(new List<PowerNode>()));
 
-    /// <summary>Every power node currently on the board.</summary>
+    /// <summary>Every power node currently in the scene.</summary>
     public static ISignal<ReadOnlyList<PowerNode>> All => all;
 
-    // Publishes a fresh list on each change. State dedups by the wrapper's inner-list reference.
+    // Publishes a fresh list each change. The wrapper compares by inner-list
+    // reference, and State dedups equal values.
     static void UpdateAll(Action<List<PowerNode>> mutate) {
         var next = new List<PowerNode>();
         foreach (var node in all.Now) next.Add(node);
@@ -44,13 +35,8 @@ public partial class PowerNode : SpokeNode {
         all.Set(new ReadOnlyList<PowerNode>(next));
     }
 
-    /// <summary>The Core, and only the Core. A root is powered by definition and has no parent.</summary>
     [Export] public bool IsRoot { get; set; }
-
-    /// <summary>How close a provider's coverage must come to count as reaching this node, in metres.</summary>
     [Export] public float ReceiveRange { get; set; } = 0.1f;
-
-    /// <summary>How far this node relays power onward, in metres. Zero for a leaf.</summary>
     [Export] public float ProvideRange { get; set; }
 
     readonly State<bool> enabled = State.Create(true);
@@ -60,13 +46,13 @@ public partial class PowerNode : SpokeNode {
     /// <summary>Switched off while the unit is dying, the way Unity disables the component.</summary>
     public IState<bool> Enabled => enabled;
 
-    /// <summary>The provider this node draws power from; null for the root, or an unpowered node.</summary>
+    /// <summary>The provider this node draws power from; null for the root or an unpowered node.</summary>
     public ISignal<PowerNode> Parent => parent;
 
     /// <summary>Whether this node is currently powered.</summary>
     public ISignal<bool> HasPower => hasPower;
 
-    /// <summary>A leaf only draws power; it never relays it onward.</summary>
+    /// <summary>A leaf only draws power; it never relays it onward to other nodes.</summary>
     public bool IsLeaf => ProvideRange <= 0f;
 
     protected override void Init(EffectBuilder s) {
@@ -82,16 +68,14 @@ public partial class PowerNode : SpokeNode {
         });
     }
 
-    // Power changes are held for a beat before they take effect, so a grid rearranging itself
-    // doesn't strobe every building it touches.
     EffectBlock SettleHasPower => s => {
         if (IsRoot) hasPower.Set(true);
 
         var nextHasPower = s.Memo(s => IsRoot || s.D(parent) != null);
         var shouldChange = s.Memo(s => s.D(nextHasPower) != s.D(hasPower));
 
-        // If the pending change reverses before the delay elapses, shouldChange goes false, the
-        // phase unmounts, and the timer goes with it. Nothing has to cancel anything.
+        // If the pending change reverses before the delay elapses, the phase unmounts and takes
+        // the timer with it. Nothing has to cancel anything.
         s.Phase(shouldChange, s => s.Wait(PowerSettleDelay, () => hasPower.Set(nextHasPower.Now)));
 
         s.OnCleanup(() => hasPower.Set(false));
@@ -109,7 +93,6 @@ public partial class PowerNode : SpokeNode {
             var parentNow = s.D(parent);
             if (parentNow == null) return;
 
-            // Drop the parent if we drift out of its coverage...
             s.Effect(s => {
                 foreach (var c in collider.Overlaps) {
                     if (c.Owner.Node == parentNow) return;
@@ -117,7 +100,6 @@ public partial class PowerNode : SpokeNode {
                 parent.Set(null);
             }, collider.OverlapsChanged);
 
-            // ...or if it loses power itself.
             s.Effect(s => {
                 if (!s.D(parentNow.HasPower)) parent.Set(null);
             });
@@ -130,8 +112,8 @@ public partial class PowerNode : SpokeNode {
             () => new Circle(Unit.GlobalPosition, World.Px(ProvideRange)),
             body => !body.IsProvider));
 
-        // One walk up the chain answers both questions: who my ancestors are (for the steal guard),
-        // and whether the chain reaches a root.
+        // One walk up the chain answers both questions: who my ancestors are
+        // (for the steal guard) and whether the chain reaches a root.
         var chain = s.Memo(s => {
             var ancestors = new HashSet<PowerNode>();
             var isRootConnected = false;
@@ -152,8 +134,8 @@ public partial class PowerNode : SpokeNode {
                 var canConnect = s.Memo(s => {
                     var parentNow = s.D(node.parent);
                     if (parentNow == null || parentNow == this) return true;
-                    // Steal the node from a farther provider, unless it's one of our own ancestors,
-                    // which would close the chain into a loop.
+                    // Steal the node from a farther provider, unless it's an
+                    // ancestor of this one, which would loop the chain.
                     var mine = node.Unit.GlobalPosition.DistanceSquaredTo(Unit.GlobalPosition);
                     var theirs = node.Unit.GlobalPosition.DistanceSquaredTo(parentNow.Unit.GlobalPosition);
                     if (mine >= theirs) return false;

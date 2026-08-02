@@ -9,7 +9,7 @@ namespace Spoke.Examples.BaseDefence;
 // previous life if something wasn't reset on despawn.
 // This is exactly the surface area for bugs that Spoke can eliminate.
 //
-// Unity disables an instance to park it. Godot's equivalent is taking it out of the tree, which is
+// Unity disables an instance to park it; Godot's equivalent is taking it out of the tree, which is
 // why every component here mounts its work under s.Phase(IsInTree, ...).
 
 /// <summary>A minimal object pool. Despawn unparents an instance and stashes it; Spawn re-parents an idle one, or instantiates a new one.</summary>
