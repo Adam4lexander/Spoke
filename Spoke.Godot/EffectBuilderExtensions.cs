@@ -6,11 +6,14 @@ namespace Spoke {
     /// <summary>
     /// EffectBuilder extensions specific to Godot.
     ///
-    /// Deliberately small. Only two things here have no straightforward equivalent in plain code:
-    /// keeping a signal connection symmetric with the block that made it, and running per-frame work
-    /// whose lifetime is the block's. Everything else is an ordinary Godot call — inside a Spoke node
-    /// `this` is the node, so AddChild, GetNode and QueueFree work exactly as they always do, and
-    /// s.OnCleanup covers the teardown half.
+    /// Deliberately small: a signal connection and a per-frame callback, each scoped to the block.
+    /// Neither has a clean equivalent in plain code, and neither presumes a policy.
+    ///
+    /// Notably absent is a node-lifetime helper. Adding one means picking what happens at cleanup —
+    /// QueueFree, return-to-pool, hide-and-reuse — and that's a per-game decision, not something a
+    /// library should decide on your behalf. Inside a Spoke node `this` is the node, so AddChild,
+    /// GetNode and QueueFree work as they always do, with s.OnCleanup as the teardown half. See
+    /// README.md, "Node lifetimes", for the extension to write if you want one.
     /// </summary>
     public static partial class EffectBuilderExtensions {
 

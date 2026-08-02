@@ -15,6 +15,7 @@ public partial class State_Example : SpokeNode2D {
 
     protected override void Init(EffectBuilder s) {
 
+        // Children are added the ordinary Godot way; s.OnCleanup is the teardown half.
         var swatch = new ColorRect {
             Position = new Vector2(40, 80),
             Size = new Vector2(200, 200)

@@ -34,7 +34,7 @@ public partial class Lifecycle_Example : SpokeNode2D {
         });
 
         // Inside a Spoke node `this` is the node, so children are added the ordinary Godot way.
-        // s.OnCleanup is the teardown half.
+        // s.OnCleanup is the teardown half — the two together are the whole pattern.
         var label = new Label {
             Position = new Vector2(40, 40),
             Text = "V   toggle visible\n"

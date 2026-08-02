@@ -92,7 +92,9 @@ can start out disabled, since no notification fires for the initial state.
 
 ## EffectBuilder extensions
 
-Only two things live here, because only two things have no straightforward equivalent in plain code:
+**Everything on `s` is scoped to the block it's called in** — that's the convention across all of
+Spoke, and these follow it. Two entries, because only two things here have no clean equivalent in
+plain code and no policy to presume.
 
 ```csharp
 s.Subscribe(button, Button.SignalName.Pressed, () => ...);   // connects, auto-disconnects
@@ -108,8 +110,11 @@ s.OnPhysicsProcess(delta => ...);                            // _PhysicsProcess,
 pause, set the node's `ProcessMode` to `Always` — the same thing you'd do for a hand-written
 `_Process`.
 
-Everything else is an ordinary Godot call. Inside a Spoke node `this` **is** the node, so `AddChild`,
-`GetNode` and `QueueFree` work as they always do, and `s.OnCleanup` covers teardown:
+## Node lifetimes
+
+There's no node helper here on purpose. Scoping a node to a block means deciding what happens when
+the block ends — free it, return it to a pool, hide it and reuse it — and that's a per-game
+decision. Inside a Spoke node `this` **is** the node, so the plain form is two lines:
 
 ```csharp
 var hud = HudScene.Instantiate<Control>();
@@ -117,23 +122,56 @@ AddChild(hud);
 s.OnCleanup(() => hud.QueueFree());
 ```
 
-Same for C# event-style signals:
+If your game does this often enough to want it wrapped, write the extension that matches your
+policy. The free-it version:
+
+```csharp
+public static T Spawn<T>(this EffectBuilder s, Node parent, T node) where T : Node {
+    parent.AddChild(node);
+    s.OnCleanup(() => {
+        if (GodotObject.IsInstanceValid(node)) node.QueueFree();
+    });
+    return node;
+}
+```
+
+...or the pooled version, same shape, different cleanup:
+
+```csharp
+public static T Rent<T>(this EffectBuilder s, Pool<T> pool, Node parent) where T : Node {
+    var node = pool.Rent();
+    parent.AddChild(node);
+    s.OnCleanup(() => pool.Return(node));
+    return node;
+}
+```
+
+Three things to get right in either version, all learned the hard way:
+
+- **`QueueFree()`, not `Free()`.** Cleanup runs mid-flush, which can be reached from a signal handler
+  or notification propagation, and Godot is explicit that freeing a node still in use is unsafe.
+- **Guard with `IsInstanceValid`.** The node may have freed itself first — a bullet on impact, a
+  one-shot effect. Godot throws on a freed node rather than no-oping the way Unity's `Destroy()`
+  does. Spoke catches exceptions in cleanup and logs them without faulting the tree, so it isn't
+  fatal, but you'll get an error per teardown.
+- **Only accept nodes that aren't in the tree yet.** Godot refuses to re-parent a node that already
+  has a parent — it logs an error and carries on — so a helper that took one anyway would register
+  cleanup for a node it never added, then later destroy something belonging elsewhere in the scene.
+  A `node.GetParent() != null` check up front turns that into a loud failure.
+
+> **Don't reach for `s.Use(node)`.** It compiles — `GodotObject` implements `IDisposable` — but
+> disposing a node destroys it *immediately*, the `Free()` path rather than `QueueFree()`, with the
+> hazard described above.
+
+## Everything else
+
+Anything not in that list is an ordinary Godot call, with `s.OnCleanup` as the teardown half. C#
+event-style signals, for instance:
 
 ```csharp
 button.Pressed += OnPressed;
 s.OnCleanup(() => button.Pressed -= OnPressed);
 ```
-
-> **One Godot gotcha worth knowing.** Unity overloads `==` so a destroyed object compares equal to
-> `null`, and `Destroy()` on an already-destroyed object is a silent no-op. Godot does neither —
-> calling `QueueFree()` on a node something else already freed throws `ObjectDisposedException`.
-> Spoke catches exceptions thrown in cleanup and logs them without faulting the tree, so it isn't
-> fatal, but you'll get an error per teardown. If a node can free itself — a bullet on impact, a
-> one-shot effect — guard it:
->
-> ```csharp
-> s.OnCleanup(() => { if (GodotObject.IsInstanceValid(n)) n.QueueFree(); });
-> ```
 
 ## Nodes you can't rebase
 
@@ -187,10 +225,12 @@ transitions, and the missing pre-scene-unload event. Godot has none of those pro
 fires reliably, and app-level events like `NOTIFICATION_WM_CLOSE_REQUEST` arrive at nodes, where
 `OnNotification` can handle them.
 
-**The extension set is deliberately small.** An earlier draft had node-ownership helpers and a
-`HostNode()` accessor. They came out: inside a Spoke node `this` is already the node, so they only
-saved typing, and guessing at what users want from an engine they know better than the library does
-is how an API gets fat. Signals and per-frame work stay because neither has a one-line equivalent.
+**The extension set is deliberately small**, and got smaller as it was written. Drafts included a
+`HostNode()` accessor, an `Own(node)`, and an `AddChild` that freed the node at cleanup. All came
+out. `HostNode()` only saved typing, since inside a Spoke node `this` is already the node. The node
+helpers foundered on the same rock: scoping a node to a block means choosing what cleanup *does*, and
+free-it is only one answer — pooling is at least as common in a real game. A library that picks for
+you is worse than two plain lines. What's left is the pair that has no policy to get wrong.
 
 **Bootstrap is `[ModuleInitializer]`.** Runs once on assembly load, before any script — covering the
 running game, `[Tool]` scripts, and post-build reloads, with nothing to register.
