@@ -43,6 +43,8 @@ Thumbs.db
 /Spoke.Reactive/**/*.meta
 /Spoke.Unity.meta
 /Spoke.Unity/**/*.meta
+/Spoke.Godot.meta
+/Spoke.Godot/**/*.meta
 /LICENSE.meta
 /README.md.meta
 /CHANGELOG.md.meta
