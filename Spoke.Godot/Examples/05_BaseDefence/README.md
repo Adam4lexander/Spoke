@@ -132,11 +132,25 @@ inspector, stored in the `.tscn` as a `NodePath`. `Building` names its `Health`,
 and `PowerNode`; `Turret` names its `Building` and the sprite it rotates. Nothing is looked up by
 type or hunted for at runtime.
 
-Two lookups can't be wired, because what they find is whatever a collider happened to hit — the
-same two the Unity version answers with `GetComponent`. Godot has no equivalent, so they go by
-node name instead: `GetNodeOrNull<Health>("Health")` for blast damage and repair targets, and
-`GetNodeOrNull<Node>("Describes")` for the component that describes a hovered unit. That's why
-every unit scene names its describing component `Describes`.
+The root carries `Unit.cs`, which has no behaviour — just two wired references. Godot has no
+`GetComponent`, so the two things a system can be handed a unit and need are named in the scene
+instead of looked up at runtime:
+
+```csharp
+public partial class Unit : Node2D {
+    [Export] public Health Health { get; set; }     // what a blast damages, a repair station heals
+    [Export] public Node Describes { get; set; }    // what names it when the pointer hovers it
+}
+```
+
+That's what `GameState.GroundZone` is generic over, so `BombBlast`, `Repair` and
+`BoardInteractions` read `c.Owner.Health` and `c.Owner.Describes` directly. Nothing in the folder
+searches for a component.
+
+Only the components that own a transform are `Node2D` — `UnitFX`, which parents the sprite pieces,
+and `HealthBar`, which sits above the unit. The rest are plain `Node`s, so there's no
+`GlobalPosition` on them to reach for by mistake; `Unit.GlobalPosition` is the only thing that
+compiles, and it's the unit that moves.
 
 `UnitFX` takes whatever `Node2D` children the scene gave it as the pieces to tint, blink and
 shatter, so the art decides what the body is made of.

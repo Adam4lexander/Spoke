@@ -23,8 +23,7 @@ public partial class Building : SpokeNode {
     [Export] public float Radius { get; set; } = 0.6f;
     [Export] public float UnpoweredDim { get; set; } = 0.35f;
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
-    public Node2D Unit => (Node2D)Owner;
+    [Export] public Unit Unit { get; set; }
 
     protected override void Init(EffectBuilder s) {
         s.Effect(s => {

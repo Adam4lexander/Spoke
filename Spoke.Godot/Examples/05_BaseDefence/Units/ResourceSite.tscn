@@ -1,5 +1,6 @@
 [gd_scene load_steps=7 format=3]
 
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Unit.cs" id="0_unit"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/ResourceSite.cs" id="1_site"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="2_power"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="3_bar"]
@@ -7,7 +8,9 @@
 [ext_resource type="Texture2D" uid="uid://cpc31iln5potg" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/resource-body.svg" id="5_body"]
 [ext_resource type="Texture2D" uid="uid://bhqx5g76wwymh" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/resource-crystal.svg" id="6_crystal"]
 
-[node name="Resource" type="Node2D"]
+[node name="Resource" type="Node2D" node_paths=PackedStringArray("Describes")]
+script = ExtResource("0_unit")
+Describes = NodePath("Describes")
 
 [node name="FX" type="Node2D" parent="."]
 script = ExtResource("4_fx")
@@ -19,8 +22,9 @@ texture = ExtResource("5_body")
 position = Vector2(0, -12)
 texture = ExtResource("6_crystal")
 
-[node name="PowerNode" type="Node" parent="."]
+[node name="PowerNode" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("2_power")
+Unit = NodePath("..")
 ReceiveRange = 0.5
 ProvideRange = 0.0
 
@@ -28,8 +32,9 @@ ProvideRange = 0.0
 position = Vector2(0, -48)
 script = ExtResource("3_bar")
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Power", "HealthBar", "FX")]
+[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Power", "HealthBar", "FX")]
 script = ExtResource("1_site")
+Unit = NodePath("..")
 Power = NodePath("../PowerNode")
 HealthBar = NodePath("../HealthBar")
 FX = NodePath("../FX")

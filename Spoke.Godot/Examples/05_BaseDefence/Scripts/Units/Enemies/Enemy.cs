@@ -29,8 +29,7 @@ public partial class Enemy : SpokeNode {
     /// <summary>True while a radar reveals this enemy, letting turrets target it.</summary>
     public ISignal<bool> IsTracked => tracked;
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
-    public Node2D Unit => (Node2D)Owner;
+    [Export] public Unit Unit { get; set; }
 
     protected override void Init(EffectBuilder s) {
         flightRootStartPos = FlightRoot.Position;

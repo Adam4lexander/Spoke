@@ -23,8 +23,7 @@ public partial class ResourceSite : SpokeNode, IHoverable {
 
     public ISignal<HoverInfo> HoverInfo => hoverInfo;
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
-    public Node2D Unit => (Node2D)Owner;
+    [Export] public Unit Unit { get; set; }
 
     protected override void Init(EffectBuilder s) {
         s.Phase(IsInTree, s => {

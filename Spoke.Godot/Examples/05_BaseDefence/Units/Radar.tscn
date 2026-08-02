@@ -1,5 +1,6 @@
 [gd_scene load_steps=9 format=3]
 
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Unit.cs" id="0_unit"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Building.cs" id="1_building"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Health.cs" id="3_health"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="4_power"]
@@ -9,10 +10,14 @@
 [ext_resource type="Texture2D" uid="uid://chrdt00hciavt" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/radar-body.svg" id="7_body"]
 [ext_resource type="Texture2D" uid="uid://c2x1g5ppaupvj" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/radar-dish.svg" id="8_dish"]
 
-[node name="RadarBuilding" type="Node2D"]
+[node name="RadarBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Describes")]
+script = ExtResource("0_unit")
+Health = NodePath("Health")
+Describes = NodePath("Describes")
 
-[node name="Health" type="Node" parent="."]
+[node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
+Unit = NodePath("..")
 MaxHp = 10.0
 
 [node name="FX" type="Node2D" parent="."]
@@ -25,8 +30,9 @@ texture = ExtResource("7_body")
 texture = ExtResource("8_dish")
 offset = Vector2(16, 0)
 
-[node name="PowerNode" type="Node" parent="."]
+[node name="PowerNode" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("4_power")
+Unit = NodePath("..")
 ReceiveRange = 0.1
 ProvideRange = 0.0
 
@@ -34,8 +40,9 @@ ProvideRange = 0.0
 position = Vector2(0, -38)
 script = ExtResource("5_bar")
 
-[node name="Building" type="Node" parent="." node_paths=PackedStringArray("Health", "HealthBar", "FX", "Power")]
+[node name="Building" type="Node" parent="." node_paths=PackedStringArray("Unit", "Health", "HealthBar", "FX", "Power")]
 script = ExtResource("1_building")
+Unit = NodePath("..")
 Health = NodePath("../Health")
 HealthBar = NodePath("../HealthBar")
 FX = NodePath("../FX")
@@ -45,8 +52,9 @@ Cost = 50
 Radius = 0.4
 UnpoweredDim = 0.35
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Building", "DishPivot")]
+[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building", "DishPivot")]
 script = ExtResource("2_radar")
+Unit = NodePath("..")
 Building = NodePath("../Building")
 DishPivot = NodePath("../FX/Dish")
 Range = 8.0

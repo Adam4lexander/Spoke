@@ -27,8 +27,7 @@ public class PowerBody {
 /// </summary>
 public partial class PowerNode : SpokeNode {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
-    public Node2D Unit => (Node2D)Owner;
+    [Export] public Unit Unit { get; set; }
 
     const float PowerSettleDelay = 0.15f;
 

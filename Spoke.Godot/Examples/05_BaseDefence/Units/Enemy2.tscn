@@ -1,5 +1,6 @@
 [gd_scene load_steps=7 format=3]
 
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Unit.cs" id="0_unit"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Enemies/Enemy.cs" id="1_enemy"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Health.cs" id="2_health"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/UI/HealthBar.cs" id="3_bar"]
@@ -7,11 +8,14 @@
 [ext_resource type="Texture2D" uid="uid://cbyrtduw8sxkp" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/enemy-2.svg" id="5_body"]
 [ext_resource type="PackedScene" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Units/BombBlast.tscn" id="6_bomb"]
 
-[node name="Enemy2" type="Node2D"]
+[node name="Enemy2" type="Node2D" node_paths=PackedStringArray("Health")]
+script = ExtResource("0_unit")
+Health = NodePath("Health")
 z_index = 10
 
-[node name="Health" type="Node" parent="."]
+[node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("2_health")
+Unit = NodePath("..")
 MaxHp = 8.0
 
 [node name="FX" type="Node2D" parent="."]
@@ -24,8 +28,9 @@ texture = ExtResource("5_body")
 position = Vector2(0, -36)
 script = ExtResource("3_bar")
 
-[node name="Enemy" type="Node" parent="." node_paths=PackedStringArray("Health", "HealthBar", "FX", "FlightRoot")]
+[node name="Enemy" type="Node" parent="." node_paths=PackedStringArray("Unit", "Health", "HealthBar", "FX", "FlightRoot")]
 script = ExtResource("1_enemy")
+Unit = NodePath("..")
 BombBlastPrefab = ExtResource("6_bomb")
 Health = NodePath("../Health")
 HealthBar = NodePath("../HealthBar")

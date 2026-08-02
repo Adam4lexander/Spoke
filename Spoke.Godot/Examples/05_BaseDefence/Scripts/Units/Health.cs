@@ -5,8 +5,7 @@ namespace Spoke.Examples.BaseDefence;
 /// <summary>Basic health system used by buildings, resource sites and enemies.</summary>
 public partial class Health : SpokeNode {
 
-    /// <summary>The unit this component belongs to. Godot's answer to Unity's gameObject.</summary>
-    public Node2D Unit => (Node2D)Owner;
+    [Export] public Unit Unit { get; set; }
 
     [Export] public float MaxHp { get => maxHp.Now; set => maxHp.Set(value); }
 

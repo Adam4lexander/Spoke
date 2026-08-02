@@ -46,7 +46,7 @@ public partial class GameState : SpokeNode2D {
     // One spatial world per query concern. Units register colliders and sensors and read overlaps;
     // all six are ticked once per frame, at the top of Init.
     readonly CollisionWorld<PowerBody> powerZone = new();
-    readonly CollisionWorld<Node2D> groundZone = new();
+    readonly CollisionWorld<Unit> groundZone = new();
     readonly CollisionWorld<Radar> radarZone = new();
     readonly CollisionWorld<Turret> turretZone = new();
     readonly CollisionWorld<Repair> repairZone = new();
@@ -80,7 +80,7 @@ public partial class GameState : SpokeNode2D {
     }
 
     public static CollisionWorld<PowerBody> PowerZone => instance.powerZone;
-    public static CollisionWorld<Node2D> GroundZone => instance.groundZone;
+    public static CollisionWorld<Unit> GroundZone => instance.groundZone;
     public static CollisionWorld<Radar> RadarZone => instance.radarZone;
     public static CollisionWorld<Turret> TurretZone => instance.turretZone;
     public static CollisionWorld<Repair> RepairZone => instance.repairZone;

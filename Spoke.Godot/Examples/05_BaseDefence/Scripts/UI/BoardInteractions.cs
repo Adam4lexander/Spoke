@@ -55,7 +55,7 @@ public partial class BoardInteractions : SpokeNode {
 
         s.Effect(s => {
             var overlap = sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null;
-            hovering.Set(overlap?.Owner.GetNodeOrNull<Node>("Describes") as IHoverable);
+            hovering.Set(overlap?.Owner.Describes as IHoverable);
             hoveringCircle.Set(overlap?.Circle ?? default);
         }, sensor.OverlapsChanged);
     };

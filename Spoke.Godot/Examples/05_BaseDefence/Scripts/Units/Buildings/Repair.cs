@@ -63,7 +63,7 @@ public partial class Repair : SpokeNode, IHoverable {
             var bestFrac = 1f;
             foreach (var c in sensor.Overlaps) {
                 if (c.Owner == Building.Unit) continue;
-                var health = c.Owner.GetNodeOrNull<Health>("Health");
+                var health = c.Owner.Health;
                 if (health == null) continue;
                 var frac = s.D(health.HPFraction);
                 if (frac < bestFrac) {

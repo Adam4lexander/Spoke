@@ -1,5 +1,6 @@
 [gd_scene load_steps=9 format=3]
 
+[ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Unit.cs" id="0_unit"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Buildings/Building.cs" id="1_building"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/Health.cs" id="3_health"]
 [ext_resource type="Script" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Scripts/Units/PowerNode.cs" id="4_power"]
@@ -9,10 +10,14 @@
 [ext_resource type="Texture2D" uid="uid://b1mebyi2oej2e" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/repair-body.svg" id="7_body"]
 [ext_resource type="Texture2D" uid="uid://cv74x6i081ryo" path="res://Spoke/Spoke.Godot/Examples/05_BaseDefence/Art/repair-cross.svg" id="8_cross"]
 
-[node name="RepairBuilding" type="Node2D"]
+[node name="RepairBuilding" type="Node2D" node_paths=PackedStringArray("Health", "Describes")]
+script = ExtResource("0_unit")
+Health = NodePath("Health")
+Describes = NodePath("Describes")
 
-[node name="Health" type="Node" parent="."]
+[node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
+Unit = NodePath("..")
 MaxHp = 10.0
 
 [node name="FX" type="Node2D" parent="."]
@@ -24,8 +29,9 @@ texture = ExtResource("7_body")
 [node name="Cross" type="Sprite2D" parent="FX"]
 texture = ExtResource("8_cross")
 
-[node name="PowerNode" type="Node" parent="."]
+[node name="PowerNode" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("4_power")
+Unit = NodePath("..")
 ReceiveRange = 0.1
 ProvideRange = 0.0
 
@@ -33,8 +39,9 @@ ProvideRange = 0.0
 position = Vector2(0, -44)
 script = ExtResource("5_bar")
 
-[node name="Building" type="Node" parent="." node_paths=PackedStringArray("Health", "HealthBar", "FX", "Power")]
+[node name="Building" type="Node" parent="." node_paths=PackedStringArray("Unit", "Health", "HealthBar", "FX", "Power")]
 script = ExtResource("1_building")
+Unit = NodePath("..")
 Health = NodePath("../Health")
 HealthBar = NodePath("../HealthBar")
 FX = NodePath("../FX")
@@ -44,8 +51,9 @@ Cost = 100
 Radius = 0.5
 UnpoweredDim = 0.35
 
-[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Building")]
+[node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building")]
 script = ExtResource("2_repair")
+Unit = NodePath("..")
 Building = NodePath("../Building")
 Range = 5.0
 RepairRate = 0.5
