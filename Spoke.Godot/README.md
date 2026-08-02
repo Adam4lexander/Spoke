@@ -248,8 +248,34 @@ silently orphan the tree. Override `OnNotification(int what)` instead. Routing e
 notifications is also what keeps `_Ready`, `_Process` and the rest free for you.
 
 **No `UState<T>`.** Unity needs 188 lines of `ISerializationCallbackReceiver` and a custom
-`PropertyDrawer` because it serializes *fields*. Godot exports *properties* with setter bodies, so a
-two-line getter/setter pair does the job.
+`PropertyDrawer` because it serializes *fields* — it writes to your backing store directly and never
+runs your code, so the wrapper exists to notice afterwards that a value changed. Godot serializes
+*properties*, and its deserializer assigns through your setter, so the notification is just the
+setter body:
+
+```csharp
+readonly State<float> _maxHp = State.Create(1f);
+[Export] float maxHp { get => _maxHp.Now; set => _maxHp.Set(value); }
+```
+
+Scene load, Inspector edit and undo all route through `Set` and drive the graph like any other write.
+Note what `[Export]` is doing here: the Inspector row is the visible half, but the half that matters
+is `Storage` — a member without it is absent from the `.tscn`, and from `PackedScene.Pack` and
+`Duplicate` with it. `Set`/`Get` and tweens reach public members either way.
+
+Where `UState<T>` is genuinely one member and this is two: `UState<T>` *is* an `IState<T>`, so it can
+be handed out as a signal. The export property is only a value, so exposing it reactively takes a
+third line — the state itself, or an `ISignal<T>` over it when callers shouldn't write:
+
+```csharp
+public IState<float> Fraction => _fraction;
+```
+
+The private export can be camelCase so the Inspector still reads "Max Hp". One hazard: Godot's
+built-in properties are snake_case, so a *single-word* camelCase export (`rotation`, `position`,
+`name`) is the same string as the built-in and silently shadows it in the property list. The public
+member above it trips `CS0108` on the same names, which is the warning to watch for — multi-word
+names like `maxHp` can't collide, since Godot's would be `max_hp`.
 
 **No `SpokeSingleton`.** Godot has autoloads. Register the node in Project Settings → Autoload and
 expose a static `Instance` from its `_EnterTree` if you want typed access. Note that Godot scripts

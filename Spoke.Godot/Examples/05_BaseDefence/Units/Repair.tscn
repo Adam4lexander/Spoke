@@ -18,7 +18,7 @@ Describes = NodePath("Describes")
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("3_health")
 Unit = NodePath("..")
-MaxHp = 10.0
+maxHp = 10.0
 
 [node name="FX" type="Node2D" parent="."]
 script = ExtResource("6_fx")
@@ -49,7 +49,7 @@ Power = NodePath("../PowerNode")
 DisplayName = "Repair"
 Cost = 100
 Radius = 0.5
-UnpoweredDim = 0.35
+unpoweredDim = 0.35
 
 [node name="Describes" type="Node" parent="." node_paths=PackedStringArray("Unit", "Building")]
 script = ExtResource("2_repair")

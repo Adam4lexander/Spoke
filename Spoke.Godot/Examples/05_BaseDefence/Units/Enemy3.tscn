@@ -16,7 +16,7 @@ z_index = 10
 [node name="Health" type="Node" parent="." node_paths=PackedStringArray("Unit")]
 script = ExtResource("2_health")
 Unit = NodePath("..")
-MaxHp = 16.0
+maxHp = 16.0
 
 [node name="FX" type="Node2D" parent="."]
 script = ExtResource("4_fx")

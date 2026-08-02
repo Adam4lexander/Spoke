@@ -21,7 +21,9 @@ public partial class Building : SpokeNode {
     [Export] public string DisplayName { get; set; } = "";
     [Export] public int Cost { get; set; }
     [Export] public float Radius { get; set; } = 0.6f;
-    [Export] public float UnpoweredDim { get; set; } = 0.35f;
+    [Export] float unpoweredDim { get => _unpoweredDim.Now; set => _unpoweredDim.Set(value); }
+
+    readonly State<float> _unpoweredDim = State.Create(0.35f);
 
     [Export] public Unit Unit { get; set; }
 
@@ -63,7 +65,7 @@ public partial class Building : SpokeNode {
                 FX.SetTint(Colors.White);
                 return;
             }
-            var d = UnpoweredDim;
+            var d = s.D(_unpoweredDim);
             FX.SetTint(new Color(d, d, d, 1f));
         });
     }
