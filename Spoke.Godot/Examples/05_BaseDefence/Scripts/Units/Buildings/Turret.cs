@@ -69,8 +69,15 @@ public partial class Turret : SpokeNode, IHoverable {
     EffectBlock IdleBehaviour => s => {
         const float minInterval = 1f;
         const float maxInterval = 3f;
-        targetDirection = GD.Randf() * Mathf.Tau;
-        s.Every(GD.RandRange(minInterval, maxInterval), () => targetDirection = GD.Randf() * Mathf.Tau);
+        var elapsed = 0.0;
+        var interval = GD.RandRange(minInterval, maxInterval);
+        s.OnProcess(delta => {
+            elapsed += delta;
+            if (elapsed < interval) return;
+            elapsed = 0.0;
+            interval = GD.RandRange(minInterval, maxInterval);
+            targetDirection = GD.Randf() * Mathf.Tau;
+        });
     };
 
     EffectBlock AttackBehaviour(Enemy target) => s => {
@@ -83,6 +90,7 @@ public partial class Turret : SpokeNode, IHoverable {
             if (!ready.Now || firing.Now) return;
             if (Mathf.Abs(Mathf.AngleDifference(Pivot.Rotation, targetDirection)) > Mathf.DegToRad(FireAngle)) return;
             firing.Set(true);
+            ready.Set(false);
         });
 
         // Flash the beam first, then land the hit, so the killing shot is seen
@@ -98,7 +106,6 @@ public partial class Turret : SpokeNode, IHoverable {
             s.Wait(BeamFlashTime, () => {
                 if (GodotObject.IsInstanceValid(target)) target.Health.Damage(Damage);
                 firing.Set(false);
-                ready.Set(false);
             });
         });
 
