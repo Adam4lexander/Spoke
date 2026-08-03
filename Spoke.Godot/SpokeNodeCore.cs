@@ -43,11 +43,6 @@ namespace Spoke {
     ///   is removed from the tree and re-added keeps its state; IsInTree just goes false and back.
     ///   Gate anything that needs a live tree with s.Phase(IsInTree, ...).
     ///
-    /// - Pause is deliberately not a signal. s.OnProcess already stops while a node can't process,
-    ///   which is the part that matters, and pause-bracketed setup/teardown is rare enough that it
-    ///   doesn't belong on every node's surface. The one node that needs it can drive a State from
-    ///   NOTIFICATION_PAUSED and NOTIFICATION_UNPAUSED in its own OnNotification.
-    ///
     /// - s.OnProcess and s.OnPhysicsProcess are dispatched from here, so they land at the node's own
     ///   point in the frame and get tree order, ProcessPriority and pause for free. They ride the
     ///   internal process notifications, leaving the node's own SetProcess and _Process untouched.
@@ -92,9 +87,6 @@ namespace Spoke {
         /// visibility probe — CanvasItem and Node3D descendants. Stays false for plain Nodes.
         /// </summary>
         public ISignal<bool> IsShown => isVisible;
-
-        /// <summary>The tree, once spawned. Null before it enters the tree, and after teardown.</summary>
-        public SpokeTree<Effect> Tree => tree;
 
         /// <param name="node">The host node.</param>
         /// <param name="init">The block that becomes the root Effect of the tree.</param>
