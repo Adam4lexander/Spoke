@@ -14,14 +14,12 @@ namespace Spoke {
     /// Extend instead of Node. Override Init to declare your logic; it runs once, as the node enters
     /// the tree, as the root Effect of a SpokeTree scoped to this node's lifetime.
     /// </summary>
-    public abstract partial class SpokeNode : Node, ISpokeNode {
+    public abstract partial class SpokeNode : Node {
 
         readonly SpokeNodeCore core;
 
         protected SpokeNode()
             => core = new SpokeNodeCore(this, Init);
-
-        public Node HostNode => this;
 
         /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
@@ -55,14 +53,12 @@ namespace Spoke {
     }
 
     /// <summary>Extend instead of Node2D. See <see cref="SpokeNode"/>.</summary>
-    public abstract partial class SpokeNode2D : Node2D, ISpokeNode {
+    public abstract partial class SpokeNode2D : Node2D {
 
         readonly SpokeNodeCore core;
 
         protected SpokeNode2D()
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
-
-        public Node HostNode => this;
 
         /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
@@ -95,14 +91,12 @@ namespace Spoke {
     }
 
     /// <summary>Extend instead of Node3D. See <see cref="SpokeNode"/>.</summary>
-    public abstract partial class SpokeNode3D : Node3D, ISpokeNode {
+    public abstract partial class SpokeNode3D : Node3D {
 
         readonly SpokeNodeCore core;
 
         protected SpokeNode3D()
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
-
-        public Node HostNode => this;
 
         /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
@@ -135,14 +129,12 @@ namespace Spoke {
     }
 
     /// <summary>Extend instead of Control. See <see cref="SpokeNode"/>.</summary>
-    public abstract partial class SpokeControl : Control, ISpokeNode {
+    public abstract partial class SpokeControl : Control {
 
         readonly SpokeNodeCore core;
 
         protected SpokeControl()
             => core = new SpokeNodeCore(this, Init, IsVisibleInTree);
-
-        public Node HostNode => this;
 
         /// <summary>True while the control is inside the SceneTree. Cycles on reparent.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;

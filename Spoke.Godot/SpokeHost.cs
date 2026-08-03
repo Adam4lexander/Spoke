@@ -36,7 +36,7 @@ namespace Spoke {
         /// <summary>True while the target is inside the SceneTree.</summary>
         public ISignal<bool> IsInTree => core.IsInTree;
 
-        /// <summary>True once the host has readied. See <see cref="SpokeNodeCore"/>.</summary>
+        /// <summary>True once the host has readied. See <see cref="SpokeNode.IsReady"/>.</summary>
         public ISignal<bool> IsReady => core.IsReady;
 
         public sealed override void _Notification(int what) {

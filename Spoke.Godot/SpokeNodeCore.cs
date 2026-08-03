@@ -5,22 +5,6 @@ using Godot;
 namespace Spoke {
 
     /// <summary>
-    /// Implemented by every Spoke node base class. Lets shared code accept "a node running a
-    /// SpokeTree" without caring whether it's a Node, Node2D, Node3D or Control.
-    /// </summary>
-    public interface ISpokeNode {
-
-        /// <summary>The node itself.</summary>
-        Node HostNode { get; }
-
-        /// <summary>True while the node is inside the SceneTree. Cycles on reparent.</summary>
-        ISignal<bool> IsInTree { get; }
-
-        /// <summary>True once the node and its children are set up. See <see cref="SpokeNodeCore"/>.</summary>
-        ISignal<bool> IsReady { get; }
-    }
-
-    /// <summary>
     /// The engine-facing half of a Spoke node. Owns the SpokeTree and translates Godot notifications
     /// into reactive signals. The node base classes are thin shims over this — the logic lives here
     /// once, because C# has no multiple inheritance and Godot's node types are separate hierarchies.
