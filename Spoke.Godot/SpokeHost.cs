@@ -8,7 +8,8 @@ namespace Spoke {
     ///
     /// SpokeHost is a child node, so Godot's own ownership rules do the work: it enters and leaves
     /// the tree with its target and is freed when the target is freed, which tears the tree down.
-    /// Signals reported here describe the target, not the host.
+    /// Signals reported here describe the target, not the host. s.OnProcess runs on the host's own
+    /// frame slot, right after the target's, since it's a child.
     ///
     /// <code>
     /// public partial class Player : CharacterBody2D {
@@ -27,7 +28,7 @@ namespace Spoke {
         /// <summary>Attaches a tree to <paramref name="target"/>. Init runs during the AddChild below.</summary>
         public static SpokeHost Attach(Node target, EffectBlock init, string name = "SpokeHost") {
             var host = new SpokeHost { Name = name };
-            host.core = new SpokeNodeCore(target, init);
+            host.core = new SpokeNodeCore(target, init, notifier: host);
             target.AddChild(host);
             return host;
         }

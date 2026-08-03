@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace Spoke {
@@ -44,18 +45,30 @@ namespace Spoke {
     ///
     /// - Pause is deliberately not a signal. s.OnProcess already stops while a node can't process,
     ///   which is the part that matters, and pause-bracketed setup/teardown is rare enough that it
-    ///   doesn't belong on every node's surface. The recipe for adding it to one node that needs it
-    ///   is in README.md, under "Reacting to pause".
+    ///   doesn't belong on every node's surface. The one node that needs it can drive a State from
+    ///   NOTIFICATION_PAUSED and NOTIFICATION_UNPAUSED in its own OnNotification.
+    ///
+    /// - s.OnProcess and s.OnPhysicsProcess are dispatched from here, so they land at the node's own
+    ///   point in the frame and get tree order, ProcessPriority and pause for free. They ride the
+    ///   internal process notifications, leaving the node's own SetProcess and _Process untouched.
+    ///   Within the node they run in Spoke tree order, so a phase that remounts doesn't shuffle
+    ///   itself to the back.
     /// </summary>
-    public sealed class SpokeNodeCore {
+    internal sealed class SpokeNodeCore {
 
         readonly Node node;
+        readonly Node notifier;
         readonly EffectBlock init;
         readonly Func<bool> visibilityProbe;
 
         readonly State<bool> isInTree = State.Create(false);
         readonly State<bool> isReady = State.Create(false);
         readonly State<bool> isVisible = State.Create(false);
+
+        readonly Jobs process = new();
+        readonly Jobs physics = new();
+        readonly Action<long> dropProcess, dropPhysics;
+        long nextJobId = 1; // 0 is reserved: it's what a blanked job reads as
 
         SpokeTree<Effect> tree;
         bool isTornDown;
@@ -88,10 +101,31 @@ namespace Spoke {
         /// <param name="visibilityProbe">
         /// Supplied by visual node shims. Returns the node's current visible-in-tree state.
         /// </param>
-        public SpokeNodeCore(Node node, EffectBlock init, Func<bool> visibilityProbe = null) {
+        /// <param name="notifier">
+        /// The node forwarding notifications here, when it isn't the host itself. SpokeHost is a
+        /// child of the node it describes.
+        /// </param>
+        public SpokeNodeCore(Node node, EffectBlock init, Func<bool> visibilityProbe = null, Node notifier = null) {
             this.node = node ?? throw new ArgumentNullException(nameof(node));
             this.init = init ?? throw new ArgumentNullException(nameof(init));
             this.visibilityProbe = visibilityProbe;
+            this.notifier = notifier ?? node;
+            dropProcess = id => Drop(process, id, isPhysics: false);
+            dropPhysics = id => Drop(physics, id, isPhysics: true);
+        }
+
+        /// <summary>Takes on a per-frame callback. Dispose the handle to give it up again.</summary>
+        internal SpokeHandle Register(FrameTick tick, Action<double> fn, bool isPhysics) {
+            var jobs = isPhysics ? physics : process;
+            // Processing follows the job count, so an idle node costs nothing per frame.
+            if (jobs.Count == 0) SetProcessing(true, isPhysics);
+            var job = new Job(nextJobId++, tick, fn);
+            jobs.Add(job);
+            return SpokeHandle.Of(job.Id, isPhysics ? dropPhysics : dropProcess);
+        }
+
+        void Drop(Jobs jobs, long id, bool isPhysics) {
+            if (jobs.Remove(id) && jobs.Count == 0) SetProcessing(false, isPhysics);
         }
 
         /// <summary>
@@ -127,6 +161,14 @@ namespace Spoke {
                     RefreshVisibility();
                     break;
 
+                case Node.NotificationInternalProcess:
+                    process.Dispatch(notifier.GetProcessDeltaTime());
+                    break;
+
+                case Node.NotificationInternalPhysicsProcess:
+                    physics.Dispatch(notifier.GetPhysicsProcessDeltaTime());
+                    break;
+
                 case GodotObject.NotificationPredelete:
                     Teardown();
                     break;
@@ -154,12 +196,82 @@ namespace Spoke {
             tree = SpokeTree.Spawn(
                 $"{node.GetType().Name}:{node.Name}",
                 new Effect("Init", init),
-                new GodotContext(node));
+                new GodotContext(node, this));
         }
 
         void RefreshVisibility() {
             if (visibilityProbe == null) return;
             isVisible.Set(node.IsInsideTree() && visibilityProbe());
+        }
+
+        void SetProcessing(bool on, bool isPhysics) {
+            if (!GodotObject.IsInstanceValid(notifier)) return;
+            if (isPhysics) notifier.SetPhysicsProcessInternal(on);
+            else notifier.SetProcessInternal(on);
+        }
+
+        // A registered callback. Its FrameTick is where it sits in the Spoke tree, and sorts it.
+        readonly struct Job {
+
+            public readonly long Id;
+            public readonly FrameTick Tick;
+            public readonly Action<double> Fn;
+
+            public Job(long id, FrameTick tick, Action<double> fn) {
+                Id = id;
+                Tick = tick;
+                Fn = fn;
+            }
+
+            public void Run(double delta) => Fn?.Invoke(delta);
+        }
+
+        // One of the node's two callback lists, kept in Spoke tree order. Only adding can disturb
+        // that order, so the sort waits for the next dispatch rather than running every frame.
+        class Jobs {
+
+            static readonly Comparison<Job> byTreeOrder = (a, b) => a.Tick.CompareTo(b.Tick);
+
+            readonly List<Job> jobs = new();
+            readonly List<Job> running = new(); // the snapshot a dispatch is walking; empty otherwise
+            bool isSorted = true;
+
+            public int Count => jobs.Count;
+
+            public void Add(in Job job) {
+                jobs.Add(job);
+                isSorted = false;
+            }
+
+            public bool Remove(long id) {
+                var found = false;
+                for (var i = 0; i < jobs.Count; i++) {
+                    if (jobs[i].Id != id) continue;
+                    jobs.RemoveAt(i);
+                    found = true;
+                    break;
+                }
+                // A job dropped mid-dispatch doesn't run again this frame.
+                for (var i = 0; i < running.Count; i++) {
+                    if (running[i].Id == id) running[i] = default;
+                }
+                return found;
+            }
+
+            public void Dispatch(double delta) {
+                if (jobs.Count == 0) return;
+                if (!isSorted) {
+                    jobs.Sort(byTreeOrder);
+                    isSorted = true;
+                }
+                // Walked over a snapshot, because a callback can unmount the block holding the next.
+                running.AddRange(jobs);
+                try {
+                    foreach (var job in running) job.Run(delta);
+                } finally {
+                    running.Clear();
+                }
+            }
         }
     }
 }

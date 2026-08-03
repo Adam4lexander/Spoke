@@ -12,8 +12,7 @@ namespace Spoke {
     /// Notably absent is a node-lifetime helper. Adding one means picking what happens at cleanup —
     /// QueueFree, return-to-pool, hide-and-reuse — and that's a per-game decision, not something a
     /// library should decide on your behalf. Inside a Spoke node `this` is the node, so AddChild,
-    /// GetNode and QueueFree work as they always do, with s.OnCleanup as the teardown half. See
-    /// README.md, "Node lifetimes", for the extension to write if you want one.
+    /// GetNode and QueueFree work as they always do, with s.OnCleanup as the teardown half.
     /// </summary>
     public static partial class EffectBuilderExtensions {
 
@@ -49,35 +48,17 @@ namespace Spoke {
 
         /// <summary>
         /// Runs a callback every rendered frame while the block is alive — _Process, scoped to the
-        /// block instead of the node. Skipped while the host is out of the tree or paused, matching
-        /// _Process. To run through a pause, set the host's ProcessMode to Always, exactly as you
-        /// would for a hand-written _Process.
+        /// block instead of the node. Two of these run in the order they're declared, however their
+        /// blocks mounted. Skipped while the host is out of the tree or paused, just like _Process.
         /// </summary>
         public static void OnProcess(this EffectBuilder s, Action<double> fn)
-            => OnFrame(s, fn, physics: false);
+            => s.Call(new FrameTick("OnProcess", fn, isPhysics: false));
 
         /// <summary>
         /// Runs a callback every physics tick while the block is alive — _PhysicsProcess, scoped to
-        /// the block. Use for anything touching physics state: MoveAndSlide, forces, shape queries.
+        /// the block. Use for anything touching physics: MoveAndSlide, forces, shape queries.
         /// </summary>
         public static void OnPhysicsProcess(this EffectBuilder s, Action<double> fn)
-            => OnFrame(s, fn, physics: true);
-
-        static void OnFrame(EffectBuilder s, Action<double> fn, bool physics) {
-            var node = s.Import<GodotContext>().Node;
-            // Reached through the MainLoop rather than node.GetTree(), so this still resolves while
-            // the host is detached — the handler itself no-ops until the host is back in the tree.
-            if (Engine.GetMainLoop() is not SceneTree tree) {
-                throw new InvalidOperationException("OnProcess requires a SceneTree MainLoop");
-            }
-            Action handler = () => {
-                if (!GodotObject.IsInstanceValid(node) || !node.IsInsideTree()) return;
-                if (!node.CanProcess()) return;
-                fn(physics ? node.GetPhysicsProcessDeltaTime() : node.GetProcessDeltaTime());
-            };
-            s.Subscribe(tree,
-                physics ? SceneTree.SignalName.PhysicsFrame : SceneTree.SignalName.ProcessFrame,
-                Callable.From(handler));
-        }
+            => s.Call(new FrameTick("OnPhysicsProcess", fn, isPhysics: true));
     }
 }
