@@ -56,7 +56,7 @@ public partial class PowerNode : SpokeNode {
     public bool IsLeaf => ProvideRange <= 0f;
 
     protected override void Init(EffectBuilder s) {
-        var isOnline = s.Memo(s => s.D(IsInTree) && s.D(enabled));
+        var isOnline = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled) && s.D(enabled));
 
         s.Phase(isOnline, s => {
             UpdateAll(list => list.Add(this));

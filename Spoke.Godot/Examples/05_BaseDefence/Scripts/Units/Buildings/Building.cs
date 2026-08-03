@@ -34,7 +34,9 @@ public partial class Building : SpokeNode {
             HealthBar.Fraction.Set(s.D(Health.HPFraction));
         });
 
-        s.Phase(IsInTree, s => {
+        var isActive = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled));
+
+        s.Phase(isActive, s => {
             s.Phase(Health.IsAlive, s => {
                 all.Add(this);
                 s.OnCleanup(() => all.Remove(this));

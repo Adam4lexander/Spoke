@@ -40,7 +40,9 @@ public partial class Enemy : SpokeNode {
             HealthBar.Fraction.Set(s.D(Health.HPFraction));
         });
 
-        s.Phase(IsInTree, s => {
+        var isActive = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled));
+
+        s.Phase(isActive, s => {
             s.Phase(Health.IsAlive, s => {
                 s.Use(GameState.EnemyZone.AddCollider(this, () => new Circle(Unit.GlobalPosition, World.Px(Radius))));
 

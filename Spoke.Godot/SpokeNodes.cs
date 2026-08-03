@@ -31,6 +31,12 @@ namespace Spoke {
         /// </summary>
         public ISignal<bool> IsReady => core.IsReady;
 
+        /// <summary>
+        /// True while the effective ProcessMode is anything but Disabled. Holds through reparents;
+        /// gate per-life state (a pool's reset-on-despawn) with s.Phase(IsEnabled, ...).
+        /// </summary>
+        public ISignal<bool> IsEnabled => core.IsEnabled;
+
         /// <summary>Declare your effects here. Replaces _EnterTree, and the teardown half of _ExitTree.</summary>
         protected abstract void Init(EffectBuilder s);
 
@@ -76,6 +82,12 @@ namespace Spoke {
         /// </summary>
         public ISignal<bool> IsShown => core.IsShown;
 
+        /// <summary>
+        /// True while the effective ProcessMode is anything but Disabled. Holds through reparents;
+        /// gate per-life state (a pool's reset-on-despawn) with s.Phase(IsEnabled, ...).
+        /// </summary>
+        public ISignal<bool> IsEnabled => core.IsEnabled;
+
         protected abstract void Init(EffectBuilder s);
 
         public sealed override void _Notification(int what) {
@@ -114,6 +126,12 @@ namespace Spoke {
         /// </summary>
         public ISignal<bool> IsShown => core.IsShown;
 
+        /// <summary>
+        /// True while the effective ProcessMode is anything but Disabled. Holds through reparents;
+        /// gate per-life state (a pool's reset-on-despawn) with s.Phase(IsEnabled, ...).
+        /// </summary>
+        public ISignal<bool> IsEnabled => core.IsEnabled;
+
         protected abstract void Init(EffectBuilder s);
 
         public sealed override void _Notification(int what) {
@@ -151,6 +169,12 @@ namespace Spoke {
         /// because IsVisible is already a method on the Godot side.
         /// </summary>
         public ISignal<bool> IsShown => core.IsShown;
+
+        /// <summary>
+        /// True while the effective ProcessMode is anything but Disabled. Holds through reparents;
+        /// gate per-life state (a pool's reset-on-despawn) with s.Phase(IsEnabled, ...).
+        /// </summary>
+        public ISignal<bool> IsEnabled => core.IsEnabled;
 
         protected abstract void Init(EffectBuilder s);
 

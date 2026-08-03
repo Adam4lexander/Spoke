@@ -90,7 +90,7 @@ public partial class GameState : SpokeNode2D {
             enemyZone.Tick();
         });
 
-        // Idle pooled units have no parent, so nothing else will ever free them.
+        // The pool is static; forget its instances so a reloaded scene starts clean.
         s.OnCleanup(Pool.Clear);
 
         var isPlaying = s.Memo(s => s.D(mode) == GameMode.Playing);

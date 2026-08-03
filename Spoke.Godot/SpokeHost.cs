@@ -39,6 +39,9 @@ namespace Spoke {
         /// <summary>True once the host has readied. See <see cref="SpokeNode.IsReady"/>.</summary>
         public ISignal<bool> IsReady => core.IsReady;
 
+        /// <summary>True while the target's effective ProcessMode is anything but Disabled. See <see cref="SpokeNode.IsEnabled"/>.</summary>
+        public ISignal<bool> IsEnabled => core.IsEnabled;
+
         public sealed override void _Notification(int what) {
             base._Notification(what);
             core?.Notification(what);

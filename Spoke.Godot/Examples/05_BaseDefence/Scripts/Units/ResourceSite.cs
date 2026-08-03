@@ -26,7 +26,9 @@ public partial class ResourceSite : SpokeNode, IHoverable {
     [Export] public Unit Unit { get; set; }
 
     protected override void Init(EffectBuilder s) {
-        s.Phase(IsInTree, s => {
+        var isActive = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled));
+
+        s.Phase(isActive, s => {
             remaining.Set(StartResources);
 
             s.Effect(SyncHoverInfo);

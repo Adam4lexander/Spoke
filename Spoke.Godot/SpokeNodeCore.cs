@@ -27,6 +27,11 @@ namespace Spoke {
     ///   is removed from the tree and re-added keeps its state; IsInTree just goes false and back.
     ///   Gate anything that needs a live tree with s.Phase(IsInTree, ...).
     ///
+    /// - IsEnabled follows the effective ProcessMode, so it holds through reparents where IsInTree
+    ///   cycles. Disabling a node is Godot's SetActive(false): gate per-life state — a pool's
+    ///   reset-on-despawn — with s.Phase(IsEnabled, ...). NOTIFICATION_DISABLED arrives while the
+    ///   node is still in the tree, so those cleanups can still reach it. Pause doesn't move it.
+    ///
     /// - s.OnProcess and s.OnPhysicsProcess are dispatched from here, so they land at the node's own
     ///   point in the frame and get tree order, ProcessPriority and pause for free. They ride the
     ///   internal process notifications, leaving the node's own SetProcess and _Process untouched.
@@ -43,6 +48,7 @@ namespace Spoke {
         readonly State<bool> isInTree = State.Create(false);
         readonly State<bool> isReady = State.Create(false);
         readonly State<bool> isVisible = State.Create(false);
+        readonly State<bool> isEnabled = State.Create(true);
 
         readonly Jobs process = new();
         readonly Jobs physics = new();
@@ -71,6 +77,13 @@ namespace Spoke {
         /// visibility probe — CanvasItem and Node3D descendants. Stays false for plain Nodes.
         /// </summary>
         public ISignal<bool> IsShown => isVisible;
+
+        /// <summary>
+        /// True while the node's effective ProcessMode is anything but Disabled. Changes only when
+        /// a mode is set on this node or an ancestor, so it holds through reparents. Pause doesn't
+        /// affect it.
+        /// </summary>
+        public ISignal<bool> IsEnabled => isEnabled;
 
         /// <param name="node">The host node.</param>
         /// <param name="init">The block that becomes the root Effect of the tree.</param>
@@ -114,8 +127,15 @@ namespace Spoke {
 
                 case Node.NotificationEnterTree:
                     isInTree.Set(true);
+                    // Godot doesn't notify a mode set while out of the tree, so recheck on the way in.
+                    RefreshEnabled();
                     RefreshVisibility();
                     Spawn();
+                    break;
+
+                case Node.NotificationDisabled:
+                case Node.NotificationEnabled:
+                    RefreshEnabled();
                     break;
 
                 case Node.NotificationReady:
@@ -180,6 +200,14 @@ namespace Spoke {
             isVisible.Set(node.IsInsideTree() && visibilityProbe());
         }
 
+        // The effective mode is inherited, and Godot has no query for it (CanProcess also reports
+        // pause), so resolve it from the nearest non-Inherit ancestor.
+        void RefreshEnabled() {
+            var n = node;
+            while (n != null && n.ProcessMode == Node.ProcessModeEnum.Inherit) n = n.GetParent();
+            isEnabled.Set(n == null || n.ProcessMode != Node.ProcessModeEnum.Disabled);
+        }
+
         void SetProcessing(bool on, bool isPhysics) {
             if (!GodotObject.IsInstanceValid(notifier)) return;
             if (isPhysics) notifier.SetPhysicsProcessInternal(on);
@@ -241,9 +269,11 @@ namespace Spoke {
                     isSorted = true;
                 }
                 // Walked over a snapshot, because a callback can unmount the block holding the next.
+                // By index: Remove blanks running slots mid-walk, and List<T>'s indexer bumps the
+                // version a foreach would trip over.
                 running.AddRange(jobs);
                 try {
-                    foreach (var job in running) job.Run(delta);
+                    for (var i = 0; i < running.Count; i++) running[i].Run(delta);
                 } finally {
                     running.Clear();
                 }

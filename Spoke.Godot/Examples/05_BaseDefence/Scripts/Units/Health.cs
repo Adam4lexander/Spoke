@@ -43,6 +43,6 @@ public partial class Health : SpokeNode {
             isAlive.Set(s.D(hp) > 0f);
         });
 
-        s.Phase(IsInTree, s => s.OnCleanup(() => _damage.Set(0f)));   // restore full health on return to the pool
+        s.Phase(IsEnabled, s => s.OnCleanup(() => _damage.Set(0f)));   // restore full health on return to the pool
     }
 }

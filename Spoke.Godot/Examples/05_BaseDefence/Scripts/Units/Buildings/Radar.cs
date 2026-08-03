@@ -25,7 +25,7 @@ public partial class Radar : SpokeNode, IHoverable {
             "Turrets cannot fire at enemies that no radar has revealed.",
             CoverageType.Radar, Building.Power));
 
-        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(Building.Power.HasPower));
+        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled) && s.D(Building.Power.HasPower));
 
         s.Phase(isRunning, s => {
             s.Use(GameState.RadarZone.AddCollider(this, () => new Circle(Unit.GlobalPosition, World.Px(Range))));

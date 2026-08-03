@@ -23,11 +23,19 @@ public partial class Lifecycle_Example : SpokeNode2D {
             s.OnCleanup(() => GD.Print("  IsShown disposed"));
         });
 
+        // Runs while the effective ProcessMode isn't Disabled -- Godot's SetActive(false).
+        // Doesn't cycle on reparent, so it's the gate for per-life state (a pool's reset-on-despawn)
+        s.Phase(IsEnabled, s => {
+            GD.Print("  IsEnabled mounted");
+            s.OnCleanup(() => GD.Print("  IsEnabled disposed"));
+        });
+
         // Children are added the ordinary Godot way, and s.OnCleanup is the teardown half
         var label = new Label {
             Position = new Vector2(40, 40),
             Text = "V   toggle visible\n"
                  + "T   detach from the tree for 1.5s\n"
+                 + "D   disable for 1.5s\n"
                  + "F   free this node\n\n"
                  + "Watch the Output panel."
         };
@@ -35,14 +43,26 @@ public partial class Lifecycle_Example : SpokeNode2D {
         s.OnCleanup(() => label.QueueFree());
     }
 
-    // Press V to toggle visibility, T to detach from the tree, F to free the node
+    // Press V to toggle visibility, T to detach from the tree, D to disable, F to free the node
     public override void _UnhandledKeyInput(InputEvent @event) {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
         switch (key.Keycode) {
             case Key.V: Visible = !Visible; break;
             case Key.T: DetachBriefly(); break;
+            case Key.D: DisableBriefly(); break;
             case Key.F: QueueFree(); break;
         }
+    }
+
+    // Disabled nodes don't receive input either, so this comes back on a timer too. The timer
+    // lives on the SceneTree, which keeps running.
+    async void DisableBriefly() {
+        var tree = GetTree();
+        GD.Print("[disabling...]");
+        ProcessMode = ProcessModeEnum.Disabled;
+        await tree.ToSignal(tree.CreateTimer(1.5), SceneTreeTimer.SignalName.Timeout);
+        GD.Print("[re-enabling...]");
+        ProcessMode = ProcessModeEnum.Inherit;
     }
 
     // Detached nodes don't receive input, so the trip back is on a timer. Add/RemoveChild are

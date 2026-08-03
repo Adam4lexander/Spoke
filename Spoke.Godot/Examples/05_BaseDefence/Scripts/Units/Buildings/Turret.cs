@@ -33,7 +33,7 @@ public partial class Turret : SpokeNode, IHoverable {
 
         targetDirection = Pivot.Rotation;
 
-        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(Building.Power.HasPower));
+        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled) && s.D(Building.Power.HasPower));
 
         s.Phase(isRunning, s => {
             s.Effect(RotateToTarget);

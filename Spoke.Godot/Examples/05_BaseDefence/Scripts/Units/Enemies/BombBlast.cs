@@ -14,9 +14,10 @@ public partial class BombBlast : SpokeNode2D {
     protected override void Init(EffectBuilder s) {
         ZIndex = 20;
 
-        // Its whole life is one window in the tree, so a pooled reuse restarts the fuse
+        // Its whole life is one enabled window, so a pooled reuse restarts the fuse
         // from zero by re-running this block. There's nothing else to reset.
-        s.Phase(IsInTree, s => {
+        var isActive = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled));
+        s.Phase(isActive, s => {
             elapsed = 0.0;
 
             s.OnProcess(delta => {

@@ -24,7 +24,7 @@ public partial class Repair : SpokeNode, IHoverable {
             "Repair buildings can mend each other, but never themselves.",
             CoverageType.Repair, Building.Power));
 
-        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(Building.Power.HasPower));
+        var isRunning = s.Memo(s => s.D(IsInTree) && s.D(IsEnabled) && s.D(Building.Power.HasPower));
 
         s.Phase(isRunning, s => {
             s.Use(GameState.RepairZone.AddCollider(this, () => new Circle(Unit.GlobalPosition, World.Px(Range))));
