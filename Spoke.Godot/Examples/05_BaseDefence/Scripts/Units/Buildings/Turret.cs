@@ -43,11 +43,11 @@ public partial class Turret : SpokeNode, IHoverable {
             // Overlaps are nearest-first, so this picks the closest radar-revealed enemy.
             var sensor = s.Use(GameState.EnemyZone.AddSensor(() => new Circle(Unit.GlobalPosition, World.Px(Range))));
             var target = s.Memo(s => {
-                foreach (var c in sensor.Overlaps) {
+                foreach (var c in s.D(sensor.Overlaps)) {
                     if (s.D(c.Owner.IsTracked)) return c.Owner;
                 }
                 return null;
-            }, sensor.OverlapsChanged);
+            });
 
             s.Effect(s => {
                 var targetNow = s.D(target);

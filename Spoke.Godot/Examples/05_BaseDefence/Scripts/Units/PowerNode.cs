@@ -94,11 +94,11 @@ public partial class PowerNode : SpokeNode {
             if (parentNow == null) return;
 
             s.Effect(s => {
-                foreach (var c in collider.Overlaps) {
+                foreach (var c in s.D(collider.Overlaps)) {
                     if (c.Owner.Node == parentNow) return;
                 }
                 parent.Set(null);
-            }, collider.OverlapsChanged);
+            });
 
             s.Effect(s => {
                 if (!s.D(parentNow.HasPower)) parent.Set(null);
@@ -127,7 +127,7 @@ public partial class PowerNode : SpokeNode {
         var isRootConnected = s.Memo(s => s.D(chain).isRootConnected);
 
         s.Phase(isRootConnected, s => {
-            foreach (var c in collider.Overlaps) {
+            foreach (var c in s.D(collider.Overlaps)) {
                 var node = c.Owner.Node;
                 if (node == this || node.IsRoot) continue;
 
@@ -144,6 +144,6 @@ public partial class PowerNode : SpokeNode {
 
                 s.Phase(canConnect, s => node.parent.Set(this));
             }
-        }, collider.OverlapsChanged);
+        });
     };
 }

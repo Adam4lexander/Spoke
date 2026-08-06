@@ -138,7 +138,7 @@ public partial class Enemy : SpokeNode {
         s.OnProcess(delta => {
             var reach = World.Px(SeparationDistance);
             var push = Vector2.Zero;
-            foreach (var c in sensor.Overlaps) {
+            foreach (var c in sensor.Overlaps.Now) {
                 if (c.Owner == this) continue;
                 var away = Unit.GlobalPosition - c.Owner.Unit.GlobalPosition;
                 var dist = away.Length();
@@ -153,7 +153,7 @@ public partial class Enemy : SpokeNode {
     EffectBlock RadarTrack => s => {
         var sensor = s.Use(GameState.RadarZone.AddSensor(() => new Circle(Unit.GlobalPosition, World.Px(Radius))));
 
-        var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.OverlapsChanged);
+        var isTracked = s.Memo(s => s.D(sensor.Overlaps).Count > 0);
         s.Phase(isTracked, s => {
             tracked.Set(true);
             s.OnCleanup(() => tracked.Set(false));

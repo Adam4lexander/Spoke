@@ -50,17 +50,17 @@ public partial class Repair : SpokeNode, IHoverable {
                 patient.Set(null);
                 return;
             }
-            foreach (var c in sensor.Overlaps) {
+            foreach (var c in s.D(sensor.Overlaps)) {
                 if (c.Owner == patientNow.Owner) return;
             }
             patient.Set(null);
-        }, sensor.OverlapsChanged);
+        });
 
         s.Effect(s => {
             if (s.D(patient) != null) return;
             Health best = null;
             var bestFrac = 1f;
-            foreach (var c in sensor.Overlaps) {
+            foreach (var c in s.D(sensor.Overlaps)) {
                 if (c.Owner == Building.Unit) continue;
                 var health = c.Owner.Health;
                 if (health == null) continue;
@@ -71,7 +71,7 @@ public partial class Repair : SpokeNode, IHoverable {
                 }
             }
             patient.Set(best);
-        }, sensor.OverlapsChanged);
+        });
 
         return patient;
     };
