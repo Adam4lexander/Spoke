@@ -18,9 +18,9 @@ namespace Spoke.Examples.BaseDefence {
             var sensor = s.Use(zone.AddSensor(() => GameState.View.Now.GroundArea, filter));
             var circles = s.Memo(s => {
                 var list = new List<Circle>();
-                foreach (var collider in sensor.Overlaps) list.Add(collider.Circle);
+                foreach (var collider in s.D(sensor.Overlaps)) list.Add(collider.Circle);
                 return list;
-            }, sensor.OverlapsChanged);
+            });
             s.Effect(DrawCircles(circles, colour, material));
         };
 
