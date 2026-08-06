@@ -11,7 +11,7 @@ namespace Spoke.Examples.BaseDefence {
     // custom collision engine was simple to write.
     //
     // ----------------------------------------------------------------------------------------
-    //  var world = new CollisionWorld<Building>();          // owners are type T
+    //  var world = new CollisionWorld<Building>();          // owners are type Building
     //
     //  // Collider: a detectable circle, bound to an owner. Re-sampled each tick.
     //  var collider = world.AddCollider(building, () => new Circle(pos, radius));
