@@ -11,7 +11,7 @@ namespace Spoke.Examples.BaseDefence {
     // custom collision engine was simple to write.
     //
     // ----------------------------------------------------------------------------------------
-    //  var world = new CollisionWorld<Building>();          // owners are type T
+    //  var world = new CollisionWorld<Building>();          // owners are type Building
     //
     //  // Collider: a detectable circle, bound to an owner. Re-sampled each tick.
     //  var collider = world.AddCollider(building, () => new Circle(pos, radius));
@@ -19,8 +19,9 @@ namespace Spoke.Examples.BaseDefence {
     //  // Sensor: detects colliders, but is itself undetectable.
     //  var sensor = world.AddSensor(() => new Circle(pos, range));
     //
-    //  // Overlaps: what it touches now, nearest-first.
-    //  foreach (var hit in sensor.Overlaps) hit.Owner.TakeDamage();
+    //  // Overlaps: a signal of what it touches now, nearest-first.
+    //  foreach (var hit in sensor.Overlaps.Now) hit.Owner.TakeDamage();
+    //  s.Effect(s => { foreach (var hit in s.D(sensor.Overlaps)) ... });   // reactive read
     //
     //  world.Tick();                                        // re-sample positions, refresh overlaps (call each frame)
     //  var hits = world.Query(new Circle(pos, radius));     // one-off lookup, all colliders overlapping circle
@@ -30,10 +31,8 @@ namespace Spoke.Examples.BaseDefence {
     public interface ISensor<T> : IDisposable {
         /// <summary>The circle this sensor currently occupies.</summary>
         Circle Circle { get; }
-        /// <summary>Colliders currently overlapping, sorted nearest-first.</summary>
-        ReadOnlyList<ICollider<T>> Overlaps { get; }
-        /// <summary>Fires when the set of Overlaps changes.</summary>
-        ITrigger OverlapsChanged { get; }
+        /// <summary>A signal of the colliders currently overlapping, sorted nearest-first.</summary>
+        ISignal<ReadOnlyList<ICollider<T>>> Overlaps { get; }
     }
 
     /// <summary>A detectable circle, bound to the owner it stands in for.</summary>
@@ -68,7 +67,7 @@ namespace Spoke.Examples.BaseDefence {
         public ICollider<T> AddCollider(T owner, Func<Circle> getCircle, Func<T, bool> filter = null)
             => new Body(this, owner, getCircle, detectable: true, filter);
 
-        /// <summary>Syncs collider/sensor positions, calculates overlaps, and fires OverlapsChanged where they changed</summary>
+        /// <summary>Syncs collider/sensor positions, calculates overlaps, and publishes Overlaps where they changed</summary>
         public void Tick() => SpokeRuntime.Batch(step);
 
         /// <summary>One-off immediate lookup of colliders overlapping area.</summary>
@@ -130,12 +129,12 @@ namespace Spoke.Examples.BaseDefence {
 
             public T Owner { get; }
             public Circle Circle => circle;
-            public ReadOnlyList<ICollider<T>> Overlaps => new(overlaps);
-            public ITrigger OverlapsChanged => changed;
+            public ISignal<ReadOnlyList<ICollider<T>>> Overlaps => overlapsState;
 
             public readonly bool detectable;
-            readonly Trigger changed = Trigger.Create();
+            readonly State<ReadOnlyList<ICollider<T>>> overlapsState = new();
             readonly List<ICollider<T>> overlaps = new();
+            long version;
             readonly List<(Body body, float dist2)> sorted = new();
             readonly Func<Circle> getCircle;
             readonly Func<T, bool> filter;
@@ -179,7 +178,8 @@ namespace Spoke.Examples.BaseDefence {
                 if (Same()) return;
                 overlaps.Clear();
                 foreach (var s in sorted) overlaps.Add(s.body);
-                changed.Invoke();
+                // Same list every publish; the bumped version makes each generation compare unequal
+                overlapsState.Set(new ReadOnlyList<ICollider<T>>(overlaps, ++version));
             }
 
             bool Same() {
