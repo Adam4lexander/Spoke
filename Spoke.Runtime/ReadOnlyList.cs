@@ -32,9 +32,12 @@ namespace Spoke {
 
         public T this[int index] => (list ?? empty)[index];
 
-        /// <summary>Copies the current contents into storeIn (allocated if null). A stable snapshot of a possibly-live view</summary>
+        public bool Contains(T item) => (list ?? empty).Contains(item);
+
+        /// <summary>Copies the current contents into storeIn (cleared first; allocated if null). A stable snapshot of a possibly-live view</summary>
         public List<T> ToList(List<T> storeIn = null) {
-            storeIn = storeIn ?? new List<T>(Count);
+            if (storeIn == null) storeIn = new List<T>(Count);
+            else storeIn.Clear();
             for (var i = 0; i < Count; i++) storeIn.Add(list[i]);
             return storeIn;
         }
