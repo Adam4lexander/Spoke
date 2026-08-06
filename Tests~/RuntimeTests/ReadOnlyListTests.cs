@@ -44,6 +44,18 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void Contains_FindsItem() {
+            var rol = new ReadOnlyList<int>(new List<int> { 1, 2, 3 });
+            Assert.IsTrue(rol.Contains(2));
+            Assert.IsFalse(rol.Contains(4));
+        }
+
+        [Test]
+        public void NullList_ContainsIsFalse() {
+            Assert.IsFalse(default(ReadOnlyList<int>).Contains(0));
+        }
+
+        [Test]
         public void ToList_CopiesContents() {
             var rol = new ReadOnlyList<int>(new List<int> { 1, 2, 3 });
             var copy = rol.ToList();
@@ -51,12 +63,12 @@ namespace Spoke.Tests {
         }
 
         [Test]
-        public void ToList_AppendsToStoreIn() {
+        public void ToList_ClearsStoreIn() {
             var rol = new ReadOnlyList<int>(new List<int> { 2, 3 });
             var storeIn = new List<int> { 1 };
             var result = rol.ToList(storeIn);
             Assert.AreSame(storeIn, result);
-            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, result);
+            CollectionAssert.AreEqual(new[] { 2, 3 }, result);
         }
 
         [Test]
