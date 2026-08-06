@@ -147,7 +147,7 @@ namespace Spoke.Examples.BaseDefence {
 
             s.Coroutine(() => {
                 var push = Vector3.zero;
-                foreach (var c in sensor.Overlaps) {
+                foreach (var c in sensor.Overlaps.Now) {
                     if (c.Owner == this) continue;
                     var away = transform.position - c.Owner.transform.position;
                     away.y = 0f;
@@ -163,7 +163,7 @@ namespace Spoke.Examples.BaseDefence {
         EffectBlock RadarTrack => s => {
             var sensor = s.Use(GameState.RadarZone.AddSensor(() => new Circle(transform.position, radius)));
 
-            var isTracked = s.Memo(s => sensor.Overlaps.Count > 0, sensor.OverlapsChanged);
+            var isTracked = s.Memo(s => s.D(sensor.Overlaps).Count > 0);
             s.Phase(isTracked, s => {
                 tracked.Set(true);
                 s.OnCleanup(() => tracked.Set(false));

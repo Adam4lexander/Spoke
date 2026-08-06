@@ -86,10 +86,10 @@ namespace Spoke.Examples.BaseDefence {
                 var parentNow = s.D(parent);
                 if (parentNow == null) return;
                 s.Effect(s => {
-                    foreach (var c in collider.Overlaps)
+                    foreach (var c in s.D(collider.Overlaps))
                         if (c.Owner.Node == parentNow) return;
                     parent.Set(null);
-                }, collider.OverlapsChanged);
+                });
                 s.Effect(s => {
                     if (!s.D(parentNow.HasPower)) parent.Set(null);
                 });
@@ -116,7 +116,7 @@ namespace Spoke.Examples.BaseDefence {
 
             var isRootConnected = s.Memo(s => s.D(chain).isRootConnected);
             s.Phase(isRootConnected, s => {
-                foreach (var c in collider.Overlaps) {
+                foreach (var c in s.D(collider.Overlaps)) {
                     var node = c.Owner.Node;
                     if (node == this || node.isRoot) continue;
                     var canConnect = s.Memo(s => {
@@ -131,7 +131,7 @@ namespace Spoke.Examples.BaseDefence {
                     });
                     s.Phase(canConnect, s => node.parent.Set(this));
                 }
-            }, collider.OverlapsChanged);
+            });
         };
 
         void OnDrawGizmosSelected() {

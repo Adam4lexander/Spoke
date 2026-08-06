@@ -62,10 +62,11 @@ namespace Spoke.Examples.BaseDefence {
                 hoveringCircle.Set(default);
             });
             s.Effect(s => {
-                var overlap = sensor.Overlaps.Count > 0 ? sensor.Overlaps[0] : null;
+                var overlaps = s.D(sensor.Overlaps);
+                var overlap = overlaps.Count > 0 ? overlaps[0] : null;
                 hovering.Set(overlap?.Owner.GetComponent<IHoverable>());
                 hoveringCircle.Set(overlap?.Circle ?? default);
-            }, sensor.OverlapsChanged);
+            });
         };
 
         EffectBlock ShowHovered => s => {
@@ -100,8 +101,7 @@ namespace Spoke.Examples.BaseDefence {
 
             var groundSensor = s.Use(GameState.GroundZone.AddSensor(() => footprint.Now));
             var powerSensor = s.Use(GameState.PowerZone.AddSensor(() => new Circle(mousePos.Now, 0f), body => body.IsProvider));
-            var isValid = s.Memo(s => groundSensor.Overlaps.Count == 0 && powerSensor.Overlaps.Count > 0,
-                groundSensor.OverlapsChanged, powerSensor.OverlapsChanged);
+            var isValid = s.Memo(s => s.D(groundSensor.Overlaps).Count == 0 && s.D(powerSensor.Overlaps).Count > 0);
             var colour = s.Memo(s => s.D(isValid) ? s.D(validPlacementColour) : s.D(invalidPlacementColour));
             
             s.Effect(CoverageDisplay.Draw(footprint, colour, lineMaterial));

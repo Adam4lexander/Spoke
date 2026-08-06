@@ -17,9 +17,7 @@ namespace Spoke {
         public ReadOnlyList<SpokeRuntime.Frame> StackSnapshot => new(stackSnapshot);
 
         internal SpokeException(string msg, Exception inner) : base(msg, inner) {
-            foreach (var frame in SpokeRuntime.Frames) {
-                stackSnapshot.Add(frame);
-            }
+            SpokeRuntime.Frames.ToList(stackSnapshot);
             innerTrace = inner.ToString();
         }
 

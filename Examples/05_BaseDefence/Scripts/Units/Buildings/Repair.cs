@@ -54,17 +54,17 @@ namespace Spoke.Examples.BaseDefence {
                     patient.Set(null);
                     return;
                 }
-                foreach (var c in sensor.Overlaps) {
+                foreach (var c in s.D(sensor.Overlaps)) {
                     if (c.Owner == patientNow.gameObject) return;
                 }
                 patient.Set(null);
-            }, sensor.OverlapsChanged);
+            });
 
             s.Effect(s => {
                 if (s.D(patient) != null) return;
                 Health best = null;
                 var bestFrac = 1f;
-                foreach (var c in sensor.Overlaps) {
+                foreach (var c in s.D(sensor.Overlaps)) {
                     if (c.Owner == building.gameObject) continue;
                     if (!c.Owner.TryGetComponent<Health>(out var health)) continue;
                     var frac = s.D(health.HPFraction);
@@ -74,7 +74,7 @@ namespace Spoke.Examples.BaseDefence {
                     }
                 }
                 patient.Set(best);
-            }, sensor.OverlapsChanged);
+            });
 
             return patient;
         };
