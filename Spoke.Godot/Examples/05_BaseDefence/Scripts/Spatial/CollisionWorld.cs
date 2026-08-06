@@ -72,9 +72,10 @@ public class CollisionWorld<T> {
     // flushing its effects against a half-updated world.
     public void Tick() => SpokeRuntime.Batch(step);
 
-    /// <summary>One-off immediate lookup of colliders overlapping area.</summary>
+    /// <summary>One-off immediate lookup of colliders overlapping area, stored in storeIn (cleared first; allocated if null).</summary>
     public List<ICollider<T>> Query(Circle area, List<ICollider<T>> storeIn = null) {
-        storeIn ??= new List<ICollider<T>>();
+        if (storeIn == null) storeIn = new List<ICollider<T>>();
+        else storeIn.Clear();
         foreach (var body in Broadphase(area)) {
             if (body.detectable && area.Overlaps(body.Circle)) storeIn.Add(body);
         }
@@ -163,6 +164,7 @@ public class CollisionWorld<T> {
             world.bodies.Remove(this);
             world.Remove(this);
             overlaps.Clear();
+            overlapsState.Set(new ReadOnlyList<ICollider<T>>(overlaps, ++version));
             world = null;
         }
 
