@@ -142,7 +142,7 @@ It's even safe to modify state from inside an effect body. If that causes ping-p
 
 ## 🎮 Base Defence
 
-**[Base Defence](./Examples/05_BaseDefence/)** is a complete RTS-lite tower defence written entirely in Spoke, in around 2,600 lines. It has a power grid, spatial queries, enemy waves, building placement and object pooling, and no `Update()` methods. Per-frame work runs in coroutines whose lifetime Spoke manages.
+**[Base Defence](./Examples/05_BaseDefence/)** is a complete RTS-lite tower defence written entirely in Spoke, in around 2,600 lines. It has a power grid, spatial queries, enemy waves, building placement and object pooling. Per-frame work runs in coroutines whose lifetime Spoke manages.
 
 It's the best place to see how Spoke is intended to be used in a real game. The smaller examples build up to it one concept at a time: [Lifecycle](./Examples/01_Lifecycle/), [State](./Examples/02_State/), [Effect](./Examples/03_Effect/), [Memo](./Examples/04_Memo/).
 
