@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.3.1 - 2026-08-09
+
+This release is focused on performance. Both `Spoke.Runtime` and `Spoke.Reactive` are roughly twice as fast, with less GC pressure.
+
+Big performance gains were made for `Trigger`s that have many subscribers. Previously, unsubscribing was O(N), now amortized O(log N). Spoke already had some busy `Trigger`s, like `UnitySignals.AppTeardown` being subscribed by every `SpokeBehaviour`.
+
+Another big performance gain was made for churny `Dock`s. They now try to compact their attachments, so the allocated tree coords are able to use `PackedTreeCoords128`.
+
+Some internal-facing APIs have changed (epoch tree coords are hidden, `BaseEffect` was refactored away), but the documented API surface is unchanged.
+
+The minimum supported Unity version is now 2022.3.
+
+ChangeList:
+
+- Hide epoch tree coords in https://github.com/Adam4lexander/Spoke/pull/22
+- Update to Unity 2022.3 in https://github.com/Adam4lexander/Spoke/pull/23
+- Big Performance Optimisations in https://github.com/Adam4lexander/Spoke/pull/24
+- No GC on dynamic deps churn in https://github.com/Adam4lexander/Spoke/pull/25
+- SpokeRuntime owns tree boost state in https://github.com/Adam4lexander/Spoke/pull/26
+- Add try/catch to Dock.Call in https://github.com/Adam4lexander/Spoke/pull/27
+- Dependants can ensure SpokeUnityBootstrap is initialized in https://github.com/Adam4lexander/Spoke/pull/28
+- Improve performance for unsubscribing from trigger in https://github.com/Adam4lexander/Spoke/pull/29
+- Remove SpokeException SkipMarkFaulted in https://github.com/Adam4lexander/Spoke/pull/30
+- Improve computation performance in https://github.com/Adam4lexander/Spoke/pull/31
+- Remove internal lambdas from memo & phase in https://github.com/Adam4lexander/Spoke/pull/32
+- Refactor out BaseEffect, Computation is common base now in https://github.com/Adam4lexander/Spoke/pull/33
+- Improve performance pushing/popping spoke frames in https://github.com/Adam4lexander/Spoke/pull/34
+- Reactify ReadOnlyList in https://github.com/Adam4lexander/Spoke/pull/38
+- Tighten ReadOnlyList in https://github.com/Adam4lexander/Spoke/pull/39
+
 ## 1.3.0 - 2026-07-09
 
 This release brings a full test suite for `Spoke.Runtime` and `Spoke.Reactive`, and a complete game example demonstrating how Spoke is intended to be used in a real project. Along with several tweaks and bug fixes.
