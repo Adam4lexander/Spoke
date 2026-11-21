@@ -141,6 +141,42 @@ namespace Spoke.Tests {
         }
 
         [Test]
+        public void OscillationGuard_FaultsTheTree_WhenEpochRetriggersItself() {
+            Errors.ExpectErrors();
+            EpochPorts p = default;
+            var ticks = 0;
+
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                p = s.Ports;
+                // Stops by itself at 5000, so a broken guard fails the test instead of hanging it
+                return s => { if (++ticks < 5000) p.RequestTick(); };
+            }));
+
+            tree.Flush();
+
+            Assert.IsNotNull(tree.Fault, "Tree should be faulted by oscillation guard");
+            Assert.Less(ticks, 5000, "The guard should stop the epoch before it stops by itself");
+        }
+
+        [Test]
+        public void OscillationGuard_StartsOver_WhenHostTicksManually() {
+            EpochPorts p = default;
+            var ticks = 0;
+
+            // An epoch that re-arms itself every tick never lets the tree run out of work. But the host
+            // is driving each tick, so nothing is holding the thread.
+            using var tree = SpokeTree.SpawnManual(new LambdaEpoch(s => {
+                p = s.Ports;
+                return s => { ticks++; p.RequestTick(); };
+            }));
+
+            for (int i = 0; i < 3000; i++) tree.Tick();
+
+            Assert.IsNull(tree.Fault, "Ticks delivered one at a time by the host must not add up to a fault");
+            Assert.AreEqual(3000, ticks);
+        }
+
+        [Test]
         public void OscillationGuard_StopsPingPong_BetweenSeparateTrees() {
             Errors.ExpectErrors();
             EpochPorts a = default, b = default;
