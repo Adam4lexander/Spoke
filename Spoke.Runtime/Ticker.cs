@@ -102,7 +102,7 @@ namespace Spoke {
             // If control went back to the host since the last tick, then nothing is holding the thread.
             // That's not a loop, even if this ticker still has pending epochs. Like a Manual tree that's
             // ticked once per frame.
-            var entry = SpokeRuntime.Local.EntryCount;
+            var entry = (SpokeRuntime.Local as SpokeRuntime.Friend).EntryCount;
             if (entry != guardEntry) {
                 guardEntry = entry;
                 lastTicked = null;
