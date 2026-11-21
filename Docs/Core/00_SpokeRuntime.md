@@ -18,7 +18,6 @@ This page explains the core `Spoke.Runtime` package. It's the engine that `Spoke
     - [LambdaEpoch](#lambdaepoch)
   - [Ticker](#ticker)
     - [Ordering Epochs by Tree Coords](#ordering-epochs-by-tree-coords)
-    - [Infinite Loop Guard](#infinite-loop-guard)
   - [SpokeTree](#spoketree)
     - [Flushing](#flushing)
     - [Spawning Trees](#spawning-trees)
@@ -445,27 +444,6 @@ In case it sounds complicated, the objective is to make ticking order as intuiti
 
 ---
 
-#### Infinite Loop Guard
-
-Every ticker guards against infinite loops, whatever tempo it ticks at. You don't need to write your own.
-
-Each time `TickNext()` moves backwards in Tree Coord order, or ticks the same epoch twice in a row, the ticker counts a _pass_. After 1000 passes, `TickNext()` throws an exception.
-
-The count starts over when the ticker runs out of pending epochs, and when control returns to the host. So the limit only applies to a single run of work that never settles.
-
-A nested ticker that's ticked many times in a row doesn't count as a pass. It's working through its own pending epochs, and its own guard is watching them.
-
-Some tickers loop on purpose, far more than 1000 times. You can change the limit in `Bootstrap`, and zero disables the guard:
-
-```cs
-protected override Epoch Bootstrap(TickerBuilder s) {
-    s.LoopGuard(100000);
-    // ...
-}
-```
-
----
-
 ### SpokeTree
 
 The `Spoketree` is a special kind of ticker that must exist at the root of a tree. All ticks in the tree will pass through `SpokeTree`. Generally, `SpokeTree` will flush its scheduled epochs on receiving a single tick. Although its possible to construct a manually flushed `SpokeTree` and tick it incrementally from user code.
@@ -494,7 +472,7 @@ public class FlushingTicker : Ticker {
 }
 ```
 
-> This loop can't spin forever. If the subtree oscillates and never finishes ticking, `TickNext()` throws. See [Infinite Loop Guard](#infinite-loop-guard).
+> This loop can't spin forever. If the subtree oscillates and never finishes ticking, `TickNext()` throws.
 
 ---
 
