@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2 - 2026-11-22
+
+ChangeList:
+
+- Every `Ticker` has an infinite loop guard now, fixing a hang when an epoch kept retriggering itself. Set the limit with `TickerBuilder.LoopGuard`.
+
 ## 1.3.1 - 2026-08-09
 
 This release is focused on performance. Both `Spoke.Runtime` and `Spoke.Reactive` are roughly twice as fast, with less GC pressure.
