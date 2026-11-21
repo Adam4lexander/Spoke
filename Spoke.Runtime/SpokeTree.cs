@@ -64,26 +64,14 @@ namespace Spoke {
             ports = s.Ports;
 
             s.OnTick(s => {
-                const long maxPasses = 1000; // Infinite loop guard. Max number of oscillations
                 if (command == CommandKind.None) {
                     return;
                 }
-                var passCount = 0;
-                Epoch prev = null;
 
-                // Drive ticks according to command: single step or full flush
+                // Drive ticks according to command: single step or full flush.
+                // The loop can't spin forever, TickNext throws if the tree oscillates without settling.
                 while (ports.HasPending) {
-                    if (passCount > maxPasses) {
-                        throw new Exception("Exceed oscillation limit - possible infinite loop");
-                    }
                     try {
-                        // If the next epoch comes before the last one by tree-coord order, we increment passcount
-                        var next = ports.PeekNext();
-                        if (prev != null && prev.CompareTo(next) > 0) {
-                            passCount++;
-                        }
-                        prev = next;
-
                         s.TickNext(); // Tick the next pending epoch in tree-coord order
                     } catch (SpokeException se) {
                         // Tree-level fault boundary: record on the tree and log the virtual stack + tree trace.

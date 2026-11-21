@@ -15,6 +15,32 @@ namespace Spoke.Tests {
             protected override Epoch Bootstrap(TickerBuilder s) => block(s);
         }
 
+        // Delivers one TickNext per OnTick, so it re-schedules itself with its own ticker while work remains
+        static LambdaTicker StepTicker(Epoch child, int? maxPasses = null) => new("StepTicker", s => {
+            if (maxPasses.HasValue) s.LoopGuard(maxPasses.Value);
+            s.OnTick(s => s.TickNext());
+            return child;
+        });
+
+        // Drains everything pending on each OnTick, with no loop guard of its own
+        static LambdaTicker DrainTicker(Epoch child, int? maxPasses = null) => new("DrainTicker", s => {
+            if (maxPasses.HasValue) s.LoopGuard(maxPasses.Value);
+            var ports = s.Ports;
+            s.OnTick(s => { while (ports.HasPending) s.TickNext(); });
+            return child;
+        });
+
+        // Re-arms itself on every tick. Stops by itself after stopAfter ticks, so that a broken loop
+        // guard fails the test instead of hanging it.
+        static LambdaEpoch SelfRetrigger(int stopAfter, Action onTick) => new("SelfRetrigger", s => {
+            var ports = s.Ports;
+            var ticks = 0;
+            return s => {
+                onTick();
+                if (++ticks < stopAfter) ports.RequestTick();
+            };
+        });
+
         [Test]
         public void OnTick_DoingNothing_ThrowsFault() {
             Errors.ExpectErrors();
@@ -218,6 +244,109 @@ namespace Spoke.Tests {
             Assert.AreEqual(1, innerRan, "Inner epoch must have run (and thrown) before boundary caught");
             Assert.IsNull(tree.Fault, "Tree should not fault — boundary contained the exception");
             Assert.IsNull(boundary.Fault, "Boundary's own tickBlock didn't throw, only its inner epoch did");
+        }
+
+        [Test]
+        public void LoopGuard_FaultsSelfRetriggeringEpoch_UnderSingleStepTicker() {
+            Errors.ExpectErrors();
+            var ticks = 0;
+
+            // The tree only ever sees the StepTicker repeating, so the StepTicker's own guard must catch this
+            using var tree = SpokeTree.SpawnManual(StepTicker(SelfRetrigger(5000, () => ticks++)));
+            tree.Flush();
+
+            Assert.IsNotNull(tree.Fault, "An epoch that keeps retriggering itself should fault the tree");
+            Assert.Less(ticks, 5000, "The loop guard should stop the epoch before it stops by itself");
+        }
+
+        [Test]
+        public void LoopGuard_FaultsSelfRetriggeringEpoch_UnderDrainTicker() {
+            Errors.ExpectErrors();
+            var ticks = 0;
+
+            // DrainTicker's loop has no guard written into it; it gets one from Ticker
+            using var tree = SpokeTree.SpawnManual(DrainTicker(SelfRetrigger(5000, () => ticks++)));
+            tree.Flush();
+
+            Assert.IsNotNull(tree.Fault, "An epoch that keeps retriggering itself should fault the tree");
+            Assert.Less(ticks, 5000, "The loop guard should stop the epoch before it stops by itself");
+        }
+
+        [Test]
+        public void LoopGuard_FaultsPingPongingEpochs_UnderDrainTicker() {
+            Errors.ExpectErrors();
+            EpochPorts p1 = default, p2 = default;
+            var ticks = 0;
+
+            using var tree = SpokeTree.SpawnManual(DrainTicker(new LambdaEpoch(s => {
+                s.Call(new LambdaEpoch(s => {
+                    p1 = s.Ports;
+                    return s => { if (++ticks < 5000) p2.RequestTick(); };
+                }));
+                s.Call(new LambdaEpoch(s => {
+                    p2 = s.Ports;
+                    return s => { if (++ticks < 5000) p1.RequestTick(); };
+                }));
+                return null;
+            })));
+            tree.Flush();
+
+            Assert.IsNotNull(tree.Fault, "Epochs that keep retriggering each other should fault the tree");
+            Assert.Less(ticks, 5000, "The loop guard should stop the epochs before they stop by themselves");
+        }
+
+        [Test]
+        public void LoopGuard_AllowsSingleStepTicker_ToWorkThroughManyEpochs() {
+            const int Groups = 6, PerGroup = 250; // more leaves than the guard allows passes
+            var ticked = 0;
+
+            // The tree ticks the StepTicker 1500+ times in a row. That's progress, not a loop.
+            using var tree = SpokeTree.SpawnManual(StepTicker(new LambdaEpoch(s => {
+                for (int g = 0; g < Groups; g++) {
+                    s.Call(new LambdaEpoch(s => {
+                        for (int i = 0; i < PerGroup; i++) s.Call(new LambdaEpoch(s => s => ticked++));
+                        return null;
+                    }));
+                }
+                return null;
+            })));
+            tree.Flush();
+
+            Assert.IsNull(tree.Fault, "A nested ticker stepping through its work must not trip the tree's guard");
+            Assert.AreEqual(Groups * PerGroup, ticked);
+        }
+
+        [TestCase(5000, Description = "Limit raised above the number of passes")]
+        [TestCase(0, Description = "Guard disabled")]
+        public void LoopGuard_LimitIsSetInBootstrap(int maxPasses) {
+            var ticks = 0;
+
+            using var tree = SpokeTree.SpawnManual(DrainTicker(SelfRetrigger(3000, () => ticks++), maxPasses));
+            tree.Flush();
+
+            Assert.IsNull(tree.Fault, "3000 passes is within this ticker's limit");
+            Assert.AreEqual(3000, ticks);
+        }
+
+        [Test]
+        public void LoopGuard_StartsOver_WhenTickerRunsOutOfWork() {
+            const int N = 3000;
+            EpochPorts reader = default;
+            var readerTicks = 0;
+
+            // An eager tree flushes nested, each time it's armed from inside the writer's tick. So the
+            // same epoch is ticked N times in a row without control going back to the host. But the
+            // eager tree settles after every one, so it isn't a loop.
+            using var eager = SpokeTree.SpawnEager(new LambdaEpoch(s => {
+                reader = s.Ports;
+                return s => readerTicks++;
+            }));
+            using var writer = SpokeTree.Spawn(new LambdaEpoch(s => s => {
+                for (int i = 0; i < N; i++) reader.RequestTick();
+            }));
+
+            Assert.IsNull(eager.Fault, "Separate flushes that each settle must not add up to a fault");
+            Assert.AreEqual(N + 1, readerTicks);
         }
     }
 }

@@ -20,6 +20,7 @@ namespace Spoke {
             void Schedule(SpokeTree tree);
             void TickTree(SpokeTree tree);
             void TryScopedLayerBoost(SpokeTree tree);
+            long EntryCount { get; }
         }
 
         // Intended for this to become a ThreadStatic in the future. So trees can be driven on multiple threads.
@@ -43,6 +44,11 @@ namespace Spoke {
 
         /// <summary>Monotonically increasing timestamp, incremented on each stack frame pushed.</summary>
         public long TimeStamp { get; private set; }
+
+        // Incremented each time the Spoke stack goes from empty to non-empty. That is, each time the
+        // host hands control to Spoke. Tickers use it to start their infinite loop guards over.
+        long entryCount;
+        long Friend.EntryCount => entryCount;
 
         // Flush-scheduling priority: same as SpokeTree.CompareTo, except boosted trees outrank
         // unboosted trees of the same layer, so TryFlush's PeekMin sees a newly spawned tree ahead
@@ -86,6 +92,7 @@ namespace Spoke {
 
         // Pushes a Spoke stack frame, returning a control handle to it.
         Handle Friend.Push(Frame frame) {
+            if (frames.Count == 0) entryCount++;
             frames.Add(frame);
             var top = frames.Count - 1;
             if (top == frameAux.Length) Array.Resize(ref frameAux, frameAux.Length * 2);

@@ -472,7 +472,7 @@ public class FlushingTicker : Ticker {
 }
 ```
 
-> In practice, you'd probably want to add guards against potential infinite loops, in case the subtree oscillates and never finishes ticking.
+> This loop can't spin forever. If the subtree oscillates and never finishes ticking, `TickNext()` throws.
 
 ---
 

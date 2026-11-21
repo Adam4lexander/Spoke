@@ -8,6 +8,7 @@ namespace Spoke {
     /// All epochs (including Tickers) request ticks from their nearest ancestor Ticker.
     /// Tickers decide the tempo of ticks delivered to their descendants, but not the order they're ticked in.
     /// Pending epochs are sorted by their tick-cursor coordinate, to enforce an imperative execution order.
+    /// Every ticker guards against infinite loops, whatever its tempo (see CheckLoopGuard).
     /// </summary>
     public abstract class Ticker : Epoch, Ticker.Friend {
 
@@ -26,6 +27,13 @@ namespace Spoke {
         bool isPaused;
         bool isManual;
         bool didContinue;
+
+        // Infinite loop guard state (see CheckLoopGuard)
+        const int DefaultMaxPasses = 1000;
+        Epoch lastTicked;                   // epoch delivered by the previous TickNext, null when starting over
+        int passCount;                      // times execution has moved backwards since starting over
+        int maxPasses = DefaultMaxPasses;   // zero or less disables the guard
+        long guardEntry = -1;               // SpokeRuntime.EntryCount when the count last started over
 
         SpokeRuntime.Handle controlHandle => (this as Epoch.Friend).GetControlHandle();
         bool isTicking => controlHandle.IsAlive && controlHandle.Frame.Type == SpokeRuntime.FrameKind.Tick;
@@ -74,9 +82,45 @@ namespace Spoke {
                 throw new Exception("TickNext() must be called from within an OnTick block");
             } 
             didContinue = true; // TickNext was called at least once
+            CheckLoopGuard(pending.PeekMin());
             var ticked = pending.RemoveMin();
             (ticked as Epoch.Friend).Tick();
+            // Running out of pending epochs means this run of work settled. The next one counts from zero.
+            if (!HasPending()) {
+                lastTicked = null;
+                passCount = 0;
+            }
             return ticked;
+        }
+
+        // Infinite loop guard, shared by every ticker. Throws once execution has moved backwards too
+        // many times without the ticker running out of work.
+        // A pass is counted when the next epoch is ordered before the last one, or is the same epoch
+        // again. Except when that epoch is a nested ticker: it's stepping through its own pending
+        // epochs, and its own guard is watching those.
+        void CheckLoopGuard(Epoch next) {
+            // If control went back to the host since the last tick, then nothing is holding the thread.
+            // That's not a loop, even if this ticker still has pending epochs. Like a Manual tree that's
+            // ticked once per frame.
+            var entry = (SpokeRuntime.Local as SpokeRuntime.Friend).EntryCount;
+            if (entry != guardEntry) {
+                guardEntry = entry;
+                lastTicked = null;
+                passCount = 0;
+            }
+            if (lastTicked != null) {
+                var wentBackwards = ReferenceEquals(lastTicked, next)
+                    ? !(next is Ticker)
+                    : lastTicked.CompareTo(next) > 0;
+                if (wentBackwards) passCount++;
+            }
+            lastTicked = next;
+            if (maxPasses > 0 && passCount > maxPasses) {
+                // Start over, in case OnTick catches the exception and keeps this ticker going
+                lastTicked = null;
+                passCount = 0;
+                throw new Exception("Exceed oscillation limit - possible infinite loop");
+            }
         }
 
         // Epochs schedule themselves by calling this method on their nearest ancestor ticker.
@@ -122,7 +166,12 @@ namespace Spoke {
 
             public void OnTick(Action<TickContext> fn) { 
                 NoMischief(); 
-                Ticker.onTick.Add(fn); 
+                Ticker.onTick.Add(fn);
+            }
+
+            public void LoopGuard(int maxPasses) {
+                NoMischief();
+                Ticker.maxPasses = maxPasses;
             }
 
             void NoMischief() {
@@ -166,8 +215,15 @@ namespace Spoke {
         public void OnCleanup(Action fn) 
             => s.OnCleanup(fn);
 
-        public void OnTick(Action<TickContext> fn) 
+        public void OnTick(Action<TickContext> fn)
             => r.OnTick(fn);
+
+        /// <summary>
+        /// Sets how many passes the ticker's infinite loop guard allows before TickNext() throws.
+        /// The default is 1000. Zero disables the guard.
+        /// </summary>
+        public void LoopGuard(int maxPasses)
+            => r.LoopGuard(maxPasses);
 
         public TickerPorts Ports => new(r);
     }
