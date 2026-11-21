@@ -38,7 +38,7 @@ namespace Spoke {
     /// A State is a read-write reactive value with event subscriptions
     /// It invokes subscribers with the new value when it changes
     /// </summary>
-    public class State<T> : IState<T> {
+    public class State<T> : IState<T>, Trigger.Friend {
         T value;
         Trigger<T> trigger = new Trigger<T>();
 
@@ -66,6 +66,9 @@ namespace Spoke {
         /// <summary>Unsubscribe the action. Prefer SpokeHandle.Dispose() instead</summary>
         public void Unsubscribe(Action<T> action) 
             => trigger.Unsubscribe(action);
+
+        SpokeHandle Trigger.Friend.AddDependant(Action action)
+            => (trigger as Trigger.Friend).AddDependant(action);
 
         /// <summary>Sets the value, notify subscribers if it changed</summary>
         public void Set(T value) {

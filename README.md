@@ -134,7 +134,7 @@ In Spoke, it's normal to have lots of small reactive trees. Each `SpokeBehaviour
 
 ### Imperative-ordered execution
 
-Spoke orders its reactive computations by source-code order, instead of topological sorting. The mental model is a program counter walking the reactive tree. You can read Spoke code top-to-bottom and know what order effects and memos will run in. 
+Spoke orders its effects by source-code order, instead of topological sorting. The mental model is a program counter walking the reactive tree. You can read Spoke code top-to-bottom and know what order effects will run in. Memos are the exception. They're pure functions of other signals, so Spoke brings them up to date before any effect runs. 
 
 It's even safe to modify state from inside an effect body. If that causes ping-ponging, the re-runs still follow source order, so you can trace them like any other code. The trade-off is that Spoke is not suitable for arbitrary dependency graphs. Or put another way, you wouldn't build Excel in Spoke.
 

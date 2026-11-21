@@ -25,7 +25,7 @@ namespace Spoke {
     /// But it does seem to handle all the edge cases, including the Undo/Redo system.
     /// </summary>
     [Serializable]
-    public class UState<T> : IState<T>, ISerializationCallbackReceiver {
+    public class UState<T> : IState<T>, ISerializationCallbackReceiver, Trigger.Friend {
         [SerializeField] T value; // Serialized value can be compared with runtimeValue to detect editor changes
         T runtimeValue; // True value of the state
         Trigger<T> trigger = new Trigger<T>();
@@ -70,6 +70,11 @@ namespace Spoke {
             trigger.Unsubscribe(action); 
         }
         
+        SpokeHandle Trigger.Friend.AddDependant(Action action) {
+            EnsureInitialized();
+            return (trigger as Trigger.Friend).AddDependant(action);
+        }
+
         /// <summary>Sets the value, notify subscribers if it changed</summary>
         public void Set(T value) {
             setCount++;

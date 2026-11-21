@@ -248,5 +248,119 @@ namespace Spoke.Tests {
 
             CollectionAssert.AreEqual(new[] { 0, 30 }, observations);
         }
+
+        // ---------------------------------------------------------------- Dependants
+
+        [Test]
+        public void Dependants_AreTold_BeforeAnySubscriber() {
+            var trigger = Trigger.Create();
+            var log = new List<string>();
+
+            // The subscribers come first, and the dependant is added between them
+            using var sub1 = trigger.Subscribe(() => log.Add("subscriber 1"));
+            using var dep = (trigger as Trigger.Friend).AddDependant(() => log.Add("dependant"));
+            using var sub2 = trigger.Subscribe(() => log.Add("subscriber 2"));
+
+            trigger.Invoke();
+
+            CollectionAssert.AreEqual(new[] { "dependant", "subscriber 1", "subscriber 2" }, log);
+        }
+
+        [Test]
+        public void Dependants_AreToldRightAway_WhenTheInvokeIsReentrant() {
+            var trigger = Trigger.Create<int>();
+            var log = new List<string>();
+
+            using var dep = (trigger as Trigger.Friend).AddDependant(() => log.Add("dependant"));
+            using var sub1 = trigger.Subscribe(v => {
+                log.Add($"first:{v}");
+                if (v == 1) trigger.Invoke(2); // subscribers hear about this one after the current event
+            });
+            using var sub2 = trigger.Subscribe(v => log.Add($"second:{v}"));
+
+            trigger.Invoke(1);
+
+            // The dependant hears about the second invoke before 'second' has even been called for the first
+            CollectionAssert.AreEqual(new[] { "dependant", "first:1", "dependant", "second:1", "first:2", "second:2" }, log);
+        }
+
+        [Test]
+        public void Dependant_DisposingItsHandle_StopsItBeingTold() {
+            var trigger = Trigger.Create();
+            var count = 0;
+
+            var dep = (trigger as Trigger.Friend).AddDependant(() => count++);
+            trigger.Invoke();
+            dep.Dispose();
+            dep.Dispose(); // harmless a second time
+            trigger.Invoke();
+
+            Assert.AreEqual(1, count);
+        }
+
+        [Test]
+        public void Dependants_RemovedOrAddedDuringAPass_DontDisturbIt() {
+            var trigger = Trigger.Create();
+            var friend = trigger as Trigger.Friend;
+            var log = new List<string>();
+            SpokeHandle b = default;
+
+            using var a = friend.AddDependant(() => {
+                log.Add("a");
+                b.Dispose(); // removes one the pass hasn't reached yet
+                friend.AddDependant(() => log.Add("late"));
+            });
+            b = friend.AddDependant(() => log.Add("b"));
+            using var c = friend.AddDependant(() => log.Add("c"));
+
+            trigger.Invoke();
+
+            CollectionAssert.AreEqual(new[] { "a", "c" }, log, "The removed one isn't told, and the new one waits for the next invoke");
+        }
+
+        [Test]
+        public void Dependants_SurviveHeavyChurn() {
+            // Adding and removing leaves tombstones behind, which get swept. The survivors must
+            // still be told, in the order they were added, and still be removable by their handles
+            var trigger = Trigger.Create();
+            var friend = trigger as Trigger.Friend;
+            var log = new List<int>();
+            var kept = new List<SpokeHandle>();
+
+            for (int i = 0; i < 200; i++) {
+                int id = i;
+                var handle = friend.AddDependant(() => log.Add(id));
+                if (i % 10 == 0) kept.Add(handle);
+                else handle.Dispose();
+            }
+
+            trigger.Invoke();
+            Assert.AreEqual(20, log.Count);
+            CollectionAssert.IsOrdered(log);
+
+            log.Clear();
+            foreach (var h in kept) h.Dispose();
+            trigger.Invoke();
+            Assert.IsEmpty(log);
+        }
+
+        [Test]
+        public void Effect_Dependencies_AreDependants_NotSubscribers() {
+            // An effect that's rescheduled from inside a subscriber's callback proves it didn't
+            // have to wait its turn behind that subscriber to be told.
+            var state = State.Create(0);
+            var runs = 0;
+            var pendingSeenBySubscriber = false;
+            SpokeTree<Effect> tree = null;
+
+            using var sub = state.Subscribe(v => pendingSeenBySubscriber = tree != null && tree.HasPending);
+            tree = SpokeTree.Spawn(new Effect("root", s => { runs++; s.D(state); }));
+
+            state.Set(1);
+
+            Assert.IsTrue(pendingSeenBySubscriber, "The effect should already be scheduled when the subscriber is called");
+            Assert.AreEqual(2, runs);
+            tree.Dispose();
+        }
     }
 }

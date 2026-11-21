@@ -369,7 +369,7 @@ This behaviour can be surprising if you're not expecting it. But the fix is simp
 
 ## Execution Order
 
-Effects and Memos are always executed in an imperative order:
+Effects are always executed in an imperative order:
 
 ```cs
 public class MyBehaviour : SpokeBehaviour {
@@ -517,7 +517,7 @@ public class Adder : SpokeBehaviour {
 }
 ```
 
-The distinction makes `Effect<T>` highly composable. It can attach its own sub-effects and memos to calculate a signal that's built up by its sub-tree. Put another way, memos compute raw values at the leaves of the tree; `Effect<T>` computes signals at the branches.
+The distinction makes `Effect<T>` highly composable. It can attach its own sub-effects and memos to calculate a signal that's built up by its sub-tree. Put another way, a memo computes a value from other signals; `Effect<T>` computes a signal from everything in its sub-tree.
 
 ---
 

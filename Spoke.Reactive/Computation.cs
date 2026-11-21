@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Spoke {
 
     /// <summary>
-    /// Abstract base class for all reactive objects
+    /// Abstract base class for the reactive epochs: Effect, Phase and Reaction
     /// A Computation is a reactive action which runs when any of its triggers fire
     /// Supports both static and dynamic trigger subscriptions
     /// - Static triggers are subscribed once, when the computation is created
@@ -39,7 +39,7 @@ namespace Spoke {
             => tracker.AddDynamic(trigger);
     }
 
-    // Manages dynamic trigger subscriptions for a Computation
+    // Manages trigger subscriptions for a Computation or a Memo
     // Dependencies are matched to slots by position, so a run that reads the same dependencies in
     // the same order rebinds nothing. Reading one twice simply takes two slots
     internal class DependencyTracker : IDisposable {
@@ -54,7 +54,7 @@ namespace Spoke {
         }
 
         public void AddStatic(ITrigger trigger) {
-            staticHandles.Add(trigger.Subscribe(schedule));
+            staticHandles.Add(Depend(trigger, schedule));
         }
 
         public void BeginDynamic() {
@@ -63,10 +63,10 @@ namespace Spoke {
 
         public void AddDynamic(ITrigger trigger) {
             if (depIndex >= dynamicHandles.Count) {
-                dynamicHandles.Add((trigger, trigger.Subscribe(ScheduleFromIndex(depIndex))));
+                dynamicHandles.Add((trigger, Depend(trigger, ScheduleFromIndex(depIndex))));
             } else if (dynamicHandles[depIndex].t != trigger) {
                 dynamicHandles[depIndex].h.Dispose();
-                dynamicHandles[depIndex] = (trigger, trigger.Subscribe(ScheduleFromIndex(depIndex)));
+                dynamicHandles[depIndex] = (trigger, Depend(trigger, ScheduleFromIndex(depIndex)));
             }
             depIndex++;
         }
@@ -82,6 +82,12 @@ namespace Spoke {
             foreach (var handle in staticHandles) handle.Dispose();
             foreach (var handle in dynamicHandles) handle.h.Dispose();
             staticHandles.Clear(); dynamicHandles.Clear();
+        }
+
+        // Spoke's own triggers and signals tell their dependants before they call any subscriber.
+        // Anything else that implements ITrigger can only be subscribed to
+        static SpokeHandle Depend(ITrigger trigger, Action action) {
+            return trigger is Trigger.Friend friend ? friend.AddDependant(action) : trigger.Subscribe(action);
         }
 
         // Dependencies may fire while we're in the middle of refreshing them

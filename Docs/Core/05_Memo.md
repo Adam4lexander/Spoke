@@ -7,6 +7,7 @@
 - [`Memo<T>` vs `MemoBlock<T>`](#memot-vs-memoblockt)
 - [Dependencies](#dependencies)
 - [`MemoBuilder`](#memobuilder)
+- [Previous Value](#previous-value)
 - [Pure Functions](#pure-functions)
 - [Example usage](#example-usage)
 
@@ -14,11 +15,13 @@
 
 ## Overview
 
-Memos are blocks of code in the tree of effects, that calculate and return a value anytime their dependencies change. As with effects, dependencies can be a mix of triggers and signals.
+Memos are blocks of code that calculate and return a value anytime their dependencies change. As with effects, dependencies can be a mix of triggers and signals.
 
-The value produced by the memo is wrapped in an `ISignal`, so it can be used as a dependency in later effects and memos.
+The value produced by the memo is wrapped in an `ISignal`, so it can be used as a dependency in effects and other memos.
 
-Besides calculating values, memos behave identically to effects. They're both nodes in the tree, executed in imperative order, following the same lifecycle rules. Sometimes reactive engines give memos (or their equivalent) separate execution rules to support optimised dataflows. Spoke doesn't do this. Memos are just another node in the tree with the same execution rules as effects.
+Memos aren't nodes in the tree of effects. They form their own dependency graph, which Spoke settles before it ticks any tree. When a signal changes, the memos that depend on it are brought up to date first, and only then do effects run. So an effect never sees a memo that's out of date.
+
+It also means a memo doesn't need a tree. You can create one anywhere.
 
 ---
 
@@ -44,6 +47,21 @@ public class Adder : SpokeBehaviour {
 
 > `s.D()` is explained in the [Effect docs](./04_Effect.md#dynamic-dependencies)
 
+`s.Memo()` creates a memo that's disposed with the effect that created it.
+
+To create one outside of an effect, use `Memo.Create()`. It's an `IDisposable`, and it keeps recomputing until you dispose it:
+
+```csharp
+public static class Wallet {
+
+    public static State<int> Coins = State.Create(0);
+    public static State<int> Gems = State.Create(0);
+
+    // Lives as long as the game does, so it's never disposed
+    public static ISignal<bool> IsEmpty = Memo.Create(s => s.D(Coins) == 0 && s.D(Gems) == 0);
+}
+```
+
 ---
 
 ## `Memo<T>` vs `MemoBlock<T>`
@@ -66,7 +84,7 @@ MemoBlock<int> block = (MemoBuilder s) => {
 
 `MemoBlock<T>` is a function delegate assigned to the `Memo<T>`. Just like an `EffectBlock` is assigned to an `Effect`.
 
-`MemoBlock<T>` is run once after the memo is created, which initializes the signal's value. Then it's run again each time any dependencies change.
+`MemoBlock<T>` is run once to initialize the signal's value. That happens when the block that created the memo finishes, or sooner if something reads the memo first. A memo created outside of Spoke runs right away. Then it's run again each time any dependencies change.
 
 ---
 
@@ -85,9 +103,22 @@ Memos support both **Explicit** and **Dynamic** dependencies, although it would 
 It has far less functionality compared to `EffectBuilder`, only offering two functions:
 
 - `s.D()`: For reading signals and binding them as dynamic dependencies
-- `s.OnCleanup()`: For cleaning up on reruns
+- `s.OnCleanup()`: For cleaning up on reruns, and when the memo is disposed
 
 Although `s.onCleanup()` is provided it would be unusual to need it. Memos are intended to run pure functions without side-effects, so there shouldn't be anything to clean up.
+
+---
+
+## Previous Value
+
+A memo can fold its previous value into the next one. Pass a starting value, and take the previous value as a second parameter:
+
+```cs
+// The highest score seen so far
+var best = s.Memo(0, (s, prev) => Mathf.Max(prev, s.D(score)));
+```
+
+The starting value is how C# knows the type of `prev`, so it's needed even when it's just `0` or `null`.
 
 ---
 
@@ -107,7 +138,7 @@ s.Memo(s => {
 });
 ```
 
-In Spoke, there's nothing stopping you running impure functions in Memos. Other reactive engines (often in JavaScript) do have real technical reasons why you shouldn't cause side effects in memos. But since Spoke runs memos the same as effects, its just a convention.
+In Spoke, there's nothing stopping you running impure functions in Memos. But there are reasons not to. A memo runs whenever its value needs to be brought up to date, which won't always be when you expect. It could be in the middle of an effect that just changed one of its dependencies. And a memo that changes a signal it depends on will keep invalidating itself, until Spoke stops it with an error.
 
 ---
 
