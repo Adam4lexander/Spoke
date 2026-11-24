@@ -11,8 +11,9 @@ namespace Spoke {
     /// - Use Memo.Create() to create a memo that isn't attached to a tree. Dispose it when you're done
     /// - Use s.Memo() to create a memo that's disposed with the block that created it
     ///
-    /// Memos aren't part of any SpokeTree. They form their own dependency graph, which settles before
-    /// the Spoke runtime ticks any tree. So an effect only ever sees memos that are up to date.
+    /// A memo made with s.Memo() is attached to its tree, but the tree doesn't tick it. Memos form
+    /// their own dependency graph, which settles before the Spoke runtime ticks any tree. So an
+    /// effect only ever sees memos that are up to date.
     ///
     /// When a signal changes, every memo downstream of it is marked before anything recomputes:
     /// - Dirty, if it read that signal directly. It must recompute

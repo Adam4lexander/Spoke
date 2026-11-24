@@ -92,7 +92,7 @@ tree.Dispose();
 
 This triggers a flush, starting at the runtime layer (which drains every pending tree), then within each scheduled `SpokeTree` (which drains every pending descendant). When there is no pending work left, control returns to user code.
 
-Memos aren't part of any tree. Spoke brings them up to date before it flushes the trees, so an effect always sees memos that are settled.
+Memos are attached to the tree, but the tree doesn't schedule them. Spoke brings them up to date before it flushes the trees, so an effect always sees memos that are settled.
 
 ```cs
 // Create a signal to trigger work in the tree

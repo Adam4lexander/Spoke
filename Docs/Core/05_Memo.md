@@ -18,7 +18,7 @@ Memos are blocks of code that calculate and return a value anytime their depende
 
 The value produced by the memo is wrapped in an `ISignal`, so it can be used as a dependency in effects and other memos.
 
-Memos aren't nodes in the tree of effects. They form their own dependency graph, which Spoke settles before it ticks any tree. When a signal changes, the memos that depend on it are brought up to date first, and only then do effects run. So an effect never sees a memo that's out of date.
+A memo is attached to the effect that created it, and disposed with it. But the tree doesn't run it. Memos form their own dependency graph, which Spoke settles before it ticks any tree. When a signal changes, the memos that depend on it are brought up to date first, and only then do effects run. So an effect never sees a memo that's out of date.
 
 It also means a memo doesn't need a tree. You can create one anywhere.
 
