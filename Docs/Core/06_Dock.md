@@ -49,7 +49,7 @@ public class MyBehaviour : SpokeBehaviour {
     UnityEvent dockCommand = new();
 
     protected override void Init(EffectBuilder s) {
-        // Attach a dock. It's a node in the tree, like Effect or Memo
+        // Attach a dock. It's a node in the tree, like Effect or Phase
         var dock = s.Dock();
 
         // Subscribe dockCommand, attach an effect when it fires

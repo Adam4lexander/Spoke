@@ -186,3 +186,5 @@ public class MyBehaviour : SpokeBehaviour {
 - **Re-entrancy Safety**: Re-entrant `Invoke()` calls are queued and flushed in order, one event at a time.
 
 - **Batched Notifications**: If a `Trigger` invalidates a reactive computation (e.g. to rerun an `Effect` or `Memo`), execution is deferred until all subscribers have been notified. Equivalent to calling `SpokeRuntime.Batch()`.
+
+- **Dependants First**: When a `Trigger` is invoked, its dependants (effects and memos) are told before any subscriber is called. So a subscriber's callback never sees a memo that's out of date.

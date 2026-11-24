@@ -21,6 +21,17 @@ namespace Spoke {
             void TickTree(SpokeTree tree);
             void TryScopedLayerBoost(SpokeTree tree);
             long EntryCount { get; }
+            void SchedulePreFlush(PreFlush job);
+            long PreFlushCount { get; }
+            void AfterCurrentFrame(Action fn);
+        }
+
+        /// <summary>
+        /// Work the runtime runs to completion before it ticks any tree.
+        /// Spoke.Reactive settles its memos this way, so trees only ever see settled values.
+        /// </summary>
+        internal interface PreFlush {
+            void Run();
         }
 
         // Intended for this to become a ThreadStatic in the future. So trees can be driven on multiple threads.
@@ -90,6 +101,11 @@ namespace Spoke {
         int layer = int.MaxValue; // Flush layer of currently flushing tree, lower values are higher priority
         int holdCount;
 
+        // Jobs waiting to run before the next tree flush, in the order they were scheduled
+        Queue<PreFlush> preFlushJobs = new Queue<PreFlush>();
+        bool isPreFlushing;
+        long preFlushCount; // Number of pre-flushes started. Jobs use it to tell one pre-flush from the next
+
         // Pushes a Spoke stack frame, returning a control handle to it.
         Handle Friend.Push(Frame frame) {
             if (frames.Count == 0) entryCount++;
@@ -122,10 +138,57 @@ namespace Spoke {
 
         // Decrements the hold count, and if it reaches zero, attempts to flush any pending trees.
         void Friend.Release() {
+            // The pre-flush runs while the last hold is still in place, so no tree can flush until
+            // it's done. Not even one scheduled by a pre-flush job.
+            if (holdCount == 1) {
+                RunPreFlush();
+            }
             holdCount--;
             if (holdCount == 0) {
                 TryFlush();
             }
+        }
+
+        // Queues a job to run before the next tree flush.
+        void Friend.SchedulePreFlush(PreFlush job) {
+            preFlushJobs.Enqueue(job);
+            if (holdCount == 0) {
+                // Nothing is holding the runtime, so nothing is going to release it
+                (this as Friend).Hold();
+                (this as Friend).Release();
+            }
+        }
+
+        long Friend.PreFlushCount => preFlushCount;
+
+        // Runs queued jobs until none remain. Jobs may queue more jobs, which run in the same pass.
+        void RunPreFlush() {
+            if (isPreFlushing || preFlushJobs.Count == 0) return;
+            isPreFlushing = true;
+            preFlushCount++;
+            try {
+                while (preFlushJobs.Count > 0) {
+                    var job = preFlushJobs.Dequeue();
+                    try {
+                        job.Run();
+                    } catch (Exception e) {
+                        SpokeError.Log($"Uncaught error before flush", e);
+                    }
+                }
+            } finally {
+                isPreFlushing = false;
+            }
+        }
+
+        // Invokes fn when the frame on top of the Spoke stack is popped, or immediately if the
+        // stack is empty.
+        void Friend.AfterCurrentFrame(Action fn) {
+            if (frames.Count == 0) {
+                fn?.Invoke();
+                return;
+            }
+            var top = frames.Count - 1;
+            new Handle(this, top, frameAux[top].Version).OnPopSelf(fn);
         }
 
         // Schedules a tree for flushing, and attempts to flush

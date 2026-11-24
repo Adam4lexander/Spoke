@@ -26,8 +26,11 @@ namespace Spoke {
         /// The effect will re-run when the signal changes value
         /// </summary>
         public T D<T>(ISignal<T> signal) {
+            // Read before subscribing. Reading a memo may bring it up to date, and that change is
+            // already in the value read here. It shouldn't count as a change since
+            var now = signal.Now;
             addDynamicTrigger(signal);
-            return signal.Now;
+            return now;
         }
 
         /// <summary>Take ownership of a SpokeHandle for auto-cleanup. SpokeHandle is non-allocating</summary>
@@ -76,11 +79,13 @@ namespace Spoke {
         public static void Subscribe<T>(this EffectBuilder s, ITrigger<T> trigger, Action<T> action)
             => s.Use(trigger != null ? trigger.Subscribe(action) : default);
 
+        // Memos aren't epochs, so they're owned as disposables instead of being attached with Call
+
         public static ISignal<T> Memo<T>(this EffectBuilder s, MemoBlock<T> selector, params ITrigger[] triggers)
-            => s.Call(new Memo<T>("Memo", selector, triggers));
+            => s.Use(new Memo<T>("Memo", selector, triggers));
 
         public static ISignal<T> Memo<T>(this EffectBuilder s, string name, MemoBlock<T> selector, params ITrigger[] triggers)
-            => s.Call(new Memo<T>(name, selector, triggers));
+            => s.Use(new Memo<T>(name, selector, triggers));
 
         public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers)
             => s.Call(new Effect<T>("Effect", block, triggers));

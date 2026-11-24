@@ -15,7 +15,7 @@
 
 `SpokeTree` is the root node for a tree of effects.
 
-Its role is an execution scheduler. When an effect or memo needs to be re-run, `SpokeTree` is what drives those executions.
+Its role is an execution scheduler. When an effect needs to be re-run, `SpokeTree` is what drives those executions.
 
 `SpokeTree` is explained in detail in the [Spoke Runtime docs](./00_SpokeRuntime.md#spoketree). This page will give a high-level overview of how it relates to `Spoke.Reactive`. Just enough to reveal the "why" so the model feels intuitive.
 
@@ -88,9 +88,11 @@ tree.Dispose();
 
 ## Flushing Model
 
-`SpokeTree` is the execution scheduler for its descendants. Effects and memos schedule themselves to run on their `SpokeTree`. When a tree receives pending work, it schedules itself on the global Spoke runtime.
+`SpokeTree` is the execution scheduler for its descendants. Effects schedule themselves to run on their `SpokeTree`. When a tree receives pending work, it schedules itself on the global Spoke runtime.
 
 This triggers a flush, starting at the runtime layer (which drains every pending tree), then within each scheduled `SpokeTree` (which drains every pending descendant). When there is no pending work left, control returns to user code.
+
+Memos are attached to the tree, but the tree doesn't schedule them. Spoke brings them up to date before it flushes the trees, so an effect always sees memos that are settled.
 
 ```cs
 // Create a signal to trigger work in the tree
@@ -136,7 +138,7 @@ It's helpful to think of your code running in one of two universes:
 General flow:
 
 1. User code updates a signal or invokes a trigger
-2. Spoke takes control and flushes all pending effects and memos
+2. Spoke takes control, brings memos up to date and flushes all pending effects
 3. Control returns to user code, continuing where it left off
 
 User code sees only the final result of the flush. When it regains control, Spoke has already updated everything.
@@ -202,7 +204,7 @@ SpokeTree.Spawn(new Effect("Init", s => {
 }));
 ```
 
-Think of each `Effect`, `Phase`, `Reaction`, and `Memo` as a **unit of work**. The `SpokeTree` orchestrates these units and ensures an imperative ordering. Once a unit starts, it completes without interruption.
+Think of each `Effect`, `Phase` and `Reaction` as a **unit of work**. The `SpokeTree` orchestrates these units and ensures an imperative ordering. Once a unit starts, it completes without interruption.
 
 > For details on nested flushes, priorities, and cross-tree orchestration, see the runtime docs.
 

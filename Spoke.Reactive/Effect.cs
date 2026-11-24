@@ -25,7 +25,7 @@ namespace Spoke {
     /// It's also capable of attaching its own sub-effects, memos or cleanup logic
     /// This makes Effect<T> nestable and composable
     /// </summary>
-    public sealed class Effect<T> : Computation, ISignal<T> {
+    public sealed class Effect<T> : Computation, ISignal<T>, Trigger.Friend {
         readonly State<T> state = State.Create<T>();
         readonly EffectBlock block;
         Action<ITrigger> _addDynamicTrigger;
@@ -61,5 +61,8 @@ namespace Spoke {
 
         public void Unsubscribe(Action<T> action)
             => state.Unsubscribe(action);
+
+        SpokeHandle Trigger.Friend.AddDependant(Action action)
+            => (state as Trigger.Friend).AddDependant(action);
     }
 }
