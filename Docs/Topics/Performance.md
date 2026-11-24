@@ -78,7 +78,7 @@ Why no GC?
 
 Because the allocations already happened when `FlushLoopStressTest` was initialized. The reactive flow was set up before the spacebar was pressed.
 
-The effect is a tree leaf, and the memos aren't in the tree at all. They will re-run without allocations, assuming there are no allocations inside their code blocks.
+The effect and the memos are all tree leaves. They will re-run without allocations, assuming there are no allocations inside their code blocks.
 
 ---
 
