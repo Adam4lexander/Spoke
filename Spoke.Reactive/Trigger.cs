@@ -65,23 +65,18 @@ namespace Spoke {
     /// Concrete implementation of Trigger with event payload of type T
     /// </summary>
     public sealed class Trigger<T> : Trigger, ITrigger<T>, Trigger.Friend {
-        static SpokePool<List<long>> longListPool = SpokePool<List<long>>.Create(l => l.Clear());
-
-        // Subscriptions in subscribe order. Unsubscribing tombstones a slot (nulling its action)
-        // rather than removing it; Compact() sweeps the tombstones out. Dispatches walk their own
-        // copy, so the slots are free to move at any time.
-        List<Subscription> subs = new List<Subscription>();
+        // Subscribers, in subscribe order. A dispatch walks its own copy, so they're free to come
+        // and go while it runs.
+        SlotList subs = new SlotList();
         List<Subscription> dispatchList;
-        int deadCount;
 
         // Dependants are the reactive objects that depend on this trigger. They're kept apart from
         // the subscribers, because they're told first: the moment the trigger is invoked, and
         // before any subscriber is called. All a dependant does about it is mark or schedule
         // itself. So by the time a subscriber's callback runs, everything that depends on the
         // trigger already knows it fired, and no callback can catch a memo that's out of date.
-        // Stored the same way as subs. Null until the first is added.
-        List<Subscription> dependants;
-        int deadDependants;
+        // Null until the first is added.
+        SlotList dependants;
         int notifyDepth;
         Action<long> _removeDependant;
 
@@ -123,12 +118,12 @@ namespace Spoke {
 
         /// <summary>SpokeHandle.Dispose() is preferred, as it is more efficient</summary>
         public override void Unsubscribe(Action action) {
-            Unsub(action);
+            subs.Remove(action);
         }
 
         /// <summary>SpokeHandle.Dispose() is preferred, as it is more efficient</summary>
         public void Unsubscribe(Action<T> action) {
-            Unsub(action);
+            subs.Remove(action);
         }
 
         // Tell the dependants, then flush the event queue, dispatching each event to the subscribers
@@ -144,7 +139,7 @@ namespace Spoke {
                 }
             } finally {
                 isFlushing = false;
-                Compact();
+                subs.Compact();
             }
         }
 
@@ -154,7 +149,7 @@ namespace Spoke {
         void Dispatch(T evt) {
             var subList = dispatchList ?? (dispatchList = new List<Subscription>());
             subList.Clear();        // No-op unless the previous dispatch was cut short
-            subList.AddRange(subs); // Tombstones come along; their null action no-ops in Invoke
+            subs.CopyTo(subList);   // Tombstones come along; their null action no-ops in Invoke
             for (var i = 0; i < subList.Count; i++) {
                 try {
                     subList[i].Invoke(evt);
@@ -186,82 +181,23 @@ namespace Spoke {
 
         SpokeHandle Friend.AddDependant(Action action) {
             if (dependants == null) {
-                dependants = new List<Subscription>();
-                _removeDependant = RemoveDependant;
+                dependants = new SlotList();
+                _removeDependant = dependants.Remove;
             }
-            // Sweep out the tombstones once they outnumber the live slots. Not during a pass, as
-            // that would move slots it has yet to reach
-            if (notifyDepth == 0 && deadDependants * 2 > dependants.Count) {
-                Sweep(dependants);
-                deadDependants = 0;
-            }
+            // Not during a pass, as a sweep would move slots it has yet to reach
+            if (notifyDepth == 0) dependants.Compact();
             var id = idCount++;
             dependants.Add(new Subscription { Id = id, Fn = action });
             return SpokeHandle.Of(id, _removeDependant);
         }
 
-        void RemoveDependant(long id) {
-            if (Tombstone(dependants, id)) deadDependants++;
-        }
-
-        void Unsub(Delegate action) {
-            var idList = longListPool.Get();
-            for (var i = 0; i < subs.Count; i++) {
-                var sub = subs[i];
-                if (sub.Fn == action) {
-                    idList.Add(sub.Id);
-                }
-            }
-            foreach (var id in idList) {
-                Unsub(id);
-            }
-            longListPool.Return(idList);
-        }
-
         protected override void Unsub(long id) {
-            // An in-flight dispatch still holds its own copy
-            if (Tombstone(subs, id)) deadCount++;
-        }
-
-        // Sweep out the tombstoned slots, packing the survivors down
-        void Compact() {
-            // Not worth the walk until the tombstones outnumber the live slots
-            if (deadCount * 2 <= subs.Count) return;
-            Sweep(subs);
-            deadCount = 0;
-        }
-
-        // Nulls the action of the slot with the given id. Returns false if there's no such slot,
-        // or it's a tombstone already.
-        // Ids ascend with slot order, so the slot can be found by binary search
-        static bool Tombstone(List<Subscription> slots, long id) {
-            var lo = 0;
-            var hi = slots.Count - 1;
-            while (lo <= hi) {
-                var mid = (int)(((uint)lo + (uint)hi) >> 1);
-                var slot = slots[mid];
-                if (slot.Id < id) { lo = mid + 1; continue; }
-                if (slot.Id > id) { hi = mid - 1; continue; }
-                if (slot.Fn == null) return false;
-                slot.Fn = null;
-                slots[mid] = slot;
-                return true;
-            }
-            return false;
-        }
-
-        static void Sweep(List<Subscription> slots) {
-            var write = 0;
-            for (var read = 0; read < slots.Count; read++) {
-                if (slots[read].Fn == null) continue;
-                slots[write++] = slots[read];
-            }
-            slots.RemoveRange(write, slots.Count - write);
+            subs.Remove(id); // An in-flight dispatch still holds its own copy
         }
 
         SpokeHandle Subscribe(Subscription sub) {
             // Nothing else sweeps a trigger that gets subscribed and unsubscribed but never invoked
-            Compact();
+            subs.Compact();
             subs.Add(sub);
             return SpokeHandle.Of(sub.Id, _unsub);
         }
@@ -278,6 +214,61 @@ namespace Spoke {
                 } else if (Fn is Action plain) {
                     plain();
                 }
+            }
+        }
+
+        // Subscriptions in the order they were added. Removing one tombstones its slot (nulling
+        // its action) rather than moving the others, and Compact() sweeps the tombstones out.
+        sealed class SlotList {
+            List<Subscription> slots = new List<Subscription>();
+            int deadCount;
+
+            public int Count => slots.Count;
+            public Subscription this[int index] => slots[index];
+
+            public void Add(Subscription sub) => slots.Add(sub);
+            public void CopyTo(List<Subscription> target) => target.AddRange(slots);
+
+            // Ids ascend with slot order, so the slot can be found by binary search
+            public void Remove(long id) {
+                var lo = 0;
+                var hi = slots.Count - 1;
+                while (lo <= hi) {
+                    var mid = (int)(((uint)lo + (uint)hi) >> 1);
+                    var slot = slots[mid];
+                    if (slot.Id < id) { lo = mid + 1; continue; }
+                    if (slot.Id > id) { hi = mid - 1; continue; }
+                    if (slot.Fn != null) Tombstone(mid);
+                    return;
+                }
+            }
+
+            // Removes every subscription of the given action
+            public void Remove(Delegate action) {
+                if (action == null) return;
+                for (var i = 0; i < slots.Count; i++) {
+                    if (slots[i].Fn == action) Tombstone(i);
+                }
+            }
+
+            // Sweeps out the tombstones, packing the survivors down
+            public void Compact() {
+                // Not worth the walk until the tombstones outnumber the live slots
+                if (deadCount * 2 <= slots.Count) return;
+                var write = 0;
+                for (var read = 0; read < slots.Count; read++) {
+                    if (slots[read].Fn == null) continue;
+                    slots[write++] = slots[read];
+                }
+                slots.RemoveRange(write, slots.Count - write);
+                deadCount = 0;
+            }
+
+            void Tombstone(int index) {
+                var slot = slots[index];
+                slot.Fn = null;
+                slots[index] = slot;
+                deadCount++;
             }
         }
     }

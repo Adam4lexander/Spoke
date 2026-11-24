@@ -87,14 +87,6 @@ namespace Spoke {
         public static ISignal<T> Memo<T>(this EffectBuilder s, string name, MemoBlock<T> selector, params ITrigger[] triggers)
             => s.Use(new Memo<T>(name, selector, triggers));
 
-        /// <summary>A memo that folds its previous value into the next, starting from seed</summary>
-        public static ISignal<T> Memo<T>(this EffectBuilder s, T seed, MemoFoldBlock<T> selector, params ITrigger[] triggers)
-            => s.Use(new Memo<T>("Memo", seed, selector, triggers));
-
-        /// <summary>A memo that folds its previous value into the next, starting from seed</summary>
-        public static ISignal<T> Memo<T>(this EffectBuilder s, string name, T seed, MemoFoldBlock<T> selector, params ITrigger[] triggers)
-            => s.Use(new Memo<T>(name, seed, selector, triggers));
-
         public static ISignal<T> Effect<T>(this EffectBuilder s, EffectBlock<T> block, params ITrigger[] triggers)
             => s.Call(new Effect<T>("Effect", block, triggers));
 

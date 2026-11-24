@@ -5,8 +5,6 @@ namespace Spoke {
 
     /// <summary>Delegate type for computing a memo's value</summary>
     public delegate T MemoBlock<T>(MemoBuilder s);
-    /// <summary>Delegate type for computing a memo's value from its previous value</summary>
-    public delegate T MemoFoldBlock<T>(MemoBuilder s, T prev);
 
     /// <summary>
     /// Abstract base class for Memo<T>
@@ -38,26 +36,16 @@ namespace Spoke {
         public static Memo<T> Create<T>(string name, MemoBlock<T> selector, params ITrigger[] triggers)
             => new Memo<T>(name, selector, triggers);
 
-        /// <summary>Creates a memo that folds its previous value into the next, starting from seed</summary>
-        public static Memo<T> Create<T>(T seed, MemoFoldBlock<T> selector, params ITrigger[] triggers)
-            => new Memo<T>("Memo", seed, selector, triggers);
-
-        /// <summary>Creates a memo that folds its previous value into the next, starting from seed</summary>
-        public static Memo<T> Create<T>(string name, T seed, MemoFoldBlock<T> selector, params ITrigger[] triggers)
-            => new Memo<T>(name, seed, selector, triggers);
-
         enum Status : byte { Clean, Check, Dirty }
 
         // Guards against a memo that keeps invalidating itself, which would never let the graph settle
         const int MaxRunsPerPreFlush = 1000;
 
         string name;
+        // Subscribes to every dependency, to hear when it changes. For one that's a memo, it also
+        // holds a subscription to that memo's invalidated trigger, to hear when it's in doubt
         DependencyTracker tracker;
         Trigger invalidated;        // Tells the memos that depend on this one when it stops being Clean. Null until one does
-        // Memos this one depends on, in the order they were read, each with a subscription to its
-        // invalidated trigger. The static ones come first and are kept. The rest are rebuilt every run
-        List<(Memo memo, SpokeHandle handle)> upstream = new List<(Memo, SpokeHandle)>();
-        int staticUpstreamCount;
         List<Action> cleanups;      // Declared by the last run. Null until one is declared
         Action _markCheck;
         Action _settle;
@@ -74,14 +62,10 @@ namespace Spoke {
             this.name = name;
             _markCheck = MarkCheck;
             _settle = Settle;
-            tracker = new DependencyTracker(MarkDirty);
+            tracker = new DependencyTracker(MarkDirty, LinkUpstream);
             if (triggers != null) {
-                foreach (var trigger in triggers) {
-                    tracker.AddStatic(trigger);
-                    AddUpstream(trigger);
-                }
+                foreach (var trigger in triggers) tracker.AddStatic(trigger);
             }
-            staticUpstreamCount = upstream.Count;
         }
 
         public override string ToString() {
@@ -96,7 +80,6 @@ namespace Spoke {
             if (isDisposed) return;
             isDisposed = true;
             tracker.Dispose();
-            DropUpstream(0);
             RunCleanups();
         }
 
@@ -199,9 +182,10 @@ namespace Spoke {
                 // the run to read them.
                 isValidating = true;
                 try {
-                    for (var i = 0; i < upstream.Count && status == Status.Check; i++) {
+                    for (var i = 0; i < tracker.Count && status == Status.Check; i++) {
+                        if (!(tracker[i] is Memo memo)) continue;
                         try {
-                            upstream[i].memo.EnsureFresh(rethrowFault: false);
+                            memo.EnsureFresh(rethrowFault: false);
                         } catch (Exception) {
                             status = Status.Dirty; // The run will meet the same error, and record it
                         }
@@ -225,7 +209,6 @@ namespace Spoke {
             isComputing = true;
             var hadFault = fault != null;
             var changed = false;
-            DropUpstream(staticUpstreamCount);
             tracker.BeginDynamic();
             try {
                 RunCleanups();
@@ -242,18 +225,12 @@ namespace Spoke {
             if (changed || hadFault != (fault != null)) Notify();
         }
 
-        // Subscribes to hear when a memo this one depends on is in doubt.
-        void AddUpstream(ITrigger trigger) {
-            if (!(trigger is Memo memo) || memo == this) return;
+        // Called by the tracker for each dependency it subscribes to. If the dependency is a memo,
+        // this also subscribes to hear when that memo is in doubt.
+        SpokeHandle LinkUpstream(ITrigger trigger) {
+            if (!(trigger is Memo memo)) return default;
             if (memo.invalidated == null) memo.invalidated = Trigger.Create();
-            upstream.Add((memo, (memo.invalidated as Trigger.Friend).AddDependant(_markCheck)));
-        }
-
-        void DropUpstream(int keep) {
-            while (upstream.Count > keep) {
-                upstream[upstream.Count - 1].handle.Dispose();
-                upstream.RemoveAt(upstream.Count - 1);
-            }
+            return (memo.invalidated as Trigger.Friend).AddDependant(_markCheck);
         }
 
         void RunCleanups() {
@@ -273,7 +250,6 @@ namespace Spoke {
                 throw new InvalidOperationException("MemoBuilder is only valid while its MemoBlock is running");
             }
             tracker.AddDynamic(trigger);
-            AddUpstream(trigger);
         }
 
         void Friend.OnCleanup(Action fn) {
@@ -292,7 +268,6 @@ namespace Spoke {
     public sealed class Memo<T> : Memo, ISignal<T>, Trigger.Friend {
         Trigger<T> trigger = new Trigger<T>();
         MemoBlock<T> selector;
-        MemoFoldBlock<T> fold;
         T value;
 
         /// <summary>The current value of the memo, brought up to date with its dependencies first</summary>
@@ -308,17 +283,9 @@ namespace Spoke {
             Start();
         }
 
-        public Memo(string name, T seed, MemoFoldBlock<T> selector, params ITrigger[] triggers) : base(name, triggers) {
-            value = seed;
-            fold = selector;
-            Start();
-        }
-
         protected override bool Compute(MemoBuilder s) {
-            T next;
-            if (fold != null) next = fold(s, value);
-            else if (selector != null) next = selector(s);
-            else return false;
+            if (selector == null) return false;
+            var next = selector(s);
             if (EqualityComparer<T>.Default.Equals(next, value)) return false;
             value = next;
             return true;

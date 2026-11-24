@@ -375,38 +375,6 @@ namespace Spoke.Tests {
             Assert.AreEqual(0, runs, "a is no longer read, so changing it shouldn't run the memo");
         }
 
-        // ---------------------------------------------------------------- Previous value
-
-        [Test]
-        public void Fold_StartsFromSeed_AndReceivesItsPreviousValue() {
-            var delta = State.Create(1);
-
-            using var total = Memo.Create(100, (s, prev) => prev + s.D(delta));
-            Assert.AreEqual(101, total.Now);
-
-            delta.Set(5);
-            Assert.AreEqual(106, total.Now);
-
-            delta.Set(-6);
-            Assert.AreEqual(100, total.Now);
-        }
-
-        [Test]
-        public void Fold_WorksFromEffectBuilder() {
-            var delta = State.Create(1);
-            ISignal<int> total = null;
-            ISignal<string> history = null;
-
-            using var tree = SpokeTree.Spawn(new Effect("root", s => {
-                total = s.Memo(0, (s, prev) => prev + s.D(delta));
-                history = s.Memo("", (s, prev) => prev + s.D(delta)); // a string seed, not a name
-            }));
-            delta.Set(2);
-
-            Assert.AreEqual(3, total.Now);
-            Assert.AreEqual("12", history.Now);
-        }
-
         // ---------------------------------------------------------------- Faults and guards
 
         [Test]

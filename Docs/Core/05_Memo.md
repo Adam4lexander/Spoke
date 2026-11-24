@@ -7,7 +7,6 @@
 - [`Memo<T>` vs `MemoBlock<T>`](#memot-vs-memoblockt)
 - [Dependencies](#dependencies)
 - [`MemoBuilder`](#memobuilder)
-- [Previous Value](#previous-value)
 - [Pure Functions](#pure-functions)
 - [Example usage](#example-usage)
 
@@ -106,19 +105,6 @@ It has far less functionality compared to `EffectBuilder`, only offering two fun
 - `s.OnCleanup()`: For cleaning up on reruns, and when the memo is disposed
 
 Although `s.onCleanup()` is provided it would be unusual to need it. Memos are intended to run pure functions without side-effects, so there shouldn't be anything to clean up.
-
----
-
-## Previous Value
-
-A memo can fold its previous value into the next one. Pass a starting value, and take the previous value as a second parameter:
-
-```cs
-// The highest score seen so far
-var best = s.Memo(0, (s, prev) => Mathf.Max(prev, s.D(score)));
-```
-
-The starting value is how C# knows the type of `prev`, so it's needed even when it's just `0` or `null`.
 
 ---
 
